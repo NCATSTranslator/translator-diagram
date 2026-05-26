@@ -44,11 +44,21 @@ def get_owner_color(owner: str, color_map: dict) -> str:
     return color_map[owner]
 
 
-def parse_id_list(field: str) -> list[str]:
-    """Split a comma-separated field into a list of stripped, non-empty strings."""
-    if not field or not field.strip():
-        return []
-    return [part.strip() for part in field.split(",") if part.strip()]
+def parse_id_list(field: str) -> tuple[list[str], list[str]]:
+    """Split a comma-separated field into (implemented_ids, planned_ids).
+
+    IDs prefixed with '~' are planned-but-not-yet-implemented.
+    """
+    implemented, planned = [], []
+    for part in field.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part.startswith("~"):
+            planned.append(part[1:].strip())
+        else:
+            implemented.append(part)
+    return implemented, planned
 
 
 def load_components(csv_path: Path) -> list[dict]:
@@ -56,8 +66,12 @@ def load_components(csv_path: Path) -> list[dict]:
         reader = csv.DictReader(f)
         rows = []
         for row in reader:
-            row["_depends_on"] = parse_id_list(row.get("Gets results from", ""))
-            row["_uses"] = parse_id_list(row.get("Calls", ""))
+            impl, planned = parse_id_list(row.get("Gets results from", ""))
+            row["_depends_on"] = impl
+            row["_depends_on_planned"] = planned
+            impl, planned = parse_id_list(row.get("Calls", ""))
+            row["_uses"] = impl
+            row["_uses_planned"] = planned
             rows.append(row)
     return rows
 
@@ -68,7 +82,11 @@ def validate(components: list[dict]) -> bool:
     ok = True
     for comp in components:
         comp_id = comp["id"]
-        for ref in comp["_depends_on"] + comp["_uses"]:
+        all_refs = (
+            comp["_depends_on"] + comp["_depends_on_planned"]
+            + comp["_uses"] + comp["_uses_planned"]
+        )
+        for ref in all_refs:
             ref_lower = ref.lower()
             if ref_lower not in id_lower_map:
                 click.echo(
@@ -91,7 +109,9 @@ def write_json(components: list[dict], out_path: Path) -> None:
     for comp in components:
         row = {k: v for k, v in comp.items() if not k.startswith("_")}
         row["depends_on"] = comp["_depends_on"]
+        row["depends_on_planned"] = comp["_depends_on_planned"]
         row["uses"] = comp["_uses"]
+        row["uses_planned"] = comp["_uses_planned"]
         exportable.append(row)
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(exportable, f, indent=2, ensure_ascii=False)
@@ -116,7 +136,11 @@ def build_graph(
     for comp in components:
         if comp["id"] not in active_set:
             continue
-        for ref in comp["_depends_on"] + comp["_uses"]:
+        all_refs = (
+            comp["_depends_on"] + comp["_depends_on_planned"]
+            + comp["_uses"] + comp["_uses_planned"]
+        )
+        for ref in all_refs:
             canonical = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if canonical not in active_set:
                 ghost_ids.add(canonical)
@@ -171,6 +195,7 @@ def build_graph(
         )
 
     # Edges — resolve ids case-insensitively
+    PLANNED_COLOR = "#999999"
     for comp in components:
         if comp["id"] not in active_set:
             continue
@@ -178,10 +203,18 @@ def build_graph(
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
                 dot.edge(target, comp["id"])  # B → A: B provides results to A
+        for ref in comp["_depends_on_planned"]:
+            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
+            if target in active_set or target in ghost_ids:
+                dot.edge(target, comp["id"], style="dashed", color=PLANNED_COLOR)
         for ref in comp["_uses"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
                 dot.edge(comp["id"], target, style="dotted")  # A ··→ B: A sends request to B
+        for ref in comp["_uses_planned"]:
+            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
+            if target in active_set or target in ghost_ids:
+                dot.edge(comp["id"], target, style="dotted", color=PLANNED_COLOR)
 
     # Entry node: External data sources (cylinder = data store)
     terminal_attrs = dict(
