@@ -3,11 +3,12 @@
 import csv
 import json
 import os
-import sys
+import urllib.request
 from pathlib import Path
 
 import click
 import graphviz
+from dotenv import load_dotenv
 
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
@@ -199,8 +200,21 @@ def build_graph(
     "--input", "input_path",
     default="data/components.csv",
     show_default=True,
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="CSV input file.",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="CSV input file (used unless --google-sheet is set).",
+)
+@click.option(
+    "--google-sheet", "google_sheet",
+    is_flag=True,
+    default=False,
+    help="Download CSV from Google Sheet instead of reading a local file. "
+         "Reads GOOGLE_SHEET_ID from .env in the script directory.",
+)
+@click.option(
+    "--sheet-gid", "sheet_gid",
+    default=0,
+    show_default=True,
+    help="Google Sheet tab GID (0 = first tab).",
 )
 @click.option(
     "--output-dir", "output_dir",
@@ -242,6 +256,8 @@ def build_graph(
 )
 def main(
     input_path: Path,
+    google_sheet: bool,
+    sheet_gid: int,
     output_dir: Path,
     output_name: str,
     refactor_status: str,
@@ -251,6 +267,25 @@ def main(
 ) -> None:
     """Validate components CSV and generate a Graphviz dependency diagram."""
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if google_sheet:
+        env_path = Path(__file__).parent / ".env"
+        load_dotenv(env_path)
+        sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+        if not sheet_id:
+            raise click.ClickException(
+                f"GOOGLE_SHEET_ID is not set. Fill it in at {env_path}"
+            )
+        url = (
+            f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+            f"/export?format=csv&gid={sheet_gid}"
+        )
+        download_path = output_dir / "components.csv"
+        click.echo(f"Downloading CSV from Google Sheet to {download_path} ...")
+        urllib.request.urlretrieve(url, download_path)
+        input_path = download_path
+    elif not input_path.exists():
+        raise click.ClickException(f"Input file not found: {input_path}")
 
     click.echo(f"Loading {input_path} ...")
     components = load_components(input_path)

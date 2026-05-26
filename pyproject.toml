@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "click>=8.0",
     "graphviz>=0.20",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
