@@ -96,19 +96,11 @@ All outputs go to `data/` (gitignored) by default.
 
 ### Node colours (by Owner)
 
-| Owner | Colour | Rationale |
-|---|---|---|
-| NCATS | Red | Main customer |
-| UI | Pink | Main customer |
-| DOGSLED | Blue | Main team |
-| DOGSURF | Green | Main team |
-| CATRAX | Amber | Main team |
-| Core Components WG | Purple | Specialized cross-team group |
-| DINGO | Cyan | Specialized cross-team group |
-| Shepherd | Lime | Specialized cross-team group |
-| Retriever | Brown | Specialized cross-team group |
+Owner-to-colour mappings live in [`owner-colors.csv`](owner-colors.csv)
+(two columns: `owner`, `color`). Edit that file to add a new owner,
+re-order the legend, or change a colour — no Python edit required.
 
-New owners not listed above receive fallback colours automatically.
+New owners not listed there receive fallback colours automatically.
 
 ### Node border weight
 
@@ -166,6 +158,8 @@ uv run generate_diagram.py [OPTIONS]
 ```
 translator-components-diagram/
 ├── generate_diagram.py   # The tool
+├── owner-colors.csv      # Owner → fill colour mapping (edit me)
+├── tests/                # pytest suite for the pure functions
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
 ├── .env                  # GOOGLE_SHEET_ID — gitignored, fill in locally

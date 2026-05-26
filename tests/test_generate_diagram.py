@@ -2,15 +2,16 @@
 
 import textwrap
 
+import click
 import pytest
 
 from generate_diagram import (
     Component,
     ColorAssigner,
     FALLBACK_COLORS,
-    OWNER_COLORS,
     index_by_id,
     load_components,
+    load_owner_colors,
     parse_id_list,
     text_color_for,
     validate,
@@ -48,8 +49,10 @@ class TestParseIdList:
 
 class TestColorAssigner:
     def test_known_owner_returns_base_color(self):
-        ca = ColorAssigner(OWNER_COLORS, FALLBACK_COLORS)
-        assert ca.get("NCATS") == OWNER_COLORS["NCATS"]
+        base = {"FooTeam": "#ABCDEF", "BarTeam": "#012345"}
+        ca = ColorAssigner(base, FALLBACK_COLORS)
+        assert ca.get("FooTeam") == "#ABCDEF"
+        assert ca.get("BarTeam") == "#012345"
 
     def test_unknown_owner_gets_first_fallback(self):
         ca = ColorAssigner({}, FALLBACK_COLORS)
@@ -233,3 +236,52 @@ class TestLoadComponents:
         )
         components = load_components(csv_path)
         assert components[0].owner == "None"
+
+
+# --- load_owner_colors -----------------------------------------------------
+
+
+class TestLoadOwnerColors:
+    def test_parses_owner_color_csv(self, tmp_path):
+        path = tmp_path / "owner-colors.csv"
+        path.write_text(
+            "owner,color\nNCATS,#EF5350\nUI,#EC407A\n",
+            encoding="utf-8",
+        )
+        assert load_owner_colors(path) == {
+            "NCATS": "#EF5350",
+            "UI": "#EC407A",
+        }
+
+    def test_preserves_row_order(self, tmp_path):
+        path = tmp_path / "owner-colors.csv"
+        path.write_text(
+            "owner,color\nzeta,#111\nalpha,#222\nbeta,#333\n",
+            encoding="utf-8",
+        )
+        # Order matters for legend layout — must match CSV order, not sorted.
+        assert list(load_owner_colors(path)) == ["zeta", "alpha", "beta"]
+
+    def test_strips_whitespace(self, tmp_path):
+        path = tmp_path / "owner-colors.csv"
+        path.write_text(
+            "owner,color\n  NCATS  ,  #EF5350  \n",
+            encoding="utf-8",
+        )
+        assert load_owner_colors(path) == {"NCATS": "#EF5350"}
+
+    def test_missing_file_raises_clickexception(self, tmp_path):
+        with pytest.raises(click.ClickException, match="not found"):
+            load_owner_colors(tmp_path / "missing.csv")
+
+    def test_missing_column_raises_clickexception(self, tmp_path):
+        path = tmp_path / "owner-colors.csv"
+        path.write_text("owner,hue\nNCATS,red\n", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="missing required columns"):
+            load_owner_colors(path)
+
+    def test_default_file_loads(self):
+        # The repo-shipped owner-colors.csv must always be loadable.
+        result = load_owner_colors()
+        assert "NCATS" in result
+        assert result["NCATS"].startswith("#")

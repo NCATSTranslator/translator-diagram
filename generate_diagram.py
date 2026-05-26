@@ -16,22 +16,11 @@ from dotenv import load_dotenv
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
 
-# Owner → fill color mapping. Insertion order doubles as legend order.
-OWNER_COLORS: dict[str, str] = {
-    # Main customers: bright and prominent
-    "NCATS": "#EF5350",          # vivid red
-    "UI": "#EC407A",             # vivid pink
-    # Three main teams: distinct solid colors
-    "DOGSLED": "#42A5F5",        # blue
-    "DOGSURF": "#66BB6A",        # green
-    "CATRAX": "#FFA726",         # amber
-    # Specialized cross-team groups: distinct from the teams above
-    "Core Components WG": "#AB47BC",  # purple
-    "DINGO": "#26C6DA",          # cyan
-    "Shepherd": "#D4E157",       # lime
-    "Retriever": "#8D6E63",      # brown
-    "None": "#E8E8E8",
-}
+# Owner → fill color mapping lives in owner-colors.csv (alongside the script)
+# so non-Python edits can change it without touching code. Row order in the
+# CSV doubles as legend order in the diagram.
+DEFAULT_OWNER_COLORS_PATH = Path(__file__).parent / "owner-colors.csv"
+
 FALLBACK_COLORS = [
     "#B0BEC5", "#BCAAA4", "#CE93D8", "#80CBC4",
     "#EF9A9A", "#FFCC80", "#C5E1A5", "#80DEEA",
@@ -121,6 +110,24 @@ def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
         else:
             implemented.append(part)
     return implemented, planned
+
+
+def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
+    """Load the owner→color mapping from a CSV with columns owner,color.
+
+    Order is preserved from the file; that order also determines legend order.
+    """
+    if not path.exists():
+        raise click.ClickException(f"Owner-colors file not found: {path}")
+    with path.open(newline="", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        missing_cols = {"owner", "color"} - set(reader.fieldnames or [])
+        if missing_cols:
+            raise click.ClickException(
+                f"{path} is missing required columns: "
+                + ", ".join(sorted(missing_cols))
+            )
+        return {row["owner"].strip(): row["color"].strip() for row in reader}
 
 
 def load_components(csv_path: Path) -> list[Component]:
@@ -645,7 +652,7 @@ def main(
             + ", ".join(sorted(active_statuses))
         )
 
-    colors = ColorAssigner(OWNER_COLORS, FALLBACK_COLORS)
+    colors = ColorAssigner(load_owner_colors(), FALLBACK_COLORS)
     dot = build_graph(components, active_statuses, direction, colors)
 
     # Save .dot source
