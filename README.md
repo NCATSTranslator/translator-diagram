@@ -152,8 +152,8 @@ uv run generate_diagram.py [OPTIONS]
   --refactor-status TEXT    Comma-separated Refactor status values to include
                             [default: "Continues into Refactor,New in Refactor"]
   --all                     Include all components regardless of Refactor status
-  --format [png|pdf|svg]    Additional output format (PNG always produced;
-                            can be repeated)
+  --format [pdf|svg]        Additional output format beyond PNG (PNG is
+                            always produced; can be repeated)
   --direction [LR|TB]       Graphviz layout direction  [default: TB]
   --help                    Show this message and exit.
 ```

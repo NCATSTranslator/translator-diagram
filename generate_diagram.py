@@ -34,15 +34,23 @@ FALLBACK_COLORS = [
     "#B0BEC5", "#BCAAA4", "#CE93D8", "#80CBC4",
     "#EF9A9A", "#FFCC80", "#C5E1A5", "#80DEEA",
 ]
-_color_index = 0
 
 
-def get_owner_color(owner: str, color_map: dict) -> str:
-    global _color_index
-    if owner not in color_map:
-        color_map[owner] = FALLBACK_COLORS[_color_index % len(FALLBACK_COLORS)]
-        _color_index += 1
-    return color_map[owner]
+class ColorAssigner:
+    """Assigns fill colors to owners, falling back to a rotating palette."""
+
+    def __init__(self, base_colors: dict[str, str], fallback_colors: list[str]):
+        self.color_map: dict[str, str] = dict(base_colors)
+        self.fallback_colors = fallback_colors
+        self.next_fallback = 0
+
+    def get(self, owner: str) -> str:
+        if owner not in self.color_map:
+            self.color_map[owner] = self.fallback_colors[
+                self.next_fallback % len(self.fallback_colors)
+            ]
+            self.next_fallback += 1
+        return self.color_map[owner]
 
 
 def parse_id_list(field: str) -> tuple[list[str], list[str]]:
@@ -147,7 +155,7 @@ def build_graph(
     components: list[dict],
     active_statuses: set[str] | None,
     direction: str,
-    color_map: dict,
+    colors: ColorAssigner,
 ) -> graphviz.Digraph:
     id_lower_map = {c["id"].lower(): c for c in components}
 
@@ -204,7 +212,7 @@ def build_graph(
         if comp["id"] not in active_set:
             continue
         owner = comp.get("Owner", "None") or "None"
-        fill = get_owner_color(owner, color_map)
+        fill = colors.get(owner)
         is_new = comp["Refactor status"] == "New in Refactor"
         label = f"{comp['Name']}\n{comp['id']}\n{owner}"
         dot.node(
@@ -289,7 +297,8 @@ def build_graph(
             sink_rank.node("_user")
         dot.edge(EXIT_SOURCE, "_user")
 
-    # Legend
+    # Legend — note: `rank` is not honored on cluster subgraphs in graphviz,
+    # so legend placement is left to the layout engine.
     with dot.subgraph(name="cluster_legend") as leg:
         leg.attr(
             label="Legend",
@@ -299,7 +308,6 @@ def build_graph(
             fontname="Helvetica",
             fontsize="11",
             margin="12",
-            rank="min",
         )
         leg.node("_leg_a1", label="Producer", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b1", label="Consumer", fillcolor="white", penwidth="1.0")
@@ -360,8 +368,9 @@ def build_graph(
 @click.option(
     "--format", "extra_formats",
     multiple=True,
-    type=click.Choice(["pdf", "svg", "png"]),
-    help="Additional output formats (PNG always produced). Can be repeated.",
+    type=click.Choice(["pdf", "svg"]),
+    help="Additional output formats beyond PNG (PNG is always produced). "
+         "Can be repeated.",
 )
 @click.option(
     "--direction",
@@ -447,25 +456,25 @@ def main(
             + ", ".join(sorted(active_statuses))
         )
 
-    color_map = dict(OWNER_COLORS)
-    dot = build_graph(components, active_statuses, direction, color_map)
+    colors = ColorAssigner(OWNER_COLORS, FALLBACK_COLORS)
+    dot = build_graph(components, active_statuses, direction, colors)
 
     # Save .dot source
     dot_path = output_dir / f"{output_name}.dot"
     dot_path.write_text(dot.source, encoding="utf-8")
     click.echo(f"Wrote {dot_path}")
 
-    # Render PNG (always)
+    # Render PNG (always) plus any extra formats. cleanup=True removes the
+    # intermediate extension-less dot source that render() writes alongside
+    # the rendered file — we already keep the canonical copy in {output_name}.dot.
     formats_to_render = {"png"} | set(extra_formats)
     for fmt in sorted(formats_to_render):
-        rendered = dot.render(
+        dot.render(
             filename=str(output_dir / output_name),
             format=fmt,
-            cleanup=False,
+            cleanup=True,
         )
-        # graphviz appends format extension; rename away the extra copy
-        expected = output_dir / f"{output_name}.{fmt}"
-        click.echo(f"Wrote {expected}")
+        click.echo(f"Wrote {output_dir / f'{output_name}.{fmt}'}")
 
 
 if __name__ == "__main__":
