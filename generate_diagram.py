@@ -3,6 +3,7 @@
 import csv
 import json
 import os
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -62,7 +63,9 @@ def parse_id_list(field: str) -> tuple[list[str], list[str]]:
 
 
 def load_components(csv_path: Path) -> list[dict]:
-    with csv_path.open(newline="", encoding="utf-8") as f:
+    # utf-8-sig strips a UTF-8 BOM if present (Excel-resaved or Windows-edited files),
+    # otherwise the first header would read as "﻿id" and KeyError on c["id"].
+    with csv_path.open(newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         rows = []
         for row in reader:
@@ -77,9 +80,31 @@ def load_components(csv_path: Path) -> list[dict]:
 
 
 def validate(components: list[dict]) -> bool:
-    """Print warnings for any reference issues. Returns False if any warnings."""
-    id_lower_map = {c["id"].lower(): c["id"] for c in components}
+    """Print messages for any reference issues.
+
+    Returns False on hard errors (duplicate ids, unknown referenced ids).
+    Case-mismatch references are informational and do not flip the return
+    value, because the case-insensitive lookup in build_graph still resolves
+    them to the canonical component.
+    """
     ok = True
+
+    # Hard error: duplicate ids (case-insensitive). The id_lower_map below
+    # would silently keep only the last duplicate, so detect them up front.
+    seen: dict[str, str] = {}
+    for comp in components:
+        key = comp["id"].lower()
+        if key in seen:
+            click.echo(
+                f"ERROR: duplicate id (case-insensitive): "
+                f"'{seen[key]}' and '{comp['id']}'",
+                err=True,
+            )
+            ok = False
+        else:
+            seen[key] = comp["id"]
+
+    id_lower_map = {c["id"].lower(): c["id"] for c in components}
     for comp in components:
         comp_id = comp["id"]
         all_refs = (
@@ -90,7 +115,7 @@ def validate(components: list[dict]) -> bool:
             ref_lower = ref.lower()
             if ref_lower not in id_lower_map:
                 click.echo(
-                    f"WARNING: '{comp_id}' references unknown id '{ref}' "
+                    f"ERROR: '{comp_id}' references unknown id '{ref}' "
                     f"in Gets results from/Calls",
                     err=True,
                 )
@@ -131,6 +156,16 @@ def build_graph(
     else:
         active_set = {c["id"] for c in components if c["Refactor status"] in active_statuses}
 
+    def resolve(ref: str) -> str | None:
+        """Resolve a ref string to its canonical component id, or None if unknown.
+
+        Unknown refs return None rather than falling back to the raw ref so they
+        do not render as phantom ghost nodes; validate() is responsible for
+        surfacing them as errors before we reach here.
+        """
+        match = id_lower_map.get(ref.lower())
+        return match["id"] if match else None
+
     # Collect ghost ids: referenced by active components but not in active_set
     ghost_ids: set[str] = set()
     for comp in components:
@@ -141,8 +176,8 @@ def build_graph(
             + comp["_uses"] + comp["_uses_planned"]
         )
         for ref in all_refs:
-            canonical = id_lower_map.get(ref.lower(), {}).get("id", ref)
-            if canonical not in active_set:
+            canonical = resolve(ref)
+            if canonical is not None and canonical not in active_set:
                 ghost_ids.add(canonical)
 
     dot = graphviz.Digraph(
@@ -194,29 +229,40 @@ def build_graph(
             color="#999999",
         )
 
-    # Edges — resolve ids case-insensitively
+    # Edges — resolve ids case-insensitively; unknown refs are skipped (validate() flagged them)
     PLANNED_COLOR = "#999999"
+
+    def edge_target(ref: str) -> str | None:
+        target = resolve(ref)
+        if target is None:
+            return None
+        if target in active_set or target in ghost_ids:
+            return target
+        return None
+
     for comp in components:
         if comp["id"] not in active_set:
             continue
         for ref in comp["_depends_on"]:
-            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
-            if target in active_set or target in ghost_ids:
+            target = edge_target(ref)
+            if target is not None:
                 dot.edge(target, comp["id"])  # B → A: B provides results to A
         for ref in comp["_depends_on_planned"]:
-            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
-            if target in active_set or target in ghost_ids:
+            target = edge_target(ref)
+            if target is not None:
                 dot.edge(target, comp["id"], style="dashed", color=PLANNED_COLOR)
         for ref in comp["_uses"]:
-            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
-            if target in active_set or target in ghost_ids:
+            target = edge_target(ref)
+            if target is not None:
                 dot.edge(comp["id"], target, style="dotted")  # A ··→ B: A sends request to B
         for ref in comp["_uses_planned"]:
-            target = id_lower_map.get(ref.lower(), {}).get("id", ref)
-            if target in active_set or target in ghost_ids:
+            target = edge_target(ref)
+            if target is not None:
                 dot.edge(comp["id"], target, style="dotted", color=PLANNED_COLOR)
 
-    # Entry node: External data sources (cylinder = data store)
+    # Entry/exit terminal nodes — only added when the components they connect
+    # to are present in the diagram. Without the gate, hardcoded edges to
+    # missing ids would silently create default-styled phantom nodes.
     terminal_attrs = dict(
         style="filled",
         fillcolor="#CFD8DC",
@@ -224,20 +270,24 @@ def build_graph(
         fontsize="11",
         penwidth="1.5",
     )
-    dot.node("_external_sources", label="External\ndata sources",
-             shape="cylinder", **terminal_attrs)
-    with dot.subgraph() as src_rank:
-        src_rank.attr(rank="min")
-        src_rank.node("_external_sources")
-    dot.edge("_external_sources", "kgx-storage-pipeline")
 
-    # Exit node: User (double-border oval = terminal endpoint)
-    dot.node("_user", label="User", shape="oval",
-             peripheries="2", **terminal_attrs)
-    with dot.subgraph() as sink_rank:
-        sink_rank.attr(rank="max")
-        sink_rank.node("_user")
-    dot.edge("ui", "_user")
+    ENTRY_TARGET = "kgx-storage-pipeline"
+    if ENTRY_TARGET in active_set or ENTRY_TARGET in ghost_ids:
+        dot.node("_external_sources", label="External\ndata sources",
+                 shape="cylinder", **terminal_attrs)
+        with dot.subgraph() as src_rank:
+            src_rank.attr(rank="min")
+            src_rank.node("_external_sources")
+        dot.edge("_external_sources", ENTRY_TARGET)
+
+    EXIT_SOURCE = "ui"
+    if EXIT_SOURCE in active_set or EXIT_SOURCE in ghost_ids:
+        dot.node("_user", label="User", shape="oval",
+                 peripheries="2", **terminal_attrs)
+        with dot.subgraph() as sink_rank:
+            sink_rank.attr(rank="max")
+            sink_rank.node("_user")
+        dot.edge(EXIT_SOURCE, "_user")
 
     # Legend
     with dot.subgraph(name="cluster_legend") as leg:
@@ -348,7 +398,24 @@ def main(
         )
         download_path = output_dir / "components.csv"
         click.echo(f"Downloading CSV from Google Sheet to {download_path} ...")
-        urllib.request.urlretrieve(url, download_path)
+        # Use urlopen + content-type check rather than urlretrieve: a private
+        # or missing sheet redirects to a 200 HTML login page, which would
+        # otherwise be silently saved as components.csv.
+        try:
+            with urllib.request.urlopen(url) as response:
+                content_type = response.headers.get("Content-Type", "")
+                body = response.read()
+        except urllib.error.URLError as exc:
+            raise click.ClickException(
+                f"Failed to download Google Sheet ({url}): {exc}"
+            ) from exc
+        if "text/csv" not in content_type.lower():
+            raise click.ClickException(
+                f"Google Sheet response was not CSV (Content-Type: "
+                f"{content_type or 'unset'}). The sheet may be private, "
+                f"the ID may be wrong, or the gid may not exist. URL: {url}"
+            )
+        download_path.write_bytes(body)
         input_path = download_path
     elif not input_path.exists():
         raise click.ClickException(f"Input file not found: {input_path}")
@@ -358,7 +425,10 @@ def main(
     click.echo(f"Loaded {len(components)} components.")
 
     click.echo("Validating references ...")
-    validate(components)
+    if not validate(components):
+        raise click.ClickException(
+            "Validation failed; fix the errors above and re-run."
+        )
 
     # Write JSON (all components, regardless of filter)
     json_path = output_dir / "components.json"
