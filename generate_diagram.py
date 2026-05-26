@@ -466,51 +466,6 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-        leg.node("_leg_pp", label="Producer*", fillcolor="white", penwidth="1.0")
-        leg.node("_leg_cc", label="Consumer*", fillcolor="white", penwidth="1.0")
-        leg.edge(
-            "_leg_pp", "_leg_cc",
-            xlabel="Planned",
-            style="dashed",
-            color=PLANNED_EDGE_COLOR,
-        )
-
-        # Node style examples — bold = new, dashed = ghost, terminal shapes.
-        leg.node(
-            "_leg_new",
-            label="New in\nRefactor",
-            fillcolor="white",
-            penwidth="2.0",
-        )
-        leg.node(
-            "_leg_ghost",
-            label="(excluded)",
-            fillcolor=GHOST_FILL_COLOR,
-            style="filled,rounded,dashed",
-            fontcolor=GHOST_FONT_COLOR,
-            color=GHOST_BORDER_COLOR,
-        )
-        leg.node(
-            "_leg_ubiq",
-            label="Ubiquitous\n(cloned per caller)",
-            fillcolor="white",
-            penwidth="1.0",
-        )
-        leg.node(
-            "_leg_entry",
-            label="Data\nsource",
-            shape="cylinder",
-            fillcolor=TERMINAL_FILL_COLOR,
-            penwidth="1.5",
-        )
-        leg.node(
-            "_leg_exit",
-            label="User",
-            shape="oval",
-            peripheries="2",
-            fillcolor=TERMINAL_FILL_COLOR,
-            penwidth="1.5",
-        )
 
 
 def build_graph(
