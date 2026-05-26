@@ -9,6 +9,7 @@ from generate_diagram import (
     Component,
     ColorAssigner,
     FALLBACK_COLORS,
+    _parse_bool,
     index_by_id,
     load_components,
     load_owner_colors,
@@ -116,6 +117,7 @@ def _comp(id_: str, **kwargs) -> Component:
         itrb=kwargs.get("itrb", ""),
         refactor_status=kwargs.get("refactor_status", "Continues into Refactor"),
         notes=kwargs.get("notes", ""),
+        ubiquitous=kwargs.get("ubiquitous", False),
         depends_on=kwargs.get("depends_on", []),
         depends_on_planned=kwargs.get("depends_on_planned", []),
         uses=kwargs.get("uses", []),
@@ -285,3 +287,53 @@ class TestLoadOwnerColors:
         result = load_owner_colors()
         assert "NCATS" in result
         assert result["NCATS"].startswith("#")
+
+
+# --- _parse_bool -----------------------------------------------------------
+
+
+class TestParseBool:
+    @pytest.mark.parametrize("value", ["TRUE", "true", "True", "yes", "Y", "1"])
+    def test_truthy_values(self, value):
+        assert _parse_bool(value) is True
+
+    @pytest.mark.parametrize("value", ["FALSE", "false", "no", "", "0", "  "])
+    def test_falsy_values(self, value):
+        assert _parse_bool(value) is False
+
+    def test_strips_whitespace(self):
+        assert _parse_bool("  TRUE  ") is True
+
+
+# --- Ubiquitous column in load_components ----------------------------------
+
+
+class TestUbiquitousColumn:
+    def test_ubiquitous_column_parsed(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Owner,Component in ITRB,Refactor status,"
+            "Gets results from,Calls,Ubiquitous,Notes\n"
+            "jaeger,Jaeger,DOGSLED,obs,Continues into Refactor,,,TRUE,\n"
+            "ars,ARS,NCATS,svc,New in Refactor,,,,\n",
+            encoding="utf-8",
+        )
+        components = load_components(csv_path)
+        by_id = {c.id: c for c in components}
+        assert by_id["jaeger"].ubiquitous is True
+        assert by_id["ars"].ubiquitous is False
+
+    def test_missing_ubiquitous_column_defaults_false(self, tmp_path):
+        # Older sheets without the column should still parse cleanly.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Owner,Component in ITRB,Refactor status,"
+            "Gets results from,Calls,Notes\n"
+            "foo,Foo,NCATS,svc,New in Refactor,,,\n",
+            encoding="utf-8",
+        )
+        components = load_components(csv_path)
+        assert components[0].ubiquitous is False
+
+    def test_dataclass_default_is_false(self):
+        assert _comp("foo").ubiquitous is False

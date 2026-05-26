@@ -63,6 +63,7 @@ The sheet must have these columns (order does not matter):
 | `Refactor status` | Lifecycle status — see filtering below |
 | `Gets results from` | Comma-separated IDs this component receives data from |
 | `Calls` | Comma-separated IDs this component makes optional API calls to |
+| `Ubiquitous` | `TRUE` to render this component as a per-caller clone (see below) |
 | `Notes` | Free-text notes (not used by the tool) |
 
 #### Planned (not-yet-implemented) relationships
@@ -76,6 +77,16 @@ Calls: ars, ~future-api
 ```
 
 Planned edges render in gray; implemented edges render in black.
+
+#### Ubiquitous components
+
+Cross-cutting infrastructure that nearly every component depends on
+(telemetry, name resolution, logging…) creates long converging edges in
+the diagram that obscure the real data-flow structure. Marking such a
+component `TRUE` in the `Ubiquitous` column renders it as a small copy
+next to each caller instead of as a single central node — the underlying
+data stays normalised, only the visual layout duplicates. Jaeger (OTel)
+is the canonical example.
 
 ## Output files
 

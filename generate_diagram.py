@@ -75,6 +75,7 @@ class Component:
     itrb: str
     refactor_status: str
     notes: str
+    ubiquitous: bool = False
     depends_on: list[str] = field(default_factory=list)
     depends_on_planned: list[str] = field(default_factory=list)
     uses: list[str] = field(default_factory=list)
@@ -93,6 +94,11 @@ class Component:
             + self.uses
             + self.uses_planned
         )
+
+
+def _parse_bool(value: str) -> bool:
+    """Parse a CSV boolean cell — accepts TRUE/yes/1 (case-insensitive)."""
+    return value.strip().lower() in ("true", "yes", "y", "1")
 
 
 def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
@@ -153,6 +159,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 itrb=row.get("Component in ITRB", "").strip(),
                 refactor_status=row.get("Refactor status", "").strip(),
                 notes=row.get("Notes", "").strip(),
+                ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
                 uses=uses,
@@ -222,6 +229,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Component in ITRB": c.itrb,
             "Refactor status": c.refactor_status,
             "Notes": c.notes,
+            "Ubiquitous": c.ubiquitous,
             "depends_on": c.depends_on,
             "depends_on_planned": c.depends_on_planned,
             "uses": c.uses,
@@ -253,13 +261,40 @@ def _compute_ghost_ids(
 ) -> set[str]:
     ghost: set[str] = set()
     for comp in components:
-        if comp.id not in active_set:
+        if comp.id not in active_set or comp.ubiquitous:
             continue
         for ref in comp.all_refs():
             match = index.get(ref.lower())
-            if match is not None and match.id not in active_set:
+            if match is None or match.ubiquitous:
+                # Ubiquitous targets render as per-caller clones, never as ghosts.
+                continue
+            if match.id not in active_set:
                 ghost.add(match.id)
     return ghost
+
+
+def _emit_component_node(
+    dot: graphviz.Digraph,
+    comp: Component,
+    node_id: str,
+    colors: ColorAssigner,
+) -> None:
+    """Render a Component as a graphviz node at the given id.
+
+    Used both for primary node placement and for per-caller ubiquitous clones
+    (which use a synthetic id like "{caller}__{target}").
+    """
+    fill = colors.get(comp.owner)
+    is_new = comp.refactor_status == "New in Refactor"
+    # Owner is encoded by node color and shown in the legend, not in the label.
+    label = f"{comp.display_name}\n{comp.id}"
+    dot.node(
+        node_id,
+        label=label,
+        fillcolor=fill,
+        fontcolor=text_color_for(fill),
+        penwidth="2.0" if is_new else "1.0",
+    )
 
 
 def _add_active_nodes(
@@ -269,19 +304,11 @@ def _add_active_nodes(
     colors: ColorAssigner,
 ) -> None:
     for comp in components:
-        if comp.id not in active_set:
+        if comp.id not in active_set or comp.ubiquitous:
+            # Ubiquitous components don't get a central node — they're emitted
+            # per-caller from _add_edges.
             continue
-        fill = colors.get(comp.owner)
-        is_new = comp.refactor_status == "New in Refactor"
-        # Owner is encoded by node color and shown in the legend, not in the label.
-        label = f"{comp.display_name}\n{comp.id}"
-        dot.node(
-            comp.id,
-            label=label,
-            fillcolor=fill,
-            fontcolor=text_color_for(fill),
-            penwidth="2.0" if is_new else "1.0",
-        )
+        _emit_component_node(dot, comp, comp.id, colors)
 
 
 def _add_ghost_nodes(
@@ -309,33 +336,47 @@ def _add_edges(
     index: dict[str, Component],
     active_set: set[str],
     ghost_ids: set[str],
+    colors: ColorAssigner,
 ) -> None:
-    def edge_target(ref: str) -> str | None:
+    emitted_clones: set[str] = set()
+
+    def edge_target(caller_id: str, ref: str) -> str | None:
+        """Return the graphviz node id to draw an edge to, or None to skip.
+
+        For ubiquitous targets, emit (idempotently) a per-caller clone node and
+        return its synthetic id. The clone uses the same visual style as the
+        original so callers can recognise it.
+        """
         match = index.get(ref.lower())
         if match is None:
             return None
-        target = match.id
-        if target in active_set or target in ghost_ids:
-            return target
+        if match.ubiquitous:
+            clone_id = f"{caller_id}__{match.id}"
+            if clone_id not in emitted_clones:
+                _emit_component_node(dot, match, clone_id, colors)
+                emitted_clones.add(clone_id)
+            return clone_id
+        if match.id in active_set or match.id in ghost_ids:
+            return match.id
         return None
 
     for comp in components:
-        if comp.id not in active_set:
+        if comp.id not in active_set or comp.ubiquitous:
             continue
         for ref in comp.depends_on:
-            t = edge_target(ref)
+            t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(t, comp.id)  # B → A: B provides results to A
         for ref in comp.depends_on_planned:
-            t = edge_target(ref)
+            t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(t, comp.id, style="dashed", color=PLANNED_EDGE_COLOR)
         for ref in comp.uses:
-            t = edge_target(ref)
+            t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(comp.id, t, style="dotted")  # A ··→ B: API call
         for ref in comp.uses_planned:
-            t = edge_target(ref)
+            t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(comp.id, t, style="dotted", color=PLANNED_EDGE_COLOR)
 
@@ -450,6 +491,12 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
             color=GHOST_BORDER_COLOR,
         )
         leg.node(
+            "_leg_ubiq",
+            label="Ubiquitous\n(cloned per caller)",
+            fillcolor="white",
+            penwidth="1.0",
+        )
+        leg.node(
             "_leg_entry",
             label="Data\nsource",
             shape="cylinder",
@@ -483,9 +530,14 @@ def build_graph(
             "rankdir": direction,
             "fontname": "Helvetica",
             "fontsize": "12",
-            "splines": "polyline",
-            "nodesep": "0.5",
-            "ranksep": "1.0",
+            # splines=true gives graphviz freedom to route edges as smooth
+            # curves around nodes; combined with concentrate=true (merges
+            # parallel edges going to the same place) this packs the layout
+            # tighter at the cost of wigglier lines.
+            "splines": "true",
+            "concentrate": "true",
+            "nodesep": "0.3",
+            "ranksep": "0.5",
             "dpi": "150",
         },
         node_attr={
@@ -499,7 +551,7 @@ def build_graph(
 
     _add_active_nodes(dot, components, active_set, colors)
     _add_ghost_nodes(dot, ghost_ids, index)
-    _add_edges(dot, components, index, active_set, ghost_ids)
+    _add_edges(dot, components, index, active_set, ghost_ids, colors)
     _add_terminal_nodes(dot, active_set, ghost_ids)
     _add_legend(dot, colors)
 
