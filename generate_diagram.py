@@ -183,6 +183,29 @@ def build_graph(
             if target in active_set or target in ghost_ids:
                 dot.edge(comp["id"], target, style="dotted")  # A ··→ B: A sends request to B
 
+    # Entry node: External data sources (cylinder = data store)
+    terminal_attrs = dict(
+        style="filled",
+        fillcolor="#CFD8DC",
+        fontname="Helvetica",
+        fontsize="11",
+        penwidth="1.5",
+    )
+    dot.node("_external_sources", label="External\ndata sources",
+             shape="cylinder", **terminal_attrs)
+    with dot.subgraph() as src_rank:
+        src_rank.attr(rank="min")
+        src_rank.node("_external_sources")
+    dot.edge("_external_sources", "kgx-storage-pipeline")
+
+    # Exit node: User (double-border oval = terminal endpoint)
+    dot.node("_user", label="User", shape="oval",
+             peripheries="2", **terminal_attrs)
+    with dot.subgraph() as sink_rank:
+        sink_rank.attr(rank="max")
+        sink_rank.node("_user")
+    dot.edge("ui", "_user")
+
     # Legend
     with dot.subgraph(name="cluster_legend") as leg:
         leg.attr(
