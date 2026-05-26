@@ -1,10 +1,12 @@
 """Generate dependency diagrams for Translator platform components."""
 
 import csv
+import html
 import json
 import os
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import click
@@ -14,8 +16,8 @@ from dotenv import load_dotenv
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
 
-# Owner → fill color mapping
-OWNER_COLORS = {
+# Owner → fill color mapping. Insertion order doubles as legend order.
+OWNER_COLORS: dict[str, str] = {
     # Main customers: bright and prominent
     "NCATS": "#EF5350",          # vivid red
     "UI": "#EC407A",             # vivid pink
@@ -34,6 +36,18 @@ FALLBACK_COLORS = [
     "#B0BEC5", "#BCAAA4", "#CE93D8", "#80CBC4",
     "#EF9A9A", "#FFCC80", "#C5E1A5", "#80DEEA",
 ]
+# Soft indigo for planned edges — distinct from the ghost-node gray
+# (#999999) so planned edges don't visually blur with excluded-node borders.
+PLANNED_EDGE_COLOR = "#7986CB"
+GHOST_BORDER_COLOR = "#999999"
+GHOST_FILL_COLOR = "#D3D3D3"
+GHOST_FONT_COLOR = "#666666"
+TERMINAL_FILL_COLOR = "#CFD8DC"
+
+# Hardcoded entry/exit anchors — the diagram has a single data-flow entry
+# (External data sources → kgx-storage-pipeline) and a single exit (UI → User).
+ENTRY_TARGET = "kgx-storage-pipeline"
+EXIT_SOURCE = "ui"
 
 
 class ColorAssigner:
@@ -53,13 +67,52 @@ class ColorAssigner:
         return self.color_map[owner]
 
 
-def parse_id_list(field: str) -> tuple[list[str], list[str]]:
+def text_color_for(fill_hex: str) -> str:
+    """Return "black" or "white" for adequate contrast against a hex fill."""
+    h = fill_hex.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    # Rec. 709 perceptual luminance
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "black" if luminance > 0.5 else "white"
+
+
+@dataclass
+class Component:
+    """A single row of the components CSV after parsing."""
+
+    id: str
+    name: str
+    owner: str
+    itrb: str
+    refactor_status: str
+    notes: str
+    depends_on: list[str] = field(default_factory=list)
+    depends_on_planned: list[str] = field(default_factory=list)
+    uses: list[str] = field(default_factory=list)
+    uses_planned: list[str] = field(default_factory=list)
+
+    @property
+    def display_name(self) -> str:
+        # Fall back to id when Name is missing — otherwise the label
+        # starts with a blank line.
+        return self.name or self.id
+
+    def all_refs(self) -> list[str]:
+        return (
+            self.depends_on
+            + self.depends_on_planned
+            + self.uses
+            + self.uses_planned
+        )
+
+
+def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
     """Split a comma-separated field into (implemented_ids, planned_ids).
 
     IDs prefixed with '~' are planned-but-not-yet-implemented.
     """
     implemented, planned = [], []
-    for part in field.split(","):
+    for part in field_value.split(","):
         part = part.strip()
         if not part:
             continue
@@ -70,24 +123,44 @@ def parse_id_list(field: str) -> tuple[list[str], list[str]]:
     return implemented, planned
 
 
-def load_components(csv_path: Path) -> list[dict]:
-    # utf-8-sig strips a UTF-8 BOM if present (Excel-resaved or Windows-edited files),
-    # otherwise the first header would read as "﻿id" and KeyError on c["id"].
+def load_components(csv_path: Path) -> list[Component]:
+    """Parse the CSV into a sorted list of Components.
+
+    Sorted by lowercase id for deterministic .dot / .json output across CSV
+    row reorderings.
+    """
+    # utf-8-sig strips a UTF-8 BOM if present (Excel-resaved or Windows-edited
+    # files), otherwise the first header would read as "﻿id" and KeyError.
     with csv_path.open(newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        rows = []
+        rows: list[Component] = []
         for row in reader:
-            impl, planned = parse_id_list(row.get("Gets results from", ""))
-            row["_depends_on"] = impl
-            row["_depends_on_planned"] = planned
-            impl, planned = parse_id_list(row.get("Calls", ""))
-            row["_uses"] = impl
-            row["_uses_planned"] = planned
-            rows.append(row)
+            depends_on, depends_on_planned = parse_id_list(
+                row.get("Gets results from", "")
+            )
+            uses, uses_planned = parse_id_list(row.get("Calls", ""))
+            rows.append(Component(
+                id=row.get("id", "").strip(),
+                name=row.get("Name", "").strip(),
+                owner=(row.get("Owner") or "None").strip() or "None",
+                itrb=row.get("Component in ITRB", "").strip(),
+                refactor_status=row.get("Refactor status", "").strip(),
+                notes=row.get("Notes", "").strip(),
+                depends_on=depends_on,
+                depends_on_planned=depends_on_planned,
+                uses=uses,
+                uses_planned=uses_planned,
+            ))
+    rows.sort(key=lambda c: c.id.lower())
     return rows
 
 
-def validate(components: list[dict]) -> bool:
+def index_by_id(components: list[Component]) -> dict[str, Component]:
+    """Case-insensitive lookup from lower(id) to Component."""
+    return {c.id.lower(): c for c in components}
+
+
+def validate(components: list[Component]) -> bool:
     """Print messages for any reference issues.
 
     Returns False on hard errors (duplicate ids, unknown referenced ids).
@@ -97,189 +170,183 @@ def validate(components: list[dict]) -> bool:
     """
     ok = True
 
-    # Hard error: duplicate ids (case-insensitive). The id_lower_map below
-    # would silently keep only the last duplicate, so detect them up front.
+    # Hard error: duplicate ids (case-insensitive). The index below would
+    # silently keep only the last duplicate, so detect them up front.
     seen: dict[str, str] = {}
     for comp in components:
-        key = comp["id"].lower()
+        key = comp.id.lower()
         if key in seen:
             click.echo(
                 f"ERROR: duplicate id (case-insensitive): "
-                f"'{seen[key]}' and '{comp['id']}'",
+                f"'{seen[key]}' and '{comp.id}'",
                 err=True,
             )
             ok = False
         else:
-            seen[key] = comp["id"]
+            seen[key] = comp.id
 
-    id_lower_map = {c["id"].lower(): c["id"] for c in components}
+    index = index_by_id(components)
     for comp in components:
-        comp_id = comp["id"]
-        all_refs = (
-            comp["_depends_on"] + comp["_depends_on_planned"]
-            + comp["_uses"] + comp["_uses_planned"]
-        )
-        for ref in all_refs:
-            ref_lower = ref.lower()
-            if ref_lower not in id_lower_map:
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is None:
                 click.echo(
-                    f"ERROR: '{comp_id}' references unknown id '{ref}' "
+                    f"ERROR: '{comp.id}' references unknown id '{ref}' "
                     f"in Gets results from/Calls",
                     err=True,
                 )
                 ok = False
-            elif id_lower_map[ref_lower] != ref:
+            elif match.id != ref:
                 click.echo(
-                    f"WARNING: '{comp_id}' references '{ref}' but the actual id "
-                    f"is '{id_lower_map[ref_lower]}' (case mismatch)",
+                    f"WARNING: '{comp.id}' references '{ref}' but the actual id "
+                    f"is '{match.id}' (case mismatch)",
                     err=True,
                 )
     return ok
 
 
-def write_json(components: list[dict], out_path: Path) -> None:
-    exportable = []
-    for comp in components:
-        row = {k: v for k, v in comp.items() if not k.startswith("_")}
-        row["depends_on"] = comp["_depends_on"]
-        row["depends_on_planned"] = comp["_depends_on_planned"]
-        row["uses"] = comp["_uses"]
-        row["uses_planned"] = comp["_uses_planned"]
-        exportable.append(row)
+def write_json(components: list[Component], out_path: Path) -> None:
+    """Serialise components to JSON, preserving the original CSV column names."""
+    exportable = [
+        {
+            "id": c.id,
+            "Name": c.name,
+            "Owner": c.owner,
+            "Component in ITRB": c.itrb,
+            "Refactor status": c.refactor_status,
+            "Notes": c.notes,
+            "depends_on": c.depends_on,
+            "depends_on_planned": c.depends_on_planned,
+            "uses": c.uses,
+            "uses_planned": c.uses_planned,
+        }
+        for c in components
+    ]
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(exportable, f, indent=2, ensure_ascii=False)
     click.echo(f"Wrote {out_path}")
 
 
-def build_graph(
-    components: list[dict],
+# --- Graph construction helpers --------------------------------------------
+
+
+def _compute_active_set(
+    components: list[Component],
     active_statuses: set[str] | None,
-    direction: str,
-    colors: ColorAssigner,
-) -> graphviz.Digraph:
-    id_lower_map = {c["id"].lower(): c for c in components}
-
+) -> set[str]:
     if active_statuses is None:
-        active_set = {c["id"] for c in components}
-    else:
-        active_set = {c["id"] for c in components if c["Refactor status"] in active_statuses}
+        return {c.id for c in components}
+    return {c.id for c in components if c.refactor_status in active_statuses}
 
-    def resolve(ref: str) -> str | None:
-        """Resolve a ref string to its canonical component id, or None if unknown.
 
-        Unknown refs return None rather than falling back to the raw ref so they
-        do not render as phantom ghost nodes; validate() is responsible for
-        surfacing them as errors before we reach here.
-        """
-        match = id_lower_map.get(ref.lower())
-        return match["id"] if match else None
-
-    # Collect ghost ids: referenced by active components but not in active_set
-    ghost_ids: set[str] = set()
+def _compute_ghost_ids(
+    components: list[Component],
+    index: dict[str, Component],
+    active_set: set[str],
+) -> set[str]:
+    ghost: set[str] = set()
     for comp in components:
-        if comp["id"] not in active_set:
+        if comp.id not in active_set:
             continue
-        all_refs = (
-            comp["_depends_on"] + comp["_depends_on_planned"]
-            + comp["_uses"] + comp["_uses_planned"]
-        )
-        for ref in all_refs:
-            canonical = resolve(ref)
-            if canonical is not None and canonical not in active_set:
-                ghost_ids.add(canonical)
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is not None and match.id not in active_set:
+                ghost.add(match.id)
+    return ghost
 
-    dot = graphviz.Digraph(
-        name="translator_components",
-        graph_attr={
-            "rankdir": direction,
-            "fontname": "Helvetica",
-            "fontsize": "12",
-            "splines": "ortho",
-            "nodesep": "0.5",
-            "ranksep": "1.0",
-        },
-        node_attr={
-            "fontname": "Helvetica",
-            "fontsize": "11",
-            "style": "filled,rounded",
-            "shape": "box",
-        },
-        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
-    )
 
-    # Add active nodes (no owner clustering — owner is shown in the label)
+def _add_active_nodes(
+    dot: graphviz.Digraph,
+    components: list[Component],
+    active_set: set[str],
+    colors: ColorAssigner,
+) -> None:
     for comp in components:
-        if comp["id"] not in active_set:
+        if comp.id not in active_set:
             continue
-        owner = comp.get("Owner", "None") or "None"
-        fill = colors.get(owner)
-        is_new = comp["Refactor status"] == "New in Refactor"
-        label = f"{comp['Name']}\n{comp['id']}\n{owner}"
+        fill = colors.get(comp.owner)
+        is_new = comp.refactor_status == "New in Refactor"
+        # Owner is encoded by node color and shown in the legend, not in the label.
+        label = f"{comp.display_name}\n{comp.id}"
         dot.node(
-            comp["id"],
+            comp.id,
             label=label,
             fillcolor=fill,
+            fontcolor=text_color_for(fill),
             penwidth="2.0" if is_new else "1.0",
         )
 
-    # Ghost nodes (outside clusters, muted style)
+
+def _add_ghost_nodes(
+    dot: graphviz.Digraph,
+    ghost_ids: set[str],
+    index: dict[str, Component],
+) -> None:
     for ghost_id in sorted(ghost_ids):
-        comp = id_lower_map.get(ghost_id.lower())
-        name = comp["Name"] if comp else ghost_id
-        owner = (comp.get("Owner", "") or "") if comp else ""
-        label = f"{name}\n{ghost_id}\n{owner}\n(excluded)" if owner else f"{name}\n{ghost_id}\n(excluded)"
+        comp = index.get(ghost_id.lower())
+        name = comp.display_name if comp else ghost_id
+        label = f"{name}\n{ghost_id}\n(excluded)"
         dot.node(
             ghost_id,
             label=label,
-            fillcolor="#D3D3D3",
+            fillcolor=GHOST_FILL_COLOR,
             style="filled,rounded,dashed",
-            fontcolor="#666666",
-            color="#999999",
+            fontcolor=GHOST_FONT_COLOR,
+            color=GHOST_BORDER_COLOR,
         )
 
-    # Edges — resolve ids case-insensitively; unknown refs are skipped (validate() flagged them)
-    PLANNED_COLOR = "#999999"
 
+def _add_edges(
+    dot: graphviz.Digraph,
+    components: list[Component],
+    index: dict[str, Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+) -> None:
     def edge_target(ref: str) -> str | None:
-        target = resolve(ref)
-        if target is None:
+        match = index.get(ref.lower())
+        if match is None:
             return None
+        target = match.id
         if target in active_set or target in ghost_ids:
             return target
         return None
 
     for comp in components:
-        if comp["id"] not in active_set:
+        if comp.id not in active_set:
             continue
-        for ref in comp["_depends_on"]:
-            target = edge_target(ref)
-            if target is not None:
-                dot.edge(target, comp["id"])  # B → A: B provides results to A
-        for ref in comp["_depends_on_planned"]:
-            target = edge_target(ref)
-            if target is not None:
-                dot.edge(target, comp["id"], style="dashed", color=PLANNED_COLOR)
-        for ref in comp["_uses"]:
-            target = edge_target(ref)
-            if target is not None:
-                dot.edge(comp["id"], target, style="dotted")  # A ··→ B: A sends request to B
-        for ref in comp["_uses_planned"]:
-            target = edge_target(ref)
-            if target is not None:
-                dot.edge(comp["id"], target, style="dotted", color=PLANNED_COLOR)
+        for ref in comp.depends_on:
+            t = edge_target(ref)
+            if t is not None:
+                dot.edge(t, comp.id)  # B → A: B provides results to A
+        for ref in comp.depends_on_planned:
+            t = edge_target(ref)
+            if t is not None:
+                dot.edge(t, comp.id, style="dashed", color=PLANNED_EDGE_COLOR)
+        for ref in comp.uses:
+            t = edge_target(ref)
+            if t is not None:
+                dot.edge(comp.id, t, style="dotted")  # A ··→ B: API call
+        for ref in comp.uses_planned:
+            t = edge_target(ref)
+            if t is not None:
+                dot.edge(comp.id, t, style="dotted", color=PLANNED_EDGE_COLOR)
 
-    # Entry/exit terminal nodes — only added when the components they connect
-    # to are present in the diagram. Without the gate, hardcoded edges to
-    # missing ids would silently create default-styled phantom nodes.
+
+def _add_terminal_nodes(
+    dot: graphviz.Digraph,
+    active_set: set[str],
+    ghost_ids: set[str],
+) -> None:
+    """Add entry/exit nodes, gated on the components they connect to."""
     terminal_attrs = dict(
         style="filled",
-        fillcolor="#CFD8DC",
+        fillcolor=TERMINAL_FILL_COLOR,
         fontname="Helvetica",
         fontsize="11",
         penwidth="1.5",
     )
 
-    ENTRY_TARGET = "kgx-storage-pipeline"
     if ENTRY_TARGET in active_set or ENTRY_TARGET in ghost_ids:
         dot.node("_external_sources", label="External\ndata sources",
                  shape="cylinder", **terminal_attrs)
@@ -288,7 +355,6 @@ def build_graph(
             src_rank.node("_external_sources")
         dot.edge("_external_sources", ENTRY_TARGET)
 
-    EXIT_SOURCE = "ui"
     if EXIT_SOURCE in active_set or EXIT_SOURCE in ghost_ids:
         dot.node("_user", label="User", shape="oval",
                  peripheries="2", **terminal_attrs)
@@ -297,8 +363,34 @@ def build_graph(
             sink_rank.node("_user")
         dot.edge(EXIT_SOURCE, "_user")
 
-    # Legend — note: `rank` is not honored on cluster subgraphs in graphviz,
-    # so legend placement is left to the layout engine.
+
+def _owner_legend_html(colors: ColorAssigner) -> str:
+    """Build an HTML-table label listing every owner and its fill color.
+
+    Two-column layout: a colored swatch on the left, the owner name on a
+    neutral background on the right. This keeps text contrast uniform
+    regardless of how dark the swatch is.
+    """
+    rows = ['<TR><TD COLSPAN="2"><B>Owner</B></TD></TR>']
+    for owner, fill in colors.color_map.items():
+        rows.append(
+            f'<TR>'
+            f'<TD BGCOLOR="{fill}" WIDTH="20"> </TD>'
+            f'<TD ALIGN="LEFT">{html.escape(owner)}</TD>'
+            f'</TR>'
+        )
+    table = (
+        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
+        + "".join(rows)
+        + '</TABLE>'
+    )
+    # Python graphviz treats labels starting with '<' as HTML-like — the
+    # outer angle brackets are the marker, inner is the table.
+    return f"<{table}>"
+
+
+def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
+    """Build a legend covering owner colors, edge styles, and node styles."""
     with dot.subgraph(name="cluster_legend") as leg:
         leg.attr(
             label="Legend",
@@ -309,12 +401,100 @@ def build_graph(
             fontsize="11",
             margin="12",
         )
-        leg.node("_leg_a1", label="Producer", fillcolor="white", penwidth="1.0")
-        leg.node("_leg_b1", label="Consumer", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_a1", "_leg_b1", xlabel="Results")
-        leg.node("_leg_a2", label="Component", fillcolor="white", penwidth="1.0")
-        leg.node("_leg_b2", label="Service", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_a2", "_leg_b2", xlabel="API call", style="dotted")
+
+        # Owner-color key as a compact HTML table.
+        leg.node(
+            "_leg_owners",
+            label=_owner_legend_html(colors),
+            shape="plain",
+        )
+
+        # Edge style examples — provider→consumer / API call / planned.
+        leg.node("_leg_p", label="Producer", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_c", label="Consumer", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_p", "_leg_c", xlabel="Results")
+
+        leg.node("_leg_a", label="Component", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
+
+        leg.node("_leg_pp", label="Producer*", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_cc", label="Consumer*", fillcolor="white", penwidth="1.0")
+        leg.edge(
+            "_leg_pp", "_leg_cc",
+            xlabel="Planned",
+            style="dashed",
+            color=PLANNED_EDGE_COLOR,
+        )
+
+        # Node style examples — bold = new, dashed = ghost, terminal shapes.
+        leg.node(
+            "_leg_new",
+            label="New in\nRefactor",
+            fillcolor="white",
+            penwidth="2.0",
+        )
+        leg.node(
+            "_leg_ghost",
+            label="(excluded)",
+            fillcolor=GHOST_FILL_COLOR,
+            style="filled,rounded,dashed",
+            fontcolor=GHOST_FONT_COLOR,
+            color=GHOST_BORDER_COLOR,
+        )
+        leg.node(
+            "_leg_entry",
+            label="Data\nsource",
+            shape="cylinder",
+            fillcolor=TERMINAL_FILL_COLOR,
+            penwidth="1.5",
+        )
+        leg.node(
+            "_leg_exit",
+            label="User",
+            shape="oval",
+            peripheries="2",
+            fillcolor=TERMINAL_FILL_COLOR,
+            penwidth="1.5",
+        )
+
+
+def build_graph(
+    components: list[Component],
+    active_statuses: set[str] | None,
+    direction: str,
+    colors: ColorAssigner,
+) -> graphviz.Digraph:
+    """Assemble the full graph from the parsed component list."""
+    index = index_by_id(components)
+    active_set = _compute_active_set(components, active_statuses)
+    ghost_ids = _compute_ghost_ids(components, index, active_set)
+
+    dot = graphviz.Digraph(
+        name="translator_components",
+        graph_attr={
+            "rankdir": direction,
+            "fontname": "Helvetica",
+            "fontsize": "12",
+            "splines": "polyline",
+            "nodesep": "0.5",
+            "ranksep": "1.0",
+            "dpi": "150",
+        },
+        node_attr={
+            "fontname": "Helvetica",
+            "fontsize": "11",
+            "style": "filled,rounded",
+            "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+
+    _add_active_nodes(dot, components, active_set, colors)
+    _add_ghost_nodes(dot, ghost_ids, index)
+    _add_edges(dot, components, index, active_set, ghost_ids)
+    _add_terminal_nodes(dot, active_set, ghost_ids)
+    _add_legend(dot, colors)
 
     return dot
 
@@ -332,7 +512,7 @@ def build_graph(
     is_flag=True,
     default=False,
     help="Download CSV from Google Sheet instead of reading a local file. "
-         "Reads GOOGLE_SHEET_ID from .env in the script directory.",
+         "Reads GOOGLE_SHEET_ID from .env (cwd, then the script directory).",
 )
 @click.option(
     "--sheet-gid", "sheet_gid",
@@ -394,12 +574,17 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if google_sheet:
-        env_path = Path(__file__).parent / ".env"
-        load_dotenv(env_path)
+        # Look for .env in cwd first (standard dotenv behavior, walks up the
+        # tree), then fall back to one next to the script for users who run
+        # the tool from a different directory. override=False keeps the cwd
+        # value winning when both files exist.
+        load_dotenv()
+        load_dotenv(Path(__file__).parent / ".env", override=False)
         sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
         if not sheet_id:
             raise click.ClickException(
-                f"GOOGLE_SHEET_ID is not set. Fill it in at {env_path}"
+                "GOOGLE_SHEET_ID is not set. Add it to .env in the current "
+                f"directory or next to {Path(__file__).name}."
             )
         url = (
             f"https://docs.google.com/spreadsheets/d/{sheet_id}"
@@ -449,8 +634,12 @@ def main(
         active_statuses = None
         click.echo("Including all components (no filter).")
     else:
-        active_statuses = {s.strip() for s in refactor_status.split(",") if s.strip()}
-        active_count = sum(1 for c in components if c["Refactor status"] in active_statuses)
+        active_statuses = {
+            s.strip() for s in refactor_status.split(",") if s.strip()
+        }
+        active_count = sum(
+            1 for c in components if c.refactor_status in active_statuses
+        )
         click.echo(
             f"Filtering to {active_count} components with status: "
             + ", ".join(sorted(active_statuses))

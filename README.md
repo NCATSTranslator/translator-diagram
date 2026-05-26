@@ -120,9 +120,12 @@ New owners not listed above receive fallback colours automatically.
 | Style | Meaning |
 |---|---|
 | Solid black arrow B → A | B provides results to A ("Gets results from") |
-| Gray dashed arrow B → A | Same, but planned / not yet implemented |
+| Indigo dashed arrow B → A | Same, but planned / not yet implemented |
 | Dotted black arrow A → B | A makes an optional API call to B ("Calls") |
-| Gray dotted arrow A → B | Same, but planned / not yet implemented |
+| Indigo dotted arrow A → B | Same, but planned / not yet implemented |
+
+Planned-edge indigo is distinct from the gray used for ghost-node borders,
+so the two encodings don't blur together visually.
 
 ### Special nodes
 
@@ -176,9 +179,6 @@ translator-components-diagram/
 
 ## Possible future improvements
 
-- **Compact HTML-table legend** — replace the current node-based legend with a
-  Graphviz HTML label table, which would be much smaller and allow adding the
-  planned-edge styles without growing the legend box.
 - **Commit `.dot` and `.json` to Git** — move these outputs outside `data/` so
   they are version-controlled and reviewable without running the tool.
 - **Interactive SVG or HTML output** — embed tooltips (owner, notes, status)
