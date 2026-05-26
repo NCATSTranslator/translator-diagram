@@ -46,6 +46,7 @@ class ColorAssigner:
         self.color_map: dict[str, str] = dict(base_colors)
         self.fallback_colors = fallback_colors
         self.next_fallback = 0
+        self._used: set[str] = set()
 
     def get(self, owner: str) -> str:
         if owner not in self.color_map:
@@ -53,7 +54,13 @@ class ColorAssigner:
                 self.next_fallback % len(self.fallback_colors)
             ]
             self.next_fallback += 1
+        self._used.add(owner)
         return self.color_map[owner]
+
+    @property
+    def used_colors(self) -> dict[str, str]:
+        """Color map restricted to owners actually rendered, in original order."""
+        return {k: v for k, v in self.color_map.items() if k in self._used}
 
 
 def text_color_for(fill_hex: str) -> str:
@@ -420,7 +427,7 @@ def _owner_legend_html(colors: ColorAssigner) -> str:
     regardless of how dark the swatch is.
     """
     rows = ['<TR><TD COLSPAN="2"><B>Owner</B></TD></TR>']
-    for owner, fill in colors.color_map.items():
+    for owner, fill in colors.used_colors.items():
         rows.append(
             f'<TR>'
             f'<TD BGCOLOR="{fill}" WIDTH="20"> </TD>'
