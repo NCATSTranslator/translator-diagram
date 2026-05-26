@@ -137,34 +137,20 @@ def build_graph(
         edge_attr={"fontname": "Helvetica", "fontsize": "9"},
     )
 
-    # Group active nodes by owner, emit as clusters
-    owners: dict[str, list[dict]] = {}
+    # Add active nodes (no owner clustering — owner is shown in the label)
     for comp in components:
         if comp["id"] not in active_set:
             continue
         owner = comp.get("Owner", "None") or "None"
-        owners.setdefault(owner, []).append(comp)
-
-    for owner, members in sorted(owners.items()):
         fill = get_owner_color(owner, color_map)
-        with dot.subgraph(name=f"cluster_{owner}") as sub:
-            sub.attr(
-                label=owner,
-                style="rounded",
-                color="#888888",
-                fontname="Helvetica",
-                fontsize="12",
-            )
-            for comp in members:
-                is_new = comp["Refactor status"] == "New in Refactor"
-                owner = comp.get("Owner", "None") or "None"
-                label = f"{comp['Name']}\n{comp['id']}\n{owner}"
-                sub.node(
-                    comp["id"],
-                    label=label,
-                    fillcolor=fill,
-                    penwidth="2.0" if is_new else "1.0",
-                )
+        is_new = comp["Refactor status"] == "New in Refactor"
+        label = f"{comp['Name']}\n{comp['id']}\n{owner}"
+        dot.node(
+            comp["id"],
+            label=label,
+            fillcolor=fill,
+            penwidth="2.0" if is_new else "1.0",
+        )
 
     # Ghost nodes (outside clusters, muted style)
     for ghost_id in sorted(ghost_ids):
