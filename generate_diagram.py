@@ -426,7 +426,7 @@ def _owner_legend_html(colors: ColorAssigner) -> str:
     neutral background on the right. This keeps text contrast uniform
     regardless of how dark the swatch is.
     """
-    rows = ['<TR><TD COLSPAN="2"><B>Owner</B></TD></TR>']
+    rows = []
     for owner, fill in colors.used_colors.items():
         rows.append(
             f'<TR>'
@@ -446,25 +446,28 @@ def _owner_legend_html(colors: ColorAssigner) -> str:
 
 def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
     """Build a legend covering owner colors, edge styles, and node styles."""
-    with dot.subgraph(name="cluster_legend") as leg:
-        leg.attr(
-            label="Legend",
-            style="filled,rounded",
-            fillcolor="#FAFAFA",
-            color="#AAAAAA",
-            fontname="Helvetica",
-            fontsize="11",
-            margin="12",
-        )
+    _cluster_attrs = dict(
+        style="filled,rounded",
+        fillcolor="#FAFAFA",
+        color="#AAAAAA",
+        fontname="Helvetica",
+        fontsize="11",
+        margin="12",
+    )
 
-        # Owner-color key as a compact HTML table.
-        leg.node(
+    # Owner-color key in its own cluster so it doesn't crowd the edge examples.
+    with dot.subgraph(name="cluster_legend_owners") as own:
+        own.attr(label="Owner", **_cluster_attrs)
+        own.node(
             "_leg_owners",
             label=_owner_legend_html(colors),
             shape="plain",
         )
 
-        # Edge style examples — provider→consumer / API call / planned.
+    # Edge style examples — provider→consumer / API call.
+    with dot.subgraph(name="cluster_legend") as leg:
+        leg.attr(label="Legend", **_cluster_attrs)
+
         leg.node("_leg_p", label="Producer", fillcolor="white", penwidth="1.0")
         leg.node("_leg_c", label="Consumer", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_p", "_leg_c", xlabel="Results")
@@ -472,6 +475,17 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_a", label="Component", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
+
+    # Place both legend clusters at the same rank (side by side, not diagonal).
+    # newrank=true (set on the graph) lets rank=same work across cluster
+    # boundaries without displacing nodes from their clusters.
+    # constraint=false on the ordering edge keeps it from creating a
+    # rank dependency (which would cause diagonal placement).
+    with dot.subgraph() as s:
+        s.attr(rank="same")
+        s.node("_leg_owners")
+        s.node("_leg_p")
+    dot.edge("_leg_owners", "_leg_p", style="invis", constraint="false")
 
 
 
@@ -500,6 +514,9 @@ def build_graph(
             "concentrate": "true",
             "nodesep": "0.3",
             "ranksep": "0.5",
+            # Required for rank=same to work correctly across cluster
+            # boundaries (e.g. keeping both legend clusters level).
+            "newrank": "true",
             "dpi": "150",
         },
         node_attr={

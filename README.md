@@ -23,16 +23,16 @@ cd translator-components-diagram
 uv sync                          # first-time setup; creates .venv/
 
 # Download latest data from the Google Sheet and regenerate
-uv run generate_diagram.py --google-sheet
+uv run generate-diagram --google-sheet
 
 # Use a locally cached CSV instead
-uv run generate_diagram.py
+uv run generate-diagram
 
 # Include all components, not just the refactor-active ones
-uv run generate_diagram.py --all
+uv run generate-diagram --all
 
 # Also produce a PDF (useful for presentations)
-uv run generate_diagram.py --google-sheet --format pdf
+uv run generate-diagram --google-sheet --format pdf
 ```
 
 ## Input data
@@ -147,7 +147,7 @@ without cluttering the main diagram.
 ## All CLI options
 
 ```
-uv run generate_diagram.py [OPTIONS]
+uv run generate-diagram [OPTIONS]
 
   --input PATH              Local CSV file  [default: data/components.csv]
   --google-sheet            Download CSV from Google Sheet (reads GOOGLE_SHEET_ID
