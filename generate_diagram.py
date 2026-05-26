@@ -181,7 +181,7 @@ def build_graph(
         for ref in comp["_uses"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
-                dot.edge(target, comp["id"], style="dotted")  # B ··→ A: B provides results to A
+                dot.edge(comp["id"], target, style="dotted")  # A ··→ B: A sends request to B
 
     # Legend
     with dot.subgraph(name="cluster_legend") as leg:
@@ -193,13 +193,14 @@ def build_graph(
             fontname="Helvetica",
             fontsize="11",
             margin="12",
+            rank="min",
         )
-        leg.node("_leg_a1", label="Component A", fillcolor="white", penwidth="1.0")
-        leg.node("_leg_b1", label="Data Source B", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_b1", "_leg_a1", xlabel="Gets results from")
-        leg.node("_leg_a2", label="Component C", fillcolor="white", penwidth="1.0")
-        leg.node("_leg_b2", label="Component D", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_b2", "_leg_a2", xlabel="Calls", style="dotted")
+        leg.node("_leg_a1", label="Producer", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b1", label="Consumer", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a1", "_leg_b1", xlabel="Results")
+        leg.node("_leg_a2", label="Component", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b2", label="Service", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a2", "_leg_b2", xlabel="API call", style="dotted")
 
     return dot
 
