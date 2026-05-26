@@ -53,7 +53,7 @@ def load_components(csv_path: Path) -> list[dict]:
         reader = csv.DictReader(f)
         rows = []
         for row in reader:
-            row["_depends_on"] = parse_id_list(row.get("Depends on", ""))
+            row["_depends_on"] = parse_id_list(row.get("Gets data from", ""))
             row["_uses"] = parse_id_list(row.get("Uses", ""))
             rows.append(row)
     return rows
@@ -70,7 +70,7 @@ def validate(components: list[dict]) -> bool:
             if ref_lower not in id_lower_map:
                 click.echo(
                     f"WARNING: '{comp_id}' references unknown id '{ref}' "
-                    f"in Depends on/Uses",
+                    f"in Gets data from/Uses",
                     err=True,
                 )
                 ok = False
@@ -157,7 +157,8 @@ def build_graph(
             )
             for comp in members:
                 is_new = comp["Refactor status"] == "New in Refactor"
-                label = f"{comp['Apps']}\n{comp['id']}"
+                owner = comp.get("Owner", "None") or "None"
+                label = f"{comp['Name']}\n{comp['id']}\n{owner}"
                 sub.node(
                     comp["id"],
                     label=label,
@@ -168,8 +169,9 @@ def build_graph(
     # Ghost nodes (outside clusters, muted style)
     for ghost_id in sorted(ghost_ids):
         comp = id_lower_map.get(ghost_id.lower())
-        apps_name = comp["Apps"] if comp else ghost_id
-        label = f"{apps_name}\n{ghost_id}\n(excluded)"
+        name = comp["Name"] if comp else ghost_id
+        owner = (comp.get("Owner", "") or "") if comp else ""
+        label = f"{name}\n{ghost_id}\n{owner}\n(excluded)" if owner else f"{name}\n{ghost_id}\n(excluded)"
         dot.node(
             ghost_id,
             label=label,
@@ -186,11 +188,29 @@ def build_graph(
         for ref in comp["_depends_on"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
-                dot.edge(target, comp["id"])  # B → A: B must run for A
+                dot.edge(comp["id"], target)  # A → B: A gets data from B
         for ref in comp["_uses"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
-                dot.edge(target, comp["id"], style="dashed")  # B → A: A uses B
+                dot.edge(comp["id"], target, style="dotted", dir="both")  # A ←··→ B: A uses B
+
+    # Legend
+    with dot.subgraph(name="cluster_legend") as leg:
+        leg.attr(
+            label="Legend",
+            style="filled,rounded",
+            fillcolor="#FAFAFA",
+            color="#AAAAAA",
+            fontname="Helvetica",
+            fontsize="11",
+            margin="12",
+        )
+        leg.node("_leg_a1", label="Component A", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b1", label="Data Source B", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a1", "_leg_b1", xlabel="Gets data from")
+        leg.node("_leg_a2", label="Component C", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b2", label="Component D", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a2", "_leg_b2", xlabel="Uses", style="dotted", dir="both")
 
     return dot
 
