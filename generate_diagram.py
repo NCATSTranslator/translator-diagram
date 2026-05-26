@@ -53,8 +53,8 @@ def load_components(csv_path: Path) -> list[dict]:
         reader = csv.DictReader(f)
         rows = []
         for row in reader:
-            row["_depends_on"] = parse_id_list(row.get("Gets data from", ""))
-            row["_uses"] = parse_id_list(row.get("Uses", ""))
+            row["_depends_on"] = parse_id_list(row.get("Gets results from", ""))
+            row["_uses"] = parse_id_list(row.get("Calls", ""))
             rows.append(row)
     return rows
 
@@ -70,7 +70,7 @@ def validate(components: list[dict]) -> bool:
             if ref_lower not in id_lower_map:
                 click.echo(
                     f"WARNING: '{comp_id}' references unknown id '{ref}' "
-                    f"in Gets data from/Uses",
+                    f"in Gets results from/Calls",
                     err=True,
                 )
                 ok = False
@@ -188,11 +188,11 @@ def build_graph(
         for ref in comp["_depends_on"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
-                dot.edge(comp["id"], target)  # A → B: A gets data from B
+                dot.edge(target, comp["id"])  # B → A: B provides results to A
         for ref in comp["_uses"]:
             target = id_lower_map.get(ref.lower(), {}).get("id", ref)
             if target in active_set or target in ghost_ids:
-                dot.edge(comp["id"], target, style="dotted", dir="both")  # A ←··→ B: A uses B
+                dot.edge(target, comp["id"], style="dotted")  # B ··→ A: B provides results to A
 
     # Legend
     with dot.subgraph(name="cluster_legend") as leg:
@@ -207,10 +207,10 @@ def build_graph(
         )
         leg.node("_leg_a1", label="Component A", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b1", label="Data Source B", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_a1", "_leg_b1", xlabel="Gets data from")
+        leg.edge("_leg_b1", "_leg_a1", xlabel="Gets results from")
         leg.node("_leg_a2", label="Component C", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b2", label="Component D", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_a2", "_leg_b2", xlabel="Uses", style="dotted", dir="both")
+        leg.edge("_leg_b2", "_leg_a2", xlabel="Calls", style="dotted")
 
     return dot
 
@@ -269,7 +269,7 @@ def build_graph(
 )
 @click.option(
     "--direction",
-    default="LR",
+    default="TB",
     show_default=True,
     type=click.Choice(["LR", "TB"]),
     help="Graph layout direction.",
