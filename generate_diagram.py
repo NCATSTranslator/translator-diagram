@@ -13,17 +13,20 @@ from dotenv import load_dotenv
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
 
-# Owner → pastel fill color mapping (soft colors work well on white backgrounds)
+# Owner → fill color mapping
 OWNER_COLORS = {
-    "DOGSURF": "#AED6F1",
-    "DINGO": "#A9DFBF",
-    "Core Components WG": "#F9E79F",
-    "NCATS": "#F1948A",
-    "Retriever": "#D7BDE2",
-    "Shepherd": "#FAD7A0",
-    "DOGSLED": "#A8D8EA",
-    "CATRAX": "#C8E6C9",
-    "UI": "#FFDDC1",
+    # Main customers: bright and prominent
+    "NCATS": "#EF5350",          # vivid red
+    "UI": "#EC407A",             # vivid pink
+    # Three main teams: distinct solid colors
+    "DOGSLED": "#42A5F5",        # blue
+    "DOGSURF": "#66BB6A",        # green
+    "CATRAX": "#FFA726",         # amber
+    # Specialized cross-team groups: distinct from the teams above
+    "Core Components WG": "#AB47BC",  # purple
+    "DINGO": "#26C6DA",          # cyan
+    "Shepherd": "#D4E157",       # lime
+    "Retriever": "#8D6E63",      # brown
     "None": "#E8E8E8",
 }
 FALLBACK_COLORS = [
