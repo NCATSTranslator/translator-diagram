@@ -405,6 +405,7 @@ def _add_group_clusters(
         with dot.subgraph(name=f"cluster_group_{safe}") as sg:
             sg.attr(
                 label=html.escape(group_label),
+                labelloc="b",
                 style="dashed",
                 color="#555555",
                 fontname="Helvetica",
