@@ -612,7 +612,11 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-    pass  # no rank pinning — let the layout engine place the owner legend freely
+    # Pin both legend clusters to the bottom of the diagram.
+    with dot.subgraph() as s:
+        s.attr(rank="max")
+        s.node("_leg_owners")
+        s.node("_leg_p")
 
 
 
