@@ -612,7 +612,15 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-        # Lock each pair onto its own horizontal row.
+        _ext = dict(
+            fillcolor=EXTERNAL_FILL_COLOR, style="filled",
+            fontname="Helvetica", fontsize="13", penwidth="2.5",
+        )
+        leg.node("_leg_src",  label="Data source", shape="cylinder", **_ext)
+        leg.node("_leg_sink", label="User / agent", shape="oval",
+                 peripheries="2", **_ext)
+
+        # Lock each pair / row onto the same horizontal rank.
         with leg.subgraph() as row1:
             row1.attr(rank="same")
             row1.node("_leg_p")
@@ -621,8 +629,13 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
             row2.attr(rank="same")
             row2.node("_leg_a")
             row2.node("_leg_b")
-        # Invisible edge to keep row 1 above row 2.
-        leg.edge("_leg_p", "_leg_a", style="invis")
+        with leg.subgraph() as row3:
+            row3.attr(rank="same")
+            row3.node("_leg_src")
+            row3.node("_leg_sink")
+        # Invisible edges enforce row order: row1 → row2 → row3.
+        leg.edge("_leg_p", "_leg_a",   style="invis")
+        leg.edge("_leg_a", "_leg_src", style="invis")
 
     # Pin the owner legend to the bottom; the edge-style legend floats freely
     # (its internal rank="same" rows keep it compact wherever it lands).
