@@ -31,12 +31,9 @@ PLANNED_EDGE_COLOR = "#7986CB"
 GHOST_BORDER_COLOR = "#999999"
 GHOST_FILL_COLOR = "#D3D3D3"
 GHOST_FONT_COLOR = "#666666"
-TERMINAL_FILL_COLOR = "#CFD8DC"
-
-# Hardcoded entry/exit anchors — the diagram has a single data-flow entry
-# (External data sources → kgx-storage-pipeline) and a single exit (UI → User).
-ENTRY_TARGET = "kgx-storage-pipeline"
-EXIT_SOURCE = "ui"
+# Warm amber for external-entity nodes (sources and sinks) so they stand out
+# clearly against the component fill colors.
+EXTERNAL_FILL_COLOR = "#FFE082"
 
 
 class ColorAssigner:
@@ -84,6 +81,7 @@ class Component:
     notes: str
     ubiquitous: bool = False
     part_of: str = ""
+    externals: list[tuple[str, str]] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     depends_on_planned: list[str] = field(default_factory=list)
     uses: list[str] = field(default_factory=list)
@@ -124,6 +122,35 @@ def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
         else:
             implemented.append(part)
     return implemented, planned
+
+
+def parse_externals(field_value: str) -> list[tuple[str, str]]:
+    """Parse the Externals column into a list of (direction, name) pairs.
+
+    Values are standard CSV (commas as separators, double-quotes for names
+    that contain commas). Each token must start with '<' (external source
+    that sends data *into* this component) or '>' (external sink that
+    receives data *from* this component).
+
+    Examples
+    --------
+    ``<External data sources, >User``
+    ``"<Upstream, service", >Researcher``
+    """
+    if not field_value.strip():
+        return []
+    result = []
+    reader = csv.reader([field_value])
+    for row in reader:
+        for token in row:
+            token = token.strip()
+            if not token:
+                continue
+            if token.startswith("<"):
+                result.append(("in", token[1:].strip()))
+            elif token.startswith(">"):
+                result.append(("out", token[1:].strip()))
+    return result
 
 
 def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
@@ -169,6 +196,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 notes=row.get("Notes", "").strip(),
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
                 part_of=row.get("Part of", "").strip(),
+                externals=parse_externals(row.get("Externals", "")),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
                 uses=uses,
@@ -240,6 +268,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Notes": c.notes,
             "Ubiquitous": c.ubiquitous,
             "Part of": c.part_of,
+            "Externals": [{"direction": d, "name": n} for d, n in c.externals],
             "depends_on": c.depends_on,
             "depends_on_planned": c.depends_on_planned,
             "uses": c.uses,
@@ -451,35 +480,72 @@ def _add_edges(
                 dot.edge(comp.id, t, style="dotted", color=PLANNED_EDGE_COLOR)
 
 
-def _add_terminal_nodes(
+def _ext_node_id(name: str) -> str:
+    """Stable graphviz node ID derived from an external-entity name."""
+    safe = "".join(c if c.isalnum() else "_" for c in name.lower())
+    return f"_ext_{safe}"
+
+
+def _add_external_nodes_and_edges(
     dot: graphviz.Digraph,
+    components: list[Component],
     active_set: set[str],
-    ghost_ids: set[str],
 ) -> None:
-    """Add entry/exit nodes, gated on the components they connect to."""
-    terminal_attrs = dict(
+    """Emit external-entity nodes and their edges from the Externals column.
+
+    Sources (direction "in") become cylinder nodes at rank=min; sinks
+    (direction "out") become double-oval nodes at rank=max.  Multiple
+    components can reference the same external name — one node is emitted
+    and one edge per referencing component is drawn.
+    """
+    in_nodes: dict[str, str] = {}            # node_id → display name
+    out_nodes: dict[str, str] = {}           # node_id → display name
+    in_edges: list[tuple[str, str]] = []     # (ext_id, comp_id)
+    out_edges: list[tuple[str, str]] = []    # (comp_id, ext_id)
+
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for direction, name in comp.externals:
+            nid = _ext_node_id(name)
+            if direction == "in":
+                in_nodes[nid] = name
+                in_edges.append((nid, comp.id))
+            else:
+                out_nodes[nid] = name
+                out_edges.append((comp.id, nid))
+
+    if not in_nodes and not out_nodes:
+        return
+
+    ext_attrs = dict(
         style="filled",
-        fillcolor=TERMINAL_FILL_COLOR,
+        fillcolor=EXTERNAL_FILL_COLOR,
         fontname="Helvetica",
-        fontsize="11",
-        penwidth="1.5",
+        fontsize="13",
+        penwidth="2.5",
     )
 
-    if ENTRY_TARGET in active_set or ENTRY_TARGET in ghost_ids:
-        dot.node("_external_sources", label="External\ndata sources",
-                 shape="cylinder", **terminal_attrs)
-        with dot.subgraph() as src_rank:
-            src_rank.attr(rank="min")
-            src_rank.node("_external_sources")
-        dot.edge("_external_sources", ENTRY_TARGET)
+    for nid, name in in_nodes.items():
+        dot.node(nid, label=name, shape="cylinder", **ext_attrs)
+    for nid, name in out_nodes.items():
+        dot.node(nid, label=name, shape="oval", peripheries="2", **ext_attrs)
 
-    if EXIT_SOURCE in active_set or EXIT_SOURCE in ghost_ids:
-        dot.node("_user", label="User", shape="oval",
-                 peripheries="2", **terminal_attrs)
-        with dot.subgraph() as sink_rank:
-            sink_rank.attr(rank="max")
-            sink_rank.node("_user")
-        dot.edge(EXIT_SOURCE, "_user")
+    if in_nodes:
+        with dot.subgraph() as s:
+            s.attr(rank="min")
+            for nid in in_nodes:
+                s.node(nid)
+    if out_nodes:
+        with dot.subgraph() as s:
+            s.attr(rank="max")
+            for nid in out_nodes:
+                s.node(nid)
+
+    for src, dst in in_edges:
+        dot.edge(src, dst)
+    for src, dst in out_edges:
+        dot.edge(src, dst)
 
 
 def _owner_legend_html(colors: ColorAssigner) -> str:
@@ -598,7 +664,7 @@ def build_graph(
     _add_active_nodes(dot, components, active_set, colors, skip_ids=grouped_ids)
     _add_ghost_nodes(dot, ghost_ids, index, skip_ids=grouped_ids)
     _add_edges(dot, components, index, active_set, ghost_ids, colors)
-    _add_terminal_nodes(dot, active_set, ghost_ids)
+    _add_external_nodes_and_edges(dot, components, active_set)
     _add_legend(dot, colors)
 
     return dot
