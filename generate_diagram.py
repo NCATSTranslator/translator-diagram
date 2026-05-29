@@ -497,16 +497,13 @@ def _add_external_nodes_and_edges(
     dot: graphviz.Digraph,
     components: list[Component],
     active_set: set[str],
-) -> set[str]:
+) -> None:
     """Emit external-entity nodes and their edges from the Externals column.
 
     Sources (direction "in") become cylinder nodes at rank=min; sinks
     (direction "out") become double-oval nodes at rank=max.  Multiple
     components can reference the same external name — one node is emitted
     and one edge per referencing component is drawn.
-
-    Returns the set of sink (out) node IDs so callers can add ordering
-    edges to nudge co-rank nodes (e.g. the owner legend) to the right.
     """
     in_nodes: dict[str, str] = {}            # node_id → display name
     out_nodes: dict[str, str] = {}           # node_id → display name
@@ -526,7 +523,7 @@ def _add_external_nodes_and_edges(
                 out_edges.append((comp.id, nid))
 
     if not in_nodes and not out_nodes:
-        return set()
+        return
 
     ext_attrs = dict(
         style="filled",
@@ -556,8 +553,6 @@ def _add_external_nodes_and_edges(
         dot.edge(src, dst)
     for src, dst in out_edges:
         dot.edge(src, dst)
-
-    return set(out_nodes.keys())
 
 
 def _owner_legend_html(colors: ColorAssigner) -> str:
@@ -617,12 +612,7 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-    # Pin the owner legend to the bottom rank so it sits below the main graph.
-    # Horizontal placement is left to the layout engine (typically ends up on
-    # the right when sink-external nodes occupy the left of the bottom tier).
-    with dot.subgraph() as s:
-        s.attr(rank="max")
-        s.node("_leg_owners")
+    pass  # no rank pinning — let the layout engine place the owner legend freely
 
 
 
@@ -672,12 +662,8 @@ def build_graph(
     _add_active_nodes(dot, components, active_set, colors, skip_ids=grouped_ids)
     _add_ghost_nodes(dot, ghost_ids, index, skip_ids=grouped_ids)
     _add_edges(dot, components, index, active_set, ghost_ids, colors)
-    sink_ext_ids = _add_external_nodes_and_edges(dot, components, active_set)
+    _add_external_nodes_and_edges(dot, components, active_set)
     _add_legend(dot, colors)
-    # Invisible ordering edges from sink externals → owner legend nudge the
-    # legend rightward within the shared rank=max row.
-    for nid in sorted(sink_ext_ids):
-        dot.edge(nid, "_leg_owners", style="invis", constraint="false")
 
     return dot
 
