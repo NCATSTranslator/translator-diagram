@@ -600,7 +600,7 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
             shape="plain",
         )
 
-    # Edge style examples — provider→consumer / API call.
+    # Edge style examples — provider→consumer / API call, one pair per row.
     with dot.subgraph(name="cluster_legend") as leg:
         leg.attr(label="Legend", **_cluster_attrs)
 
@@ -612,16 +612,23 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-    # Pin both legend clusters to the bottom of the diagram.  All four edge-
-    # example nodes must be included — pinning only _leg_p while leaving
-    # _leg_c/_leg_a/_leg_b free causes the cluster to stretch across ranks.
+        # Lock each pair onto its own horizontal row.
+        with leg.subgraph() as row1:
+            row1.attr(rank="same")
+            row1.node("_leg_p")
+            row1.node("_leg_c")
+        with leg.subgraph() as row2:
+            row2.attr(rank="same")
+            row2.node("_leg_a")
+            row2.node("_leg_b")
+        # Invisible edge to keep row 1 above row 2.
+        leg.edge("_leg_p", "_leg_a", style="invis")
+
+    # Pin the owner legend to the bottom; the edge-style legend floats freely
+    # (its internal rank="same" rows keep it compact wherever it lands).
     with dot.subgraph() as s:
         s.attr(rank="max")
         s.node("_leg_owners")
-        s.node("_leg_p")
-        s.node("_leg_c")
-        s.node("_leg_a")
-        s.node("_leg_b")
 
 
 
