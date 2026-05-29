@@ -612,11 +612,16 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-    # Pin both legend clusters to the bottom of the diagram.
+    # Pin both legend clusters to the bottom of the diagram.  All four edge-
+    # example nodes must be included — pinning only _leg_p while leaving
+    # _leg_c/_leg_a/_leg_b free causes the cluster to stretch across ranks.
     with dot.subgraph() as s:
         s.attr(rank="max")
         s.node("_leg_owners")
         s.node("_leg_p")
+        s.node("_leg_c")
+        s.node("_leg_a")
+        s.node("_leg_b")
 
 
 
