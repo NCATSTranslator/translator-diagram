@@ -83,6 +83,7 @@ class Component:
     refactor_status: str
     notes: str
     ubiquitous: bool = False
+    part_of: str = ""
     depends_on: list[str] = field(default_factory=list)
     depends_on_planned: list[str] = field(default_factory=list)
     uses: list[str] = field(default_factory=list)
@@ -167,6 +168,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 refactor_status=row.get("Refactor status", "").strip(),
                 notes=row.get("Notes", "").strip(),
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
+                part_of=row.get("Part of", "").strip(),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
                 uses=uses,
@@ -237,6 +239,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Refactor status": c.refactor_status,
             "Notes": c.notes,
             "Ubiquitous": c.ubiquitous,
+            "Part of": c.part_of,
             "depends_on": c.depends_on,
             "depends_on_planned": c.depends_on_planned,
             "uses": c.uses,
@@ -304,16 +307,34 @@ def _emit_component_node(
     )
 
 
+def _compute_groups(
+    components: list[Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+) -> dict[str, list[str]]:
+    """Map Part-of label → node ids for active (non-ubiquitous) and ghost nodes."""
+    groups: dict[str, list[str]] = {}
+    for comp in components:
+        if not comp.part_of or comp.ubiquitous:
+            continue
+        if comp.id in active_set or comp.id in ghost_ids:
+            groups.setdefault(comp.part_of, []).append(comp.id)
+    return groups
+
+
 def _add_active_nodes(
     dot: graphviz.Digraph,
     components: list[Component],
     active_set: set[str],
     colors: ColorAssigner,
+    skip_ids: set[str] | None = None,
 ) -> None:
     for comp in components:
         if comp.id not in active_set or comp.ubiquitous:
             # Ubiquitous components don't get a central node — they're emitted
             # per-caller from _add_edges.
+            continue
+        if skip_ids and comp.id in skip_ids:
             continue
         _emit_component_node(dot, comp, comp.id, colors)
 
@@ -322,8 +343,11 @@ def _add_ghost_nodes(
     dot: graphviz.Digraph,
     ghost_ids: set[str],
     index: dict[str, Component],
+    skip_ids: set[str] | None = None,
 ) -> None:
     for ghost_id in sorted(ghost_ids):
+        if skip_ids and ghost_id in skip_ids:
+            continue
         comp = index.get(ghost_id.lower())
         name = comp.display_name if comp else ghost_id
         label = f"{name}\n{ghost_id}\n(excluded)"
@@ -335,6 +359,45 @@ def _add_ghost_nodes(
             fontcolor=GHOST_FONT_COLOR,
             color=GHOST_BORDER_COLOR,
         )
+
+
+def _add_group_clusters(
+    dot: graphviz.Digraph,
+    groups: dict[str, list[str]],
+    components: list[Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+    index: dict[str, Component],
+    colors: ColorAssigner,
+) -> None:
+    """Wrap each Part-of group in a labeled dotted-border cluster subgraph."""
+    for group_label, node_ids in sorted(groups.items()):
+        safe = group_label.lower().replace(" ", "_").replace("/", "_")
+        with dot.subgraph(name=f"cluster_group_{safe}") as sg:
+            sg.attr(
+                label=html.escape(group_label),
+                style="dashed",
+                color="#555555",
+                fontname="Helvetica",
+                fontsize="12",
+                penwidth="1.5",
+                bgcolor="transparent",
+            )
+            for node_id in sorted(node_ids):
+                comp = index.get(node_id.lower())
+                if comp and node_id in active_set:
+                    _emit_component_node(sg, comp, node_id, colors)
+                elif node_id in ghost_ids:
+                    name = comp.display_name if comp else node_id
+                    label = f"{name}\n{node_id}\n(excluded)"
+                    sg.node(
+                        node_id,
+                        label=label,
+                        fillcolor=GHOST_FILL_COLOR,
+                        style="filled,rounded,dashed",
+                        fontcolor=GHOST_FONT_COLOR,
+                        color=GHOST_BORDER_COLOR,
+                    )
 
 
 def _add_edges(
@@ -528,8 +591,12 @@ def build_graph(
         edge_attr={"fontname": "Helvetica", "fontsize": "9"},
     )
 
-    _add_active_nodes(dot, components, active_set, colors)
-    _add_ghost_nodes(dot, ghost_ids, index)
+    groups = _compute_groups(components, active_set, ghost_ids)
+    grouped_ids = {nid for ids in groups.values() for nid in ids}
+
+    _add_group_clusters(dot, groups, components, active_set, ghost_ids, index, colors)
+    _add_active_nodes(dot, components, active_set, colors, skip_ids=grouped_ids)
+    _add_ghost_nodes(dot, ghost_ids, index, skip_ids=grouped_ids)
     _add_edges(dot, components, index, active_set, ghost_ids, colors)
     _add_terminal_nodes(dot, active_set, ghost_ids)
     _add_legend(dot, colors)
