@@ -616,8 +616,8 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
             fillcolor=EXTERNAL_FILL_COLOR, style="filled",
             fontname="Helvetica", fontsize="13", penwidth="2.5",
         )
-        leg.node("_leg_src",  label="Data source", shape="cylinder", **_ext)
-        leg.node("_leg_sink", label="User / agent", shape="oval",
+        leg.node("_leg_src",  label="Database", shape="cylinder", **_ext)
+        leg.node("_leg_sink", label="User/agent", shape="oval",
                  peripheries="2", **_ext)
 
         # Lock each pair / row onto the same horizontal rank.
