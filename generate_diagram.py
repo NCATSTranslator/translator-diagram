@@ -403,13 +403,18 @@ def _add_group_clusters(
     for group_label, node_ids in sorted(groups.items()):
         safe = group_label.lower().replace(" ", "_").replace("/", "_")
         with dot.subgraph(name=f"cluster_group_{safe}") as sg:
+            tab_label = (
+                f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="5">'
+                f'<TR><TD>'
+                f'<FONT COLOR="white" POINT-SIZE="13"><B>{html.escape(group_label)}</B></FONT>'
+                f'</TD></TR></TABLE>>'
+            )
             sg.attr(
-                label=html.escape(group_label),
-                labelloc="b",
+                label=tab_label,
+                labelloc="t",
                 style="dashed",
                 color="#555555",
                 fontname="Helvetica",
-                fontsize="12",
                 penwidth="1.5",
                 bgcolor="transparent",
             )
