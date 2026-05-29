@@ -612,16 +612,12 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted")
 
-    # Place both legend clusters at the same rank (side by side, not diagonal).
-    # newrank=true (set on the graph) lets rank=same work across cluster
-    # boundaries without displacing nodes from their clusters.
-    # constraint=false on the ordering edge keeps it from creating a
-    # rank dependency (which would cause diagonal placement).
+    # Pin the owner legend to the bottom rank so it sits below the main graph.
+    # Horizontal placement is left to the layout engine (typically ends up on
+    # the right when sink-external nodes occupy the left of the bottom tier).
     with dot.subgraph() as s:
-        s.attr(rank="same")
+        s.attr(rank="max")
         s.node("_leg_owners")
-        s.node("_leg_p")
-    dot.edge("_leg_owners", "_leg_p", style="invis", constraint="false")
 
 
 
