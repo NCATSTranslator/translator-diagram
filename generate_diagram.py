@@ -80,6 +80,7 @@ class Component:
     refactor_status: str
     notes: str
     ubiquitous: bool = False
+    hide: bool = False
     part_of: str = ""
     externals: list[tuple[str, str]] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
@@ -195,6 +196,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 refactor_status=row.get("Refactor status", "").strip(),
                 notes=row.get("Notes", "").strip(),
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
+                hide=_parse_bool(row.get("Hide", "")),
                 part_of=row.get("Part of", "").strip(),
                 externals=parse_externals(row.get("Externals", "")),
                 depends_on=depends_on,
@@ -267,6 +269,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Refactor status": c.refactor_status,
             "Notes": c.notes,
             "Ubiquitous": c.ubiquitous,
+            "Hide": c.hide,
             "Part of": c.part_of,
             "Externals": [{"direction": d, "name": n} for d, n in c.externals],
             "depends_on": c.depends_on,
@@ -289,8 +292,8 @@ def _compute_active_set(
     active_statuses: set[str] | None,
 ) -> set[str]:
     if active_statuses is None:
-        return {c.id for c in components}
-    return {c.id for c in components if c.refactor_status in active_statuses}
+        return {c.id for c in components if not c.hide}
+    return {c.id for c in components if c.refactor_status in active_statuses and not c.hide}
 
 
 def _compute_ghost_ids(
@@ -304,8 +307,9 @@ def _compute_ghost_ids(
             continue
         for ref in comp.all_refs():
             match = index.get(ref.lower())
-            if match is None or match.ubiquitous:
+            if match is None or match.ubiquitous or match.hide:
                 # Ubiquitous targets render as per-caller clones, never as ghosts.
+                # Hidden components are suppressed entirely — not even as ghosts.
                 continue
             if match.id not in active_set:
                 ghost.add(match.id)
@@ -455,6 +459,8 @@ def _add_edges(
         """
         match = index.get(ref.lower())
         if match is None:
+            return None
+        if match.hide:
             return None
         if match.ubiquitous:
             clone_id = f"{caller_id}__{match.id}"
