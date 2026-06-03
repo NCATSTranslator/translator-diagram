@@ -663,7 +663,7 @@ def build_graph(
     active_statuses: set[str] | None,
     direction: str,
     colors: ColorAssigner,
-    concentrate: bool = True,
+    concentrate: bool = False,
 ) -> graphviz.Digraph:
     """Assemble the full graph from the parsed component list."""
     index = index_by_id(components)
@@ -773,7 +773,7 @@ def build_graph(
 )
 @click.option(
     "--concentrate/--no-concentrate",
-    default=True,
+    default=False,
     show_default=True,
     help="Merge partially-parallel edges (concentrate=true). Disable if solid "
          "and dashed edges between nearby nodes render incorrectly merged.",
