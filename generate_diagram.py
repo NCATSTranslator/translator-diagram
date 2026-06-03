@@ -612,7 +612,7 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
 
         leg.node("_leg_p", label="Producer", fillcolor="white", penwidth="1.0")
         leg.node("_leg_c", label="Consumer", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_p", "_leg_c", xlabel="Results")
+        leg.edge("_leg_p", "_leg_c", xlabel="Results", minlen="2")
 
         leg.node("_leg_a", label="Component", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
