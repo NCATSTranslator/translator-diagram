@@ -73,6 +73,7 @@ CSV column → `Component` field:
 | `Ubiquitous` | `ubiquitous` | TRUE/yes/1 → render as per-caller clones |
 | `Hide` | `hide` | TRUE/yes/1 → suppress entirely (not even as ghost) |
 | `Part of` | `part_of` | Groups node into a named cluster subgraph |
+| `Hosted at` | `hosted_at` | Deployment location; `ITRB` is default (no label shown); others get a third label line, e.g. `Hosted at: RENCI 🌐` |
 | `Externals` | `externals` | `<Source` = data in, `>Sink` = data out |
 
 ## Common change patterns
@@ -84,6 +85,8 @@ CSV column → `Component` field:
 **Change planned-edge color** → `PLANNED_EDGE_COLOR` constant at line 30.
 
 **Change active refactor statuses** → `DEFAULT_STATUSES` list at line 17.
+
+**Change node label format** → `_emit_component_node` (line 319). Active node labels are `display_name\nid` plus an optional third line for non-ITRB hosts. Emoji mapping lives in `HOSTED_AT_EMOJI` at line ~37.
 
 **Change node shape or border style** → `_emit_component_node` (line 319) for active nodes; `_add_ghost_nodes` (line 375) for ghost nodes. The `is_new` bold border is set at line 339.
 
