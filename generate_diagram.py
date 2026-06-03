@@ -450,7 +450,7 @@ def _add_edges(
 ) -> None:
     emitted_clones: set[str] = set()
     # Track (src, dst) pairs that already have a solid edge so that a
-    # dotted/dashed edge between the same two nodes — which concentrate=true
+    # dashed edge between the same two nodes — which concentrate=true
     # would merge, losing the solid style — is suppressed in favour of solid.
     solid_edges: set[tuple[str, str]] = set()
 
@@ -492,12 +492,12 @@ def _add_edges(
         for ref in comp.uses:
             t = edge_target(comp.id, ref)
             if t is not None and (comp.id, t) not in solid_edges:
-                dot.edge(comp.id, t, style="dotted")  # A ··→ B: API call
+                dot.edge(comp.id, t, style="dashed")  # A --→ B: API call
         for ref in comp.uses_planned:
             t = edge_target(comp.id, ref)
             if t is not None and (comp.id, t) not in solid_edges:
-                # Planned/in-development "Calls" — dotted red to stand out
-                dot.edge(comp.id, t, style="dotted", color="red")
+                # Planned/in-development "Calls" — dashed red to stand out
+                dot.edge(comp.id, t, style="dashed", color="red")
 
 
 def _ext_node_id(name: str) -> str:
@@ -623,7 +623,7 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
 
         leg.node("_leg_a", label="Component", fillcolor="white", penwidth="1.0")
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
-        leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dotted", minlen="5")
+        leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dashed", minlen="5")
 
         _ext = dict(
             fillcolor=EXTERNAL_FILL_COLOR, style="filled",
