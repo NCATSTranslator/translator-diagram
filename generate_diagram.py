@@ -449,6 +449,10 @@ def _add_edges(
     colors: ColorAssigner,
 ) -> None:
     emitted_clones: set[str] = set()
+    # Track (src, dst) pairs that already have a solid edge so that a
+    # dotted/dashed edge between the same two nodes — which concentrate=true
+    # would merge, losing the solid style — is suppressed in favour of solid.
+    solid_edges: set[tuple[str, str]] = set()
 
     def edge_target(caller_id: str, ref: str) -> str | None:
         """Return the graphviz node id to draw an edge to, or None to skip.
@@ -479,17 +483,18 @@ def _add_edges(
             t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(t, comp.id)  # B → A: B provides results to A
+                solid_edges.add((t, comp.id))
         for ref in comp.depends_on_planned:
             t = edge_target(comp.id, ref)
-            if t is not None:
+            if t is not None and (t, comp.id) not in solid_edges:
                 dot.edge(t, comp.id, style="dashed", color=PLANNED_EDGE_COLOR)
         for ref in comp.uses:
             t = edge_target(comp.id, ref)
-            if t is not None:
+            if t is not None and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dotted")  # A ··→ B: API call
         for ref in comp.uses_planned:
             t = edge_target(comp.id, ref)
-            if t is not None:
+            if t is not None and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dotted", color=PLANNED_EDGE_COLOR)
 
 
