@@ -663,6 +663,7 @@ def build_graph(
     active_statuses: set[str] | None,
     direction: str,
     colors: ColorAssigner,
+    concentrate: bool = True,
 ) -> graphviz.Digraph:
     """Assemble the full graph from the parsed component list."""
     index = index_by_id(components)
@@ -676,11 +677,11 @@ def build_graph(
             "fontname": "Helvetica",
             "fontsize": "12",
             # splines=true gives graphviz freedom to route edges as smooth
-            # curves around nodes; combined with concentrate=true (merges
-            # parallel edges going to the same place) this packs the layout
-            # tighter at the cost of wigglier lines.
+            # curves around nodes; concentrate merges partially-parallel edges
+            # to pack the layout tighter (disable if mixed solid/dashed edges
+            # render incorrectly merged).
             "splines": "true",
-            "concentrate": "true",
+            "concentrate": "true" if concentrate else "false",
             "nodesep": "0.3",
             "ranksep": "0.5",
             # Required for rank=same to work correctly across cluster
@@ -770,6 +771,13 @@ def build_graph(
     type=click.Choice(["LR", "TB"]),
     help="Graph layout direction.",
 )
+@click.option(
+    "--concentrate/--no-concentrate",
+    default=True,
+    show_default=True,
+    help="Merge partially-parallel edges (concentrate=true). Disable if solid "
+         "and dashed edges between nearby nodes render incorrectly merged.",
+)
 def main(
     input_path: Path,
     google_sheet: bool,
@@ -780,6 +788,7 @@ def main(
     include_all: bool,
     extra_formats: tuple[str, ...],
     direction: str,
+    concentrate: bool,
 ) -> None:
     """Validate components CSV and generate a Graphviz dependency diagram."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -857,7 +866,7 @@ def main(
         )
 
     colors = ColorAssigner(load_owner_colors(), FALLBACK_COLORS)
-    dot = build_graph(components, active_statuses, direction, colors)
+    dot = build_graph(components, active_statuses, direction, colors, concentrate=concentrate)
 
     # Save .dot source
     dot_path = output_dir / f"{output_name}.dot"
