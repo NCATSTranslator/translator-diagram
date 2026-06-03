@@ -2,6 +2,8 @@
 
 Generates Graphviz dependency diagrams for Translator platform components from a Google Sheet CSV.
 
+> **Note for Claude:** After making code changes, do not run `uv run generate-diagram` yourself — the user will run it. Only run `uv run pytest` to check for test failures.
+
 ## Quick start
 
 ```bash

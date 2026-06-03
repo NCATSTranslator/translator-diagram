@@ -34,6 +34,8 @@ GHOST_FONT_COLOR = "#666666"
 # Warm amber for external-entity nodes (sources and sinks) so they stand out
 # clearly against the component fill colors.
 EXTERNAL_FILL_COLOR = "#FFE082"
+# Emoji labels for non-default hosting locations (ITRB is the default and shown as nothing).
+HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Local": "💻", "Unknown": "❓"}
 
 
 class ColorAssigner:
@@ -82,6 +84,7 @@ class Component:
     ubiquitous: bool = False
     hide: bool = False
     part_of: str = ""
+    hosted_at: str = ""
     externals: list[tuple[str, str]] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     depends_on_planned: list[str] = field(default_factory=list)
@@ -198,6 +201,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
                 hide=_parse_bool(row.get("Hide", "")),
                 part_of=row.get("Part of", "").strip(),
+                hosted_at=row.get("Hosted at", "").strip(),
                 externals=parse_externals(row.get("Externals", "")),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
@@ -271,6 +275,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Ubiquitous": c.ubiquitous,
             "Hide": c.hide,
             "Part of": c.part_of,
+            "Hosted at": c.hosted_at,
             "Externals": [{"direction": d, "name": n} for d, n in c.externals],
             "depends_on": c.depends_on,
             "depends_on_planned": c.depends_on_planned,
@@ -331,6 +336,10 @@ def _emit_component_node(
     is_new = comp.refactor_status == "New in Refactor"
     # Owner is encoded by node color and shown in the legend, not in the label.
     label = f"{comp.display_name}\n{comp.id}"
+    if comp.hosted_at and comp.hosted_at != "ITRB":
+        emoji = HOSTED_AT_EMOJI.get(comp.hosted_at, "")
+        suffix = f" {emoji}" if emoji else ""
+        label += f"\nHosted at: {comp.hosted_at}{suffix}"
     dot.node(
         node_id,
         label=label,
