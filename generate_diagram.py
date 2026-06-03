@@ -487,7 +487,8 @@ def _add_edges(
         for ref in comp.depends_on_planned:
             t = edge_target(comp.id, ref)
             if t is not None and (t, comp.id) not in solid_edges:
-                dot.edge(t, comp.id, style="dashed", color=PLANNED_EDGE_COLOR)
+                # Planned/in-development "Gets results from" — solid red to stand out
+                dot.edge(t, comp.id, style="solid", color="red")
         for ref in comp.uses:
             t = edge_target(comp.id, ref)
             if t is not None and (comp.id, t) not in solid_edges:
@@ -495,7 +496,8 @@ def _add_edges(
         for ref in comp.uses_planned:
             t = edge_target(comp.id, ref)
             if t is not None and (comp.id, t) not in solid_edges:
-                dot.edge(comp.id, t, style="dotted", color=PLANNED_EDGE_COLOR)
+                # Planned/in-development "Calls" — dotted red to stand out
+                dot.edge(comp.id, t, style="dotted", color="red")
 
 
 def _ext_node_id(name: str) -> str:
