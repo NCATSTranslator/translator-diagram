@@ -4,6 +4,7 @@ import csv
 import html
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ GHOST_FONT_COLOR = "#666666"
 EXTERNAL_FILL_COLOR = "#FFE082"
 # Emoji labels for non-default hosting locations (ITRB is the default and shown as nothing).
 HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Local": "💻", "Unknown": "❓"}
+# Bold border penwidth for in-layer nodes in per-layer sub-figures.
+IN_LAYER_PENWIDTH = "4.0"
 
 
 class ColorAssigner:
@@ -329,11 +332,13 @@ def _emit_component_node(
     comp: Component,
     node_id: str,
     colors: ColorAssigner,
+    penwidth: str | None = None,
 ) -> None:
     """Render a Component as a graphviz node at the given id.
 
     Used both for primary node placement and for per-caller ubiquitous clones
     (which use a synthetic id like "{caller}__{target}").
+    penwidth overrides the default (2.0 for "New in Refactor", 1.0 otherwise).
     """
     fill = colors.get(comp.owner)
     is_new = comp.refactor_status == "New in Refactor"
@@ -348,7 +353,7 @@ def _emit_component_node(
         label=label,
         fillcolor=fill,
         fontcolor=text_color_for(fill),
-        penwidth="2.0" if is_new else "1.0",
+        penwidth=penwidth if penwidth is not None else ("2.0" if is_new else "1.0"),
     )
 
 
@@ -723,6 +728,162 @@ def build_graph(
     return dot
 
 
+def _layer_filename(layer: str) -> str:
+    """Convert a layer label to a safe filename stem."""
+    safe = re.sub(r"[^\w\s-]", "", layer.lower())
+    safe = re.sub(r"[\s-]+", "_", safe).strip("_")
+    return safe or "layer"
+
+
+def build_layer_subgraph(
+    components: list[Component],
+    layer_value: str,
+    active_set: set[str],
+    index: dict[str, Component],
+    direction: str,
+    colors: ColorAssigner,
+) -> graphviz.Digraph:
+    """Build a legend-free sub-diagram showing one layer and its direct neighbors."""
+    in_layer = {
+        c.id for c in components
+        if c.id in active_set and c.layer == layer_value and not c.ubiquitous and not c.hide
+    }
+
+    # Direct neighbors (both directions) that are outside this layer
+    out_of_layer: set[str] = set()
+    for comp in components:
+        if comp.id not in in_layer:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if (
+                match
+                and match.id not in in_layer
+                and match.id in active_set
+                and not match.ubiquitous
+                and not match.hide
+            ):
+                out_of_layer.add(match.id)
+    for comp in components:
+        if comp.ubiquitous or comp.hide or comp.id in in_layer or comp.id not in active_set:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match and match.id in in_layer:
+                out_of_layer.add(comp.id)
+                break
+
+    visible = in_layer | out_of_layer
+
+    dot = graphviz.Digraph(
+        name=f"layer_{_layer_filename(layer_value)}",
+        graph_attr={
+            "rankdir": direction,
+            "fontname": "Helvetica",
+            "fontsize": "12",
+            "splines": "true",
+            "concentrate": "false",
+            "nodesep": "0.3",
+            "ranksep": "0.5",
+            "newrank": "true",
+            "dpi": "150",
+        },
+        node_attr={
+            "fontname": "Helvetica",
+            "fontsize": "11",
+            "style": "filled,rounded",
+            "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+
+    # Clusters for in-layer nodes that have a Part-of group
+    groups: dict[str, list[str]] = {}
+    for comp in components:
+        if not comp.part_of or comp.ubiquitous or comp.id not in in_layer:
+            continue
+        groups.setdefault(comp.part_of, []).append(comp.id)
+    grouped_in_layer = {nid for ids in groups.values() for nid in ids}
+
+    for group_label, node_ids in sorted(groups.items()):
+        safe = group_label.lower().replace(" ", "_").replace("/", "_")
+        with dot.subgraph(name=f"cluster_group_{safe}") as sg:
+            tab_label = (
+                f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3">'
+                f"<TR><TD>"
+                f'<FONT COLOR="white" POINT-SIZE="12"><B>{html.escape(group_label)}</B></FONT>'
+                f"</TD></TR></TABLE>>"
+            )
+            sg.attr(
+                label=tab_label,
+                labelloc="t",
+                style="filled",
+                fillcolor="#DDDDDD",
+                color="#555555",
+                fontname="Helvetica",
+                penwidth="1.5",
+                bgcolor="transparent",
+            )
+            for node_id in sorted(node_ids):
+                comp = index.get(node_id.lower())
+                if comp:
+                    _emit_component_node(sg, comp, node_id, colors, penwidth=IN_LAYER_PENWIDTH)
+
+    # Ungrouped in-layer nodes
+    for comp in components:
+        if comp.id not in in_layer or comp.ubiquitous or comp.id in grouped_in_layer:
+            continue
+        _emit_component_node(dot, comp, comp.id, colors, penwidth=IN_LAYER_PENWIDTH)
+
+    # Out-of-layer neighbors — full owner colors, default border weight
+    for ool_id in sorted(out_of_layer):
+        comp = index.get(ool_id.lower())
+        if comp:
+            _emit_component_node(dot, comp, ool_id, colors)
+
+    # Edges — only those with at least one in-layer endpoint
+    emitted_clones: set[str] = set()
+    solid_edges: set[tuple[str, str]] = set()
+
+    def _sub_target(caller_id: str, ref: str) -> str | None:
+        match = index.get(ref.lower())
+        if match is None or match.hide:
+            return None
+        if match.ubiquitous:
+            if caller_id in in_layer:
+                clone_id = f"{caller_id}__{match.id}"
+                if clone_id not in emitted_clones:
+                    _emit_component_node(dot, match, clone_id, colors)
+                    emitted_clones.add(clone_id)
+                return clone_id
+            return None
+        return match.id if match.id in visible else None
+
+    for comp in components:
+        if comp.id not in visible or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer):
+                dot.edge(t, comp.id)
+                solid_edges.add((t, comp.id))
+        for ref in comp.depends_on_planned:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer) and (t, comp.id) not in solid_edges:
+                dot.edge(t, comp.id, style="solid", color="red")
+        for ref in comp.uses:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
+                dot.edge(comp.id, t, style="dashed")
+                solid_edges.add((comp.id, t))
+        for ref in comp.uses_planned:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
+                dot.edge(comp.id, t, style="dashed", color="red")
+
+    return dot
+
+
 @click.command()
 @click.option(
     "--input", "input_path",
@@ -790,6 +951,15 @@ def build_graph(
     help="Merge partially-parallel edges (concentrate=true). Disable if solid "
          "and dashed edges between nearby nodes render incorrectly merged.",
 )
+@click.option(
+    "--layer-column", "layer_column",
+    default="",
+    show_default=True,
+    help="CSV column name to use for layer-based sub-figures (e.g. 'Layer'). "
+         "When set, one PNG sub-figure is written per distinct value found in "
+         "that column, showing in-layer nodes at full color and direct "
+         "neighbors from other layers greyed out. Leave empty to skip.",
+)
 def main(
     input_path: Path,
     google_sheet: bool,
@@ -801,6 +971,7 @@ def main(
     extra_formats: tuple[str, ...],
     direction: str,
     concentrate: bool,
+    layer_column: str,
 ) -> None:
     """Validate components CSV and generate a Graphviz dependency diagram."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -847,7 +1018,7 @@ def main(
         raise click.ClickException(f"Input file not found: {input_path}")
 
     click.echo(f"Loading {input_path} ...")
-    components = load_components(input_path)
+    components = load_components(input_path, layer_column=layer_column)
     click.echo(f"Loaded {len(components)} components.")
 
     click.echo("Validating references ...")
@@ -896,6 +1067,48 @@ def main(
             cleanup=True,
         )
         click.echo(f"Wrote {output_dir / f'{output_name}.{fmt}'}")
+
+    # Per-layer sub-figures
+    if layer_column:
+        _index = index_by_id(components)
+        _active_set = _compute_active_set(components, active_statuses)
+        layers = sorted({c.layer for c in components if c.layer})
+        if not layers:
+            click.echo(
+                f"Note: no values found in '{layer_column}' column; "
+                "no layer sub-figures written."
+            )
+        else:
+            click.echo(
+                f"Generating {len(layers)} layer sub-figure(s) "
+                f"from '{layer_column}' column ..."
+            )
+            for layer_value in layers:
+                in_layer_count = sum(
+                    1 for c in components
+                    if c.id in _active_set
+                    and c.layer == layer_value
+                    and not c.ubiquitous
+                    and not c.hide
+                )
+                if in_layer_count == 0:
+                    click.echo(
+                        f"  Skipping '{layer_value}' "
+                        "(no active non-ubiquitous components)."
+                    )
+                    continue
+                layer_dot = build_layer_subgraph(
+                    components, layer_value, _active_set, _index, direction, colors
+                )
+                stem = f"{output_name}_{_layer_filename(layer_value)}"
+                layer_dot_path = output_dir / f"{stem}.dot"
+                layer_dot_path.write_text(layer_dot.source, encoding="utf-8")
+                layer_dot.render(
+                    filename=str(output_dir / stem),
+                    format="png",
+                    cleanup=True,
+                )
+                click.echo(f"  Wrote {output_dir / f'{stem}.png'}")
 
 
 if __name__ == "__main__":
