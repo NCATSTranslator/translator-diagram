@@ -913,6 +913,8 @@ def build_layer_subgraph(
             if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dashed", color="red")
 
+    _add_external_nodes_and_edges(dot, components, in_layer)
+
     return dot
 
 
