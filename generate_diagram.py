@@ -585,6 +585,16 @@ def _add_external_nodes_and_edges(
         dot.edge(src, dst)
 
 
+_LEGEND_CLUSTER_ATTRS = dict(
+    style="filled,rounded",
+    fillcolor="#FAFAFA",
+    color="#AAAAAA",
+    fontname="Helvetica",
+    fontsize="11",
+    margin="12",
+)
+
+
 def _owner_legend_html(colors: ColorAssigner) -> str:
     """Build an HTML-table label listing every owner and its fill color.
 
@@ -610,29 +620,17 @@ def _owner_legend_html(colors: ColorAssigner) -> str:
     return f"<{table}>"
 
 
-def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
-    """Build a legend covering owner colors, edge styles, and node styles."""
-    _cluster_attrs = dict(
-        style="filled,rounded",
-        fillcolor="#FAFAFA",
-        color="#AAAAAA",
-        fontname="Helvetica",
-        fontsize="11",
-        margin="12",
-    )
-
-    # Owner-color key in its own cluster so it doesn't crowd the edge examples.
+def _add_owner_cluster(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
+    """Add the owner-color key cluster to dot."""
     with dot.subgraph(name="cluster_legend_owners") as own:
-        own.attr(label="Owner", **_cluster_attrs)
-        own.node(
-            "_leg_owners",
-            label=_owner_legend_html(colors),
-            shape="plain",
-        )
+        own.attr(label="Owner", **_LEGEND_CLUSTER_ATTRS)
+        own.node("_leg_owners", label=_owner_legend_html(colors), shape="plain")
 
-    # Edge style examples — provider→consumer / API call, one pair per row.
+
+def _add_edge_cluster(dot: graphviz.Digraph) -> None:
+    """Add the edge-style example cluster to dot."""
     with dot.subgraph(name="cluster_legend") as leg:
-        leg.attr(label="Legend", **_cluster_attrs)
+        leg.attr(label="Legend", **_LEGEND_CLUSTER_ATTRS)
 
         leg.node("_leg_p", label="Producer", fillcolor="white", penwidth="1.0")
         leg.node("_leg_c", label="Consumer", fillcolor="white", penwidth="1.0")
@@ -650,7 +648,6 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
         leg.node("_leg_sink", label="User/agent", shape="oval",
                  peripheries="2", **_ext)
 
-        # Lock each pair / row onto the same horizontal rank.
         with leg.subgraph() as row1:
             row1.attr(rank="same")
             row1.node("_leg_p")
@@ -663,15 +660,48 @@ def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
             row3.attr(rank="same")
             row3.node("_leg_src")
             row3.node("_leg_sink")
-        # Invisible edges enforce row order: row1 → row2 → row3.
         leg.edge("_leg_p", "_leg_a",   style="invis")
         leg.edge("_leg_a", "_leg_src", style="invis")
+
+
+def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
+    """Add both legend clusters to dot (for the combined main diagram)."""
+    _add_owner_cluster(dot, colors)
+    _add_edge_cluster(dot)
 
     # Pin the owner legend to the bottom; the edge-style legend floats freely
     # (its internal rank="same" rows keep it compact wherever it lands).
     with dot.subgraph() as s:
         s.attr(rank="max")
         s.node("_leg_owners")
+
+
+def _build_owners_graph(colors: ColorAssigner) -> graphviz.Digraph:
+    """Standalone diagram containing only the owner-color legend."""
+    dot = graphviz.Digraph(
+        name="owners_legend",
+        graph_attr={"fontname": "Helvetica", "fontsize": "11", "dpi": "150"},
+    )
+    _add_owner_cluster(dot, colors)
+    return dot
+
+
+def _build_edge_legend_graph() -> graphviz.Digraph:
+    """Standalone diagram containing only the edge-style legend."""
+    dot = graphviz.Digraph(
+        name="edge_legend",
+        graph_attr={
+            "fontname": "Helvetica", "fontsize": "11", "dpi": "150",
+            "rankdir": "TB", "newrank": "true",
+        },
+        node_attr={
+            "fontname": "Helvetica", "fontsize": "11",
+            "style": "filled,rounded", "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+    _add_edge_cluster(dot)
+    return dot
 
 
 
@@ -681,6 +711,7 @@ def build_graph(
     direction: str,
     colors: ColorAssigner,
     concentrate: bool = False,
+    include_legend: bool = True,
 ) -> graphviz.Digraph:
     """Assemble the full graph from the parsed component list."""
     index = index_by_id(components)
@@ -723,7 +754,8 @@ def build_graph(
     _add_ghost_nodes(dot, ghost_ids, index, skip_ids=grouped_ids)
     _add_edges(dot, components, index, active_set, ghost_ids, colors)
     _add_external_nodes_and_edges(dot, components, active_set)
-    _add_legend(dot, colors)
+    if include_legend:
+        _add_legend(dot, colors)
 
     return dot
 
@@ -952,6 +984,14 @@ def build_layer_subgraph(
          "and dashed edges between nearby nodes render incorrectly merged.",
 )
 @click.option(
+    "--split-legends/--no-split-legends", "split_legends",
+    default=True,
+    show_default=True,
+    help="Write owner and edge-style legends as separate PNGs "
+         "({output_name}_owners.png / {output_name}_legend.png) and omit "
+         "them from the main diagram. Use --no-split-legends to embed them.",
+)
+@click.option(
     "--layer-column", "layer_column",
     default="",
     show_default=True,
@@ -971,6 +1011,7 @@ def main(
     extra_formats: tuple[str, ...],
     direction: str,
     concentrate: bool,
+    split_legends: bool,
     layer_column: str,
 ) -> None:
     """Validate components CSV and generate a Graphviz dependency diagram."""
@@ -1049,7 +1090,10 @@ def main(
         )
 
     colors = ColorAssigner(load_owner_colors(), FALLBACK_COLORS)
-    dot = build_graph(components, active_statuses, direction, colors, concentrate=concentrate)
+    dot = build_graph(
+        components, active_statuses, direction, colors,
+        concentrate=concentrate, include_legend=not split_legends,
+    )
 
     # Save .dot source
     dot_path = output_dir / f"{output_name}.dot"
@@ -1067,6 +1111,19 @@ def main(
             cleanup=True,
         )
         click.echo(f"Wrote {output_dir / f'{output_name}.{fmt}'}")
+
+    # Separate legend files
+    if split_legends:
+        for legend_stem, legend_dot in [
+            (f"{output_name}_owners", _build_owners_graph(colors)),
+            (f"{output_name}_legend", _build_edge_legend_graph()),
+        ]:
+            legend_dot.render(
+                filename=str(output_dir / legend_stem),
+                format="png",
+                cleanup=True,
+            )
+            click.echo(f"Wrote {output_dir / f'{legend_stem}.png'}")
 
     # Per-layer sub-figures
     if layer_column:
