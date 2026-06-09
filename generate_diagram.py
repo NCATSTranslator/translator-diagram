@@ -85,6 +85,7 @@ class Component:
     hide: bool = False
     part_of: str = ""
     hosted_at: str = ""
+    layer: str = ""
     externals: list[tuple[str, str]] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
     depends_on_planned: list[str] = field(default_factory=list)
@@ -175,7 +176,7 @@ def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
         return {row["owner"].strip(): row["color"].strip() for row in reader}
 
 
-def load_components(csv_path: Path) -> list[Component]:
+def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
     """Parse the CSV into a sorted list of Components.
 
     Sorted by lowercase id for deterministic .dot / .json output across CSV
@@ -202,6 +203,7 @@ def load_components(csv_path: Path) -> list[Component]:
                 hide=_parse_bool(row.get("Hide", "")),
                 part_of=row.get("Part of", "").strip(),
                 hosted_at=row.get("Hosted at", "").strip(),
+                layer=row.get(layer_column, "").strip() if layer_column else "",
                 externals=parse_externals(row.get("Externals", "")),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
@@ -276,6 +278,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Hide": c.hide,
             "Part of": c.part_of,
             "Hosted at": c.hosted_at,
+            "Layer": c.layer,
             "Externals": [{"direction": d, "name": n} for d, n in c.externals],
             "depends_on": c.depends_on,
             "depends_on_planned": c.depends_on_planned,
