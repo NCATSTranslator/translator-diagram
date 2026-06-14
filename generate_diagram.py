@@ -36,7 +36,7 @@ GHOST_FONT_COLOR = "#666666"
 # clearly against the component fill colors.
 EXTERNAL_FILL_COLOR = "#FFE082"
 # Emoji labels for non-default hosting locations (ITRB is the default and shown as nothing).
-HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Local": "💻", "Unknown": "❓"}
+HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Scripps": "🌐", "Local": "💻", "Unknown": "❓"}
 # Bold border penwidth for in-layer nodes in per-layer sub-figures.
 IN_LAYER_PENWIDTH = "4.0"
 
