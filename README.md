@@ -1,6 +1,9 @@
-# Translator Components Diagram
+# translator-diagram
 
-A Python CLI tool that reads a spreadsheet of Translator platform components,
+Diagrams describing the overall architecture of the
+[NCATS Biomedical Data Translator](https://ncats.nih.gov/research/research-activities/translator).
+
+A Python CLI tool reads a spreadsheet of Translator platform components,
 validates their dependency declarations, and produces Graphviz diagrams showing
 how data flows through the system and which services call each other.
 
@@ -12,14 +15,18 @@ Google Sheet into a shareable diagram. The default view filters to components
 that are active in the current refactor ("Continues into Refactor" and
 "New in Refactor"), so the diagram stays focused on what is currently relevant.
 
+It is meant to serve three audiences at once: everyone inside the project who
+needs to see how the pieces fit together, performance work that needs a map of
+where the bottlenecks might be (usefully combined with our OpenTelemetry data),
+and people outside the project trying to understand how Translator works.
+
 ## Quick start
 
 Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
 The [Graphviz](https://graphviz.org/) system package must also be installed
-(`brew install graphviz` on macOS).
+(`brew install graphviz` on macOS, `apt-get install graphviz` on Debian/Ubuntu).
 
 ```bash
-cd translator-components-diagram
 uv sync                          # first-time setup; creates .venv/
 
 # Download latest data from the Google Sheet and regenerate
@@ -33,6 +40,9 @@ uv run generate-diagram --all
 
 # Also produce a PDF (useful for presentations)
 uv run generate-diagram --google-sheet --format pdf
+
+# One sub-figure per tier, plus the main diagram
+uv run generate-diagram --google-sheet --layer-column Tier
 ```
 
 ## Input data
@@ -40,10 +50,10 @@ uv run generate-diagram --google-sheet --format pdf
 ### Google Sheet
 
 The canonical source of truth is a world-readable Google Sheet. Its ID is
-stored in `.env` (gitignored; never committed):
+stored in `.env` at the repository root (gitignored; never committed). Copy
+[`env.default`](env.default) to `.env` and fill it in:
 
 ```
-# translator-components-diagram/.env
 GOOGLE_SHEET_ID=<paste the sheet ID here>
 ```
 
@@ -52,19 +62,28 @@ use it immediately. The downloaded file is also gitignored.
 
 ### CSV format
 
-The sheet must have these columns (order does not matter):
+The sheet must have these columns (order does not matter; unknown columns are
+ignored, and any column may be absent):
 
 | Column | Description |
 |---|---|
 | `id` | Unique machine-readable identifier (kebab-case preferred) |
 | `Name` | Human-readable display name shown in the diagram |
 | `Owner` | Team that owns the component; controls node colour |
+| `URL` | Link to the component's repo or docs; makes the node clickable in SVG output |
 | `Component in ITRB` | ITRB category (informational only) |
 | `Refactor status` | Lifecycle status — see filtering below |
 | `Gets results from` | Comma-separated IDs this component receives data from |
 | `Calls` | Comma-separated IDs this component makes optional API calls to |
+| `Externals` | Entities outside the diagram — `<Name` feeds in, `>Name` receives out |
+| `Part of` | Groups this component into a named cluster box |
+| `Hosted at` | Deployment location; `ITRB` is the default and shown as nothing |
 | `Ubiquitous` | `TRUE` to render this component as a per-caller clone (see below) |
-| `Notes` | Free-text notes (not used by the tool) |
+| `Hide` | `TRUE` to suppress the component entirely, not even as a ghost node |
+| `Notes` | Free-text notes; shown as an SVG hover tooltip, not in the diagram |
+
+IDs are matched case-insensitively; a case mismatch is a warning, an unknown ID
+or a duplicate ID is a hard error that stops the run.
 
 #### Planned (not-yet-implemented) relationships
 
@@ -76,7 +95,7 @@ Gets results from: nodenorm-es, ~new-service
 Calls: ars, ~future-api
 ```
 
-Planned edges render in gray; implemented edges render in black.
+Planned edges render in red; implemented edges render in black.
 
 #### Ubiquitous components
 
@@ -97,11 +116,14 @@ All outputs go to `data/` (gitignored) by default.
 | `data/diagram.png` | yes | Main shareable diagram |
 | `data/diagram.dot` | yes | Graphviz source — useful for debugging or tweaking |
 | `data/components.json` | yes | All components parsed (all statuses, not filtered) |
+| `data/diagram_owners.png` | default | Owner-colour legend |
+| `data/diagram_legend.png` | default | Edge-style legend |
 | `data/diagram.pdf` | `--format pdf` | Vector format for presentations |
 | `data/diagram.svg` | `--format svg` | Vector format for web embedding |
+| `data/diagram_<layer>.png` | `--layer-column` | One sub-figure per distinct column value |
 
-> The `.dot` and `.json` files are intended to eventually be committed to the
-> repo so people can inspect the data without running the tool.
+The two legend files are written separately by default; `--no-split-legends`
+embeds them in the main diagram instead.
 
 ## Diagram conventions
 
@@ -123,19 +145,23 @@ New owners not listed there receive fallback colours automatically.
 | Style | Meaning |
 |---|---|
 | Solid black arrow B → A | B provides results to A ("Gets results from") |
-| Indigo dashed arrow B → A | Same, but planned / not yet implemented |
-| Dotted black arrow A → B | A makes an optional API call to B ("Calls") |
-| Indigo dotted arrow A → B | Same, but planned / not yet implemented |
+| Solid red arrow B → A | Same, but planned / not yet implemented |
+| Dashed black arrow A → B | A makes an optional API call to B ("Calls") |
+| Dashed red arrow A → B | Same, but planned / not yet implemented |
 
-Planned-edge indigo is distinct from the gray used for ghost-node borders,
-so the two encodings don't blur together visually.
+Where a solid edge already connects two nodes, a dashed edge in the same
+direction is suppressed — otherwise `--concentrate` would merge the two and
+lose the solid style.
 
 ### Special nodes
 
-- **External data sources** (cylinder, gray) — entry point; represents all
-  upstream data stores that feed into `kgx-storage-pipeline`
-- **User** (double-border oval, gray) — exit point; the human end-consumer
-  who receives results from the UI
+Entries in the `Externals` column become nodes for things outside the diagram's
+scope, filled amber so they stand out against the component colours:
+
+- **Sources** (`<Name`, cylinder) — entry points, e.g. the upstream data stores
+  that feed into `kgx-storage-pipeline`
+- **Sinks** (`>Name`, double-border oval) — exit points, e.g. the human
+  end-consumer who receives results from the UI
 
 ### Ghost nodes
 
@@ -144,36 +170,59 @@ outside the current filter (e.g. "Removed after Refactor") appear as gray
 dashed boxes labelled `(excluded)`. This keeps cross-boundary edges visible
 without cluttering the main diagram.
 
+## SVG output and links
+
+In SVG output every component node carries:
+
+- an `<a xlink:href>` wrapper when the row has a `URL`, so the node is a
+  clickable link to that component's repo or docs — no JavaScript needed;
+- a hover tooltip with the owner, refactor status and notes;
+- a stable `id` matching the component's `id`, so a web page can address nodes
+  directly from `components.json`.
+
+These attributes are inert in PNG output. They exist to support the planned
+interactive GitHub Pages view of this diagram — see below.
+
 ## All CLI options
+
+Run `uv run generate-diagram --help` for the authoritative list.
 
 ```
 uv run generate-diagram [OPTIONS]
 
-  --input PATH              Local CSV file  [default: data/components.csv]
-  --google-sheet            Download CSV from Google Sheet (reads GOOGLE_SHEET_ID
-                            from .env) instead of using --input
-  --sheet-gid INTEGER       Google Sheet tab GID (0 = first tab)  [default: 0]
-  --output-dir PATH         Directory for output files  [default: data]
-  --output-name TEXT        Base filename for outputs  [default: diagram]
-  --refactor-status TEXT    Comma-separated Refactor status values to include
-                            [default: "Continues into Refactor,New in Refactor"]
-  --all                     Include all components regardless of Refactor status
-  --format [pdf|svg]        Additional output format beyond PNG (PNG is
-                            always produced; can be repeated)
-  --direction [LR|TB]       Graphviz layout direction  [default: TB]
-  --help                    Show this message and exit.
+  --input FILE                     Local CSV file  [default: data/components.csv]
+  --google-sheet                   Download CSV from Google Sheet (reads
+                                   GOOGLE_SHEET_ID from .env) instead of --input
+  --sheet-gid INTEGER              Google Sheet tab GID (0 = first tab)  [default: 0]
+  --output-dir DIRECTORY           Directory for output files  [default: data]
+  --output-name TEXT               Base filename for outputs  [default: diagram]
+  --refactor-status TEXT           Comma-separated Refactor status values to include
+                                   [default: "Continues into Refactor,New in Refactor"]
+  --all                            Include all components regardless of Refactor status
+  --format [pdf|svg]               Additional output format beyond PNG (PNG is
+                                   always produced; can be repeated)
+  --direction [LR|TB]              Graphviz layout direction  [default: TB]
+  --concentrate/--no-concentrate   Merge partially-parallel edges  [default: off]
+  --split-legends/--no-split-legends
+                                   Write the legends as separate PNGs rather than
+                                   embedding them  [default: split-legends]
+  --layer-column TEXT              Column to drive per-layer sub-figures. In the
+                                   current sheet this column is named `Tier`.
+  --help                           Show this message and exit.
 ```
 
 ## Repository layout
 
 ```
-translator-components-diagram/
+translator-diagram/
 ├── generate_diagram.py   # The tool
 ├── owner-colors.csv      # Owner → fill colour mapping (edit me)
 ├── tests/                # pytest suite for the pure functions
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
+├── env.default           # Template for .env
 ├── .env                  # GOOGLE_SHEET_ID — gitignored, fill in locally
+├── AGENTS.md             # Orientation for coding agents
 ├── README.md             # This file
 └── data/                 # Gitignored — all inputs and outputs go here
     ├── components.csv    # Downloaded from Google Sheet
@@ -182,13 +231,28 @@ translator-components-diagram/
     └── diagram.png       # Rendered diagram
 ```
 
+## Status and next steps
+
+This is a work in progress. The tool itself works; what is not yet built is the
+public-facing view.
+
+**Next: an interactive GitHub Pages view.** The plan is a single static HTML
+page that embeds the generated SVG and drives a detail panel from
+`components.json` — no build step, no bundler. The generator already emits
+everything that needs: per-node links, tooltips and stable ids. A GitHub
+Actions workflow will regenerate from the sheet on a schedule and deploy.
+
+**Open question, to settle before that ships:** this repository and its Pages
+site are public, so publishing a rendered diagram publishes the component
+names, owners, statuses and dependency edges it contains. That needs a
+deliberate decision — publish everything, gate it behind an opt-in `Public`
+column in the sheet, or strip the free-text fields. Until then nothing
+generated is committed; `data/` stays gitignored.
+
 ## Possible future improvements
 
 - **Commit `.dot` and `.json` to Git** — move these outputs outside `data/` so
   they are version-controlled and reviewable without running the tool.
-- **Interactive SVG or HTML output** — embed tooltips (owner, notes, status)
-  using Graphviz's `tooltip` attribute or a post-processing step with a library
-  like `d3-graphviz`.
 - **Grouping / filtering by ITRB category** — the `Component in ITRB` column
   is loaded but not currently used; it could drive an alternative colour scheme
   or a `--group-by itrb` flag.
@@ -198,3 +262,7 @@ translator-components-diagram/
   a `--all-tabs` mode could merge or overlay multiple views.
 - **Diff mode** — compare two runs of the tool (e.g. before and after a sprint)
   and highlight added, removed, or changed components and edges.
+
+## Licence
+
+[MIT](LICENSE).
