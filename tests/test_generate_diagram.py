@@ -239,6 +239,21 @@ class TestLoadComponents:
         components = load_components(csv_path)
         assert components[0].owner == "None"
 
+    def test_reads_url_column(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,URL,Refactor status\n"
+            "x,Ex, https://example.org/x ,New in Refactor\n",
+            encoding="utf-8",
+        )
+        assert load_components(csv_path)[0].url == "https://example.org/x"
+
+    def test_missing_url_column_defaults_to_empty(self, tmp_path):
+        # CSV_FIXTURE has no URL column — older exports of the sheet won't.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(CSV_FIXTURE, encoding="utf-8")
+        assert all(c.url == "" for c in load_components(csv_path))
+
 
 # --- load_owner_colors -----------------------------------------------------
 

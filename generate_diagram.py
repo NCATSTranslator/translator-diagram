@@ -84,6 +84,7 @@ class Component:
     itrb: str
     refactor_status: str
     notes: str
+    url: str = ""
     ubiquitous: bool = False
     hide: bool = False
     part_of: str = ""
@@ -202,6 +203,7 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
                 itrb=row.get("Component in ITRB", "").strip(),
                 refactor_status=row.get("Refactor status", "").strip(),
                 notes=row.get("Notes", "").strip(),
+                url=row.get("URL", "").strip(),
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
                 hide=_parse_bool(row.get("Hide", "")),
                 part_of=row.get("Part of", "").strip(),
@@ -277,6 +279,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "Component in ITRB": c.itrb,
             "Refactor status": c.refactor_status,
             "Notes": c.notes,
+            "URL": c.url,
             "Ubiquitous": c.ubiquitous,
             "Hide": c.hide,
             "Part of": c.part_of,
@@ -327,6 +330,22 @@ def _compute_ghost_ids(
     return ghost
 
 
+def _node_tooltip(comp: Component) -> str:
+    """Hover text for a component node in SVG output.
+
+    Carries the fields that don't fit in the label — owner, status, and notes —
+    so a reader gets them without leaving the diagram.
+    """
+    lines = [f"{comp.display_name} ({comp.id})"]
+    if comp.owner and comp.owner != "None":
+        lines.append(f"Owner: {comp.owner}")
+    if comp.refactor_status:
+        lines.append(f"Status: {comp.refactor_status}")
+    if comp.notes:
+        lines.append(comp.notes)
+    return "\n".join(lines)
+
+
 def _emit_component_node(
     dot: graphviz.Digraph,
     comp: Component,
@@ -348,12 +367,23 @@ def _emit_component_node(
         emoji = HOSTED_AT_EMOJI.get(comp.hosted_at, "")
         suffix = f" {emoji}" if emoji else ""
         label += f"\nHosted at: {comp.hosted_at}{suffix}"
+    # id gives every node a stable, predictable handle in the SVG (<g id="...">)
+    # instead of graphviz's default node1/node2 counter, so the planned GitHub
+    # Pages view can address nodes from components.json without re-parsing DOT.
+    # URL makes graphviz wrap the node in <a xlink:href=...> in SVG output, which
+    # is clickable component documentation with no JavaScript at all. Both are
+    # inert in PNG output, so this changes nothing about today's diagrams.
+    extra: dict[str, str] = {"id": node_id, "tooltip": _node_tooltip(comp)}
+    if comp.url:
+        extra["URL"] = comp.url
+        extra["target"] = "_blank"
     dot.node(
         node_id,
         label=label,
         fillcolor=fill,
         fontcolor=text_color_for(fill),
         penwidth=penwidth if penwidth is not None else ("2.0" if is_new else "1.0"),
+        **extra,
     )
 
 
