@@ -419,6 +419,30 @@ def _add_active_nodes(
         _emit_component_node(dot, comp, comp.id, colors)
 
 
+def _emit_ghost_node(
+    dot: graphviz.Digraph,
+    ghost_id: str,
+    index: dict[str, Component],
+) -> None:
+    """Render one excluded-but-referenced component as a dimmed node.
+
+    Called both for free-standing ghosts and for ghosts inside a Part-of
+    cluster, so the two stay in step.
+    """
+    comp = index.get(ghost_id.lower())
+    name = comp.display_name if comp else ghost_id
+    dot.node(
+        ghost_id,
+        label=f"{name}\n{ghost_id}\n(excluded)",
+        fillcolor=GHOST_FILL_COLOR,
+        style="filled,rounded,dashed",
+        fontcolor=GHOST_FONT_COLOR,
+        color=GHOST_BORDER_COLOR,
+        id=ghost_id,
+        tooltip=f"{name} ({ghost_id}) — excluded by the current filter",
+    )
+
+
 def _add_ghost_nodes(
     dot: graphviz.Digraph,
     ghost_ids: set[str],
@@ -428,17 +452,7 @@ def _add_ghost_nodes(
     for ghost_id in sorted(ghost_ids):
         if skip_ids and ghost_id in skip_ids:
             continue
-        comp = index.get(ghost_id.lower())
-        name = comp.display_name if comp else ghost_id
-        label = f"{name}\n{ghost_id}\n(excluded)"
-        dot.node(
-            ghost_id,
-            label=label,
-            fillcolor=GHOST_FILL_COLOR,
-            style="filled,rounded,dashed",
-            fontcolor=GHOST_FONT_COLOR,
-            color=GHOST_BORDER_COLOR,
-        )
+        _emit_ghost_node(dot, ghost_id, index)
 
 
 def _add_group_clusters(
@@ -475,16 +489,7 @@ def _add_group_clusters(
                 if comp and node_id in active_set:
                     _emit_component_node(sg, comp, node_id, colors)
                 elif node_id in ghost_ids:
-                    name = comp.display_name if comp else node_id
-                    label = f"{name}\n{node_id}\n(excluded)"
-                    sg.node(
-                        node_id,
-                        label=label,
-                        fillcolor=GHOST_FILL_COLOR,
-                        style="filled,rounded,dashed",
-                        fontcolor=GHOST_FONT_COLOR,
-                        color=GHOST_BORDER_COLOR,
-                    )
+                    _emit_ghost_node(sg, node_id, index)
 
 
 def _add_edges(
@@ -594,9 +599,12 @@ def _add_external_nodes_and_edges(
     )
 
     for nid, name in in_nodes.items():
-        dot.node(nid, label=name, shape="cylinder", **ext_attrs)
+        dot.node(nid, label=name, shape="cylinder", id=nid, tooltip=name, **ext_attrs)
     for nid, name in out_nodes.items():
-        dot.node(nid, label=name, shape="oval", peripheries="2", **ext_attrs)
+        dot.node(
+            nid, label=name, shape="oval", peripheries="2",
+            id=nid, tooltip=name, **ext_attrs,
+        )
 
     if in_nodes:
         with dot.subgraph() as s:
