@@ -449,6 +449,26 @@ class TestBlankRows:
         assert [c.id for c in components] == ["x"]
         assert validate(components) is True
 
+    def test_blank_spacer_rows_are_skipped_quietly(self, tmp_path, capsys):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Refactor status\n,,\nx,X,New in Refactor\n",
+            encoding="utf-8",
+        )
+        load_components(csv_path)
+        assert capsys.readouterr().err == ""
+
+    def test_a_row_with_data_but_no_id_warns(self, tmp_path, capsys):
+        # That one is a typo, not a spacer — skipping it silently would make
+        # the component vanish from the diagram with no explanation.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Refactor status\n,Forgotten,New in Refactor\n",
+            encoding="utf-8",
+        )
+        assert load_components(csv_path) == []
+        assert "Forgotten" in capsys.readouterr().err
+
 
 # --- SVG node attributes ---------------------------------------------------
 
@@ -494,9 +514,10 @@ class TestSvgNodeAttributes:
 
 
 class TestEdgeStyles:
-    def test_call_and_planned_call_to_the_same_target_both_render(self):
-        # solid_edges suppresses a dashed edge only when a *solid* one already
-        # covers the pair — a planned call alongside a real one must survive.
+    def test_implemented_call_suppresses_a_planned_call_to_the_same_target(self):
+        # "Calls: b, ~b" is contradictory data. Draw the implemented edge only,
+        # mirroring how depends_on outranks depends_on_planned — two dashed
+        # edges between one pair merge under concentrate=true anyway.
         components = [
             _comp("a", refactor_status="New in Refactor",
                   uses=["b"], uses_planned=["b"]),
@@ -504,8 +525,18 @@ class TestEdgeStyles:
         ]
         edges = [ln for ln in _source_for(components).splitlines()
                  if "a -> b" in ln]
-        assert len(edges) == 2
-        assert any("color=red" in e for e in edges)
+        assert len(edges) == 1
+        assert "color=red" not in edges[0]
+
+    def test_planned_call_renders_when_there_is_no_implemented_one(self):
+        components = [
+            _comp("a", refactor_status="New in Refactor", uses_planned=["b"]),
+            _comp("b", refactor_status="New in Refactor"),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> b" in ln]
+        assert len(edges) == 1
+        assert "color=red" in edges[0]
 
     def test_solid_edge_suppresses_a_dashed_one_in_the_same_direction(self):
         # a gets results from b  → solid b -> a.

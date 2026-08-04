@@ -222,7 +222,9 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
 
     Rows with a blank id are skipped: they are spacer or trailing rows from the
     sheet, and keeping them yields an unnamed graphviz node, or a baffling
-    "duplicate id: '' and ''" error once there are two of them.
+    "duplicate id: '' and ''" error once there are two of them. A skipped row
+    that carries other data warns, since that one is a typo rather than a
+    spacer.
 
     Sorted by lowercase id for deterministic .dot / .json output across CSV
     row reorderings.
@@ -235,6 +237,15 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
         for row in reader:
             comp_id = row.get("id", "").strip()
             if not comp_id:
+                # An entirely blank row is a spacer or a trailing row and is
+                # skipped quietly. A row carrying data but no id is a
+                # data-entry mistake, and would otherwise vanish without trace.
+                if any(isinstance(v, str) and v.strip() for v in row.values()):
+                    click.echo(
+                        f"WARNING: skipping a row with no id "
+                        f"(Name: '{row.get('Name', '').strip()}')",
+                        err=True,
+                    )
                 continue
             depends_on, depends_on_planned = parse_id_list(
                 row.get("Gets results from", "")
@@ -549,6 +560,11 @@ def _add_edges(
     # dashed edge between the same two nodes — which concentrate=true
     # would merge, losing the solid style — is suppressed in favour of solid.
     solid_edges: set[tuple[str, str]] = set()
+    # Same idea one level down: an implemented "Calls" edge outranks a planned
+    # one to the same target, mirroring how depends_on outranks
+    # depends_on_planned above. Two dashed edges between one pair would merge
+    # under concentrate=true and lose the planned-vs-implemented distinction.
+    dashed_edges: set[tuple[str, str]] = set()
 
     def edge_target(caller_id: str, ref: str) -> str | None:
         """Return the graphviz node id to draw an edge to, or None to skip.
@@ -589,9 +605,14 @@ def _add_edges(
             t = edge_target(comp.id, ref)
             if t is not None and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dashed")  # A --→ B: API call
+                dashed_edges.add((comp.id, t))
         for ref in comp.uses_planned:
             t = edge_target(comp.id, ref)
-            if t is not None and (comp.id, t) not in solid_edges:
+            if (
+                t is not None
+                and (comp.id, t) not in solid_edges
+                and (comp.id, t) not in dashed_edges
+            ):
                 # Planned/in-development "Calls" — dashed red to stand out
                 dot.edge(comp.id, t, style="dashed", color="red")
 
@@ -958,6 +979,7 @@ def build_layer_subgraph(
     # Edges — only those with at least one in-layer endpoint
     emitted_clones: set[str] = set()
     solid_edges: set[tuple[str, str]] = set()
+    dashed_edges: set[tuple[str, str]] = set()
 
     def _sub_target(caller_id: str, ref: str) -> str | None:
         match = index.get(ref.lower())
@@ -989,13 +1011,18 @@ def build_layer_subgraph(
             t = _sub_target(comp.id, ref)
             if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dashed")
-                # Deliberately not added to solid_edges: the set suppresses
-                # dashed edges that duplicate a *solid* one, so recording a
-                # dashed edge here would drop the planned (red) edge below and
-                # diverge from _add_edges in the main diagram.
+                # Recorded in dashed_edges, not solid_edges — the two sets
+                # suppress different things and mixing them drops the wrong
+                # edge. See _add_edges, which this must stay in step with.
+                dashed_edges.add((comp.id, t))
         for ref in comp.uses_planned:
             t = _sub_target(comp.id, ref)
-            if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
+            if (
+                t is not None
+                and (comp.id in in_layer or t in in_layer)
+                and (comp.id, t) not in solid_edges
+                and (comp.id, t) not in dashed_edges
+            ):
                 dot.edge(comp.id, t, style="dashed", color="red")
 
     _add_external_nodes_and_edges(dot, components, in_layer)

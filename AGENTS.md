@@ -156,10 +156,13 @@ and `.json` output is stable when someone reorders rows in the sheet.
 `PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
 and has been deleted — red is what ships and what the README documents.
 
-**`solid_edges` records solid edges only.** It exists to suppress a dashed
-edge that duplicates a solid one in the same direction. Adding a dashed edge to
-it would also suppress the planned (red) dashed edge between the same pair,
-which is a real bug `build_layer_subgraph` used to have.
+**There are two suppression sets, and they are not interchangeable.**
+`solid_edges` suppresses a dashed edge that duplicates a solid one in the same
+direction; `dashed_edges` suppresses a planned (red) "Calls" edge when an
+implemented one already covers the pair, mirroring how `depends_on` outranks
+`depends_on_planned`. Recording a dashed edge in `solid_edges` drops the wrong
+edge — a real bug `build_layer_subgraph` used to have. `_add_edges` and
+`build_layer_subgraph` must stay in step on both.
 
 ## Special features
 

@@ -151,7 +151,8 @@ New owners not listed there receive fallback colours automatically.
 
 Where a solid edge already connects two nodes, a dashed edge in the same
 direction is suppressed — otherwise `--concentrate` would merge the two and
-lose the solid style.
+lose the solid style. For the same reason, listing an ID both plainly and with
+a `~` prefix in one cell (`Calls: foo, ~foo`) draws only the implemented edge.
 
 ### Special nodes
 
