@@ -26,9 +26,6 @@ FALLBACK_COLORS = [
     "#B0BEC5", "#BCAAA4", "#CE93D8", "#80CBC4",
     "#EF9A9A", "#FFCC80", "#C5E1A5", "#80DEEA",
 ]
-# Soft indigo for planned edges — distinct from the ghost-node gray
-# (#999999) so planned edges don't visually blur with excluded-node borders.
-PLANNED_EDGE_COLOR = "#7986CB"
 GHOST_BORDER_COLOR = "#999999"
 GHOST_FILL_COLOR = "#D3D3D3"
 GHOST_FONT_COLOR = "#666666"
@@ -39,6 +36,13 @@ EXTERNAL_FILL_COLOR = "#FFE082"
 HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Scripps": "🌐", "Local": "💻", "Unknown": "❓"}
 # Bold border penwidth for in-layer nodes in per-layer sub-figures.
 IN_LAYER_PENWIDTH = "4.0"
+# owner-colors.csv is hand-edited, so its values are checked rather than trusted:
+# text_color_for needs exactly six hex digits, and graphviz would silently render
+# a typo'd color as black.
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Node URLs come from the sheet and become live <a xlink:href> in the SVG. Only
+# ordinary web links are allowed through — see _valid_url.
+URL_SCHEMES = ("http://", "https://")
 
 
 class ColorAssigner:
@@ -133,13 +137,15 @@ def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
     return implemented, planned
 
 
-def parse_externals(field_value: str) -> list[tuple[str, str]]:
+def parse_externals(field_value: str, where: str = "") -> list[tuple[str, str]]:
     """Parse the Externals column into a list of (direction, name) pairs.
 
     Values are standard CSV (commas as separators, double-quotes for names
     that contain commas). Each token must start with '<' (external source
     that sends data *into* this component) or '>' (external sink that
-    receives data *from* this component).
+    receives data *from* this component). A token with neither prefix has no
+    direction to draw, so it is dropped with a warning rather than silently —
+    otherwise a typo in the sheet just makes a node disappear.
 
     Examples
     --------
@@ -159,6 +165,12 @@ def parse_externals(field_value: str) -> list[tuple[str, str]]:
                 result.append(("in", token[1:].strip()))
             elif token.startswith(">"):
                 result.append(("out", token[1:].strip()))
+            else:
+                click.echo(
+                    f"WARNING: external '{token}' in {where or 'Externals'} has "
+                    f"no '<' or '>' prefix; ignoring it",
+                    err=True,
+                )
     return result
 
 
@@ -177,11 +189,40 @@ def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
                 f"{path} is missing required columns: "
                 + ", ".join(sorted(missing_cols))
             )
-        return {row["owner"].strip(): row["color"].strip() for row in reader}
+        colors = {}
+        for row in reader:
+            owner, color = row["owner"].strip(), row["color"].strip()
+            if not HEX_COLOR_RE.match(color):
+                raise click.ClickException(
+                    f"{path}: owner '{owner}' has color '{color}', which is not "
+                    f"a six-digit hex colour like #EF5350."
+                )
+            colors[owner] = color
+        return colors
+
+
+def _valid_url(url: str, comp_id: str) -> str:
+    """Return url if it is a plain web link, else "" with a warning.
+
+    Node URLs become live <a xlink:href> wrappers in the SVG, and the planned
+    Pages view inlines that SVG — so a 'javascript:' URL pasted into the sheet
+    would otherwise become executable on a public page.
+    """
+    if not url or url.startswith(URL_SCHEMES):
+        return url
+    click.echo(
+        f"WARNING: '{comp_id}' has URL '{url}', which is not http(s); ignoring it",
+        err=True,
+    )
+    return ""
 
 
 def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
     """Parse the CSV into a sorted list of Components.
+
+    Rows with a blank id are skipped: they are spacer or trailing rows from the
+    sheet, and keeping them yields an unnamed graphviz node, or a baffling
+    "duplicate id: '' and ''" error once there are two of them.
 
     Sorted by lowercase id for deterministic .dot / .json output across CSV
     row reorderings.
@@ -192,24 +233,27 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
         reader = csv.DictReader(f)
         rows: list[Component] = []
         for row in reader:
+            comp_id = row.get("id", "").strip()
+            if not comp_id:
+                continue
             depends_on, depends_on_planned = parse_id_list(
                 row.get("Gets results from", "")
             )
             uses, uses_planned = parse_id_list(row.get("Calls", ""))
             rows.append(Component(
-                id=row.get("id", "").strip(),
+                id=comp_id,
                 name=row.get("Name", "").strip(),
                 owner=(row.get("Owner") or "None").strip() or "None",
                 itrb=row.get("Component in ITRB", "").strip(),
                 refactor_status=row.get("Refactor status", "").strip(),
                 notes=row.get("Notes", "").strip(),
-                url=row.get("URL", "").strip(),
+                url=_valid_url(row.get("URL", "").strip(), comp_id),
                 ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
                 hide=_parse_bool(row.get("Hide", "")),
                 part_of=row.get("Part of", "").strip(),
                 hosted_at=row.get("Hosted at", "").strip(),
                 layer=row.get(layer_column, "").strip() if layer_column else "",
-                externals=parse_externals(row.get("Externals", "")),
+                externals=parse_externals(row.get("Externals", ""), comp_id),
                 depends_on=depends_on,
                 depends_on_planned=depends_on_planned,
                 uses=uses,
@@ -945,7 +989,10 @@ def build_layer_subgraph(
             t = _sub_target(comp.id, ref)
             if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
                 dot.edge(comp.id, t, style="dashed")
-                solid_edges.add((comp.id, t))
+                # Deliberately not added to solid_edges: the set suppresses
+                # dashed edges that duplicate a *solid* one, so recording a
+                # dashed edge here would drop the planned (red) edge below and
+                # diverge from _add_edges in the main diagram.
         for ref in comp.uses_planned:
             t = _sub_target(comp.id, ref)
             if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
@@ -1080,7 +1127,9 @@ def main(
         # or missing sheet redirects to a 200 HTML login page, which would
         # otherwise be silently saved as components.csv.
         try:
-            with urllib.request.urlopen(url) as response:
+            # timeout so a stalled request fails the run rather than hanging a
+            # scheduled CI job forever.
+            with urllib.request.urlopen(url, timeout=30) as response:
                 content_type = response.headers.get("Content-Type", "")
                 body = response.read()
         except urllib.error.URLError as exc:
@@ -1122,7 +1171,9 @@ def main(
             s.strip() for s in refactor_status.split(",") if s.strip()
         }
         active_count = sum(
-            1 for c in components if c.refactor_status in active_statuses
+            # Must match _compute_active_set, which also drops hidden rows.
+            1 for c in components
+            if c.refactor_status in active_statuses and not c.hide
         )
         click.echo(
             f"Filtering to {active_count} components with status: "

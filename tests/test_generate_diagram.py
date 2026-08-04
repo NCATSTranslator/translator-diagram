@@ -10,9 +10,11 @@ from generate_diagram import (
     ColorAssigner,
     FALLBACK_COLORS,
     _parse_bool,
+    build_graph,
     index_by_id,
     load_components,
     load_owner_colors,
+    parse_externals,
     parse_id_list,
     text_color_for,
     validate,
@@ -273,7 +275,7 @@ class TestLoadOwnerColors:
     def test_preserves_row_order(self, tmp_path):
         path = tmp_path / "owner-colors.csv"
         path.write_text(
-            "owner,color\nzeta,#111\nalpha,#222\nbeta,#333\n",
+            "owner,color\nzeta,#111111\nalpha,#222222\nbeta,#333333\n",
             encoding="utf-8",
         )
         # Order matters for legend layout — must match CSV order, not sorted.
@@ -295,6 +297,15 @@ class TestLoadOwnerColors:
         path = tmp_path / "owner-colors.csv"
         path.write_text("owner,hue\nNCATS,red\n", encoding="utf-8")
         with pytest.raises(click.ClickException, match="missing required columns"):
+            load_owner_colors(path)
+
+    @pytest.mark.parametrize("color", ["#fff", "red", "EF5350", "#GGGGGG", ""])
+    def test_non_hex_color_raises_clickexception(self, tmp_path, color):
+        # The file is hand-edited by non-Python folk; text_color_for needs six
+        # hex digits and used to die with a raw ValueError traceback.
+        path = tmp_path / "owner-colors.csv"
+        path.write_text(f"owner,color\nNCATS,{color}\n", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="six-digit hex"):
             load_owner_colors(path)
 
     def test_default_file_loads(self):
@@ -352,3 +363,159 @@ class TestUbiquitousColumn:
 
     def test_dataclass_default_is_false(self):
         assert _comp("foo").ubiquitous is False
+
+
+# --- parse_externals -------------------------------------------------------
+
+
+class TestParseExternals:
+    def test_empty(self):
+        assert parse_externals("") == []
+        assert parse_externals("   ") == []
+
+    def test_source_and_sink(self):
+        assert parse_externals("<Upstream, >User") == [
+            ("in", "Upstream"),
+            ("out", "User"),
+        ]
+
+    def test_quoted_name_containing_a_comma(self):
+        # The column is parsed as CSV so a name may contain a comma if quoted.
+        assert parse_externals('"<Upstream, service", >Researcher') == [
+            ("in", "Upstream, service"),
+            ("out", "Researcher"),
+        ]
+
+    def test_strips_whitespace_around_prefix_and_name(self):
+        assert parse_externals("  <  DB  ") == [("in", "DB")]
+
+    def test_undirected_token_is_dropped_with_a_warning(self, capsys):
+        # A missing '<' or '>' is a typo in the sheet; dropping it silently
+        # would just make the node vanish.
+        assert parse_externals("User, >Sink", "comp-a") == [("out", "Sink")]
+        err = capsys.readouterr().err
+        assert "external 'User'" in err
+        assert "comp-a" in err
+
+
+# --- URL column ------------------------------------------------------------
+
+
+URL_CSV_HEADER = "id,Name,Refactor status,URL\n"
+
+
+class TestUrlValidation:
+    def test_http_and_https_pass_through(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            URL_CSV_HEADER
+            + "a,A,New in Refactor,http://example.org/a\n"
+            + "b,B,New in Refactor,https://example.org/b\n",
+            encoding="utf-8",
+        )
+        assert [c.url for c in load_components(csv_path)] == [
+            "http://example.org/a",
+            "https://example.org/b",
+        ]
+
+    def test_javascript_url_is_dropped_with_a_warning(self, tmp_path, capsys):
+        # The Pages view inlines the SVG, so a javascript: href would be live
+        # on a public page.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            URL_CSV_HEADER + "a,A,New in Refactor,javascript:alert(1)\n",
+            encoding="utf-8",
+        )
+        assert load_components(csv_path)[0].url == ""
+        assert "not http(s)" in capsys.readouterr().err
+
+
+# --- blank rows ------------------------------------------------------------
+
+
+class TestBlankRows:
+    def test_rows_without_an_id_are_skipped(self, tmp_path):
+        # Spacer and trailing rows in the sheet export as empty rows. Keeping
+        # them yielded an unnamed node, or "duplicate id: '' and ''" for two.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Refactor status\n"
+            ",,\n"
+            ",,\n"
+            "x,X,New in Refactor\n",
+            encoding="utf-8",
+        )
+        components = load_components(csv_path)
+        assert [c.id for c in components] == ["x"]
+        assert validate(components) is True
+
+
+# --- SVG node attributes ---------------------------------------------------
+
+
+def _source_for(components, **kwargs) -> str:
+    colors = ColorAssigner({"None": "#E8E8E8"}, FALLBACK_COLORS)
+    return build_graph(
+        components, {"New in Refactor"}, "TB", colors, **kwargs
+    ).source
+
+
+class TestSvgNodeAttributes:
+    def test_node_gets_a_stable_id_matching_its_component_id(self):
+        # The Pages view addresses nodes by id, not graphviz's node1/node2.
+        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
+        assert "id=ars" in source
+
+    def test_url_becomes_a_graphviz_url_attribute(self):
+        comp = _comp("ars", refactor_status="New in Refactor")
+        comp.url = "https://example.org/ars"
+        source = _source_for([comp])
+        assert 'URL="https://example.org/ars"' in source
+        assert "target=_blank" in source
+
+    def test_no_url_attribute_when_the_column_is_empty(self):
+        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
+        assert "URL=" not in source
+
+    def test_tooltip_carries_owner_status_and_notes(self):
+        comp = _comp(
+            "ars",
+            owner="NCATS",
+            refactor_status="New in Refactor",
+            notes="Runs the queries",
+        )
+        source = _source_for([comp])
+        assert "Owner: NCATS" in source
+        assert "Status: New in Refactor" in source
+        assert "Runs the queries" in source
+
+
+# --- edge styles -----------------------------------------------------------
+
+
+class TestEdgeStyles:
+    def test_call_and_planned_call_to_the_same_target_both_render(self):
+        # solid_edges suppresses a dashed edge only when a *solid* one already
+        # covers the pair — a planned call alongside a real one must survive.
+        components = [
+            _comp("a", refactor_status="New in Refactor",
+                  uses=["b"], uses_planned=["b"]),
+            _comp("b", refactor_status="New in Refactor"),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> b" in ln]
+        assert len(edges) == 2
+        assert any("color=red" in e for e in edges)
+
+    def test_solid_edge_suppresses_a_dashed_one_in_the_same_direction(self):
+        # a gets results from b  → solid b -> a.
+        # b calls a              → dashed b -> a, same direction, suppressed
+        #                          so --concentrate can't merge away the solid.
+        components = [
+            _comp("a", refactor_status="New in Refactor", depends_on=["b"]),
+            _comp("b", refactor_status="New in Refactor", uses=["a"]),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "b -> a" in ln]
+        assert len(edges) == 1
+        assert "dashed" not in edges[0]
