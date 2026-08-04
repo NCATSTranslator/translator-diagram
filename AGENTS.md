@@ -79,7 +79,7 @@ CSV column → `Component` field:
 | `id` | `id` | Unique identifier; references to it are case-insensitive |
 | `Name` | `name` | Display name; falls back to `id` if blank |
 | `Owner` | `owner` | Defaults to `"None"` if blank |
-| `URL` | `url` | Becomes the graphviz `URL` node attribute — a real link in SVG output |
+| `URL` | `url` | Becomes the graphviz `URL` node attribute — a real link in SVG output. `_valid_url` drops anything that isn't `http(s)` |
 | `Component in ITRB` | `itrb` | Informational only; not currently rendered |
 | `Refactor status` | `refactor_status` | Drives active-set filtering |
 | `Gets results from` | `depends_on` / `depends_on_planned` | Comma-separated IDs; `~` prefix = planned |
@@ -151,9 +151,15 @@ saved as `components.csv` and fail confusingly much later.
 **Components are sorted by lowercase `id`** in `load_components` so the `.dot`
 and `.json` output is stable when someone reorders rows in the sheet.
 
-**`PLANNED_EDGE_COLOR` is currently unreferenced.** `_add_edges` hardcodes
-`color="red"`. Whether planned edges should be red or that indigo is an open
-question for review — leave the constant in place.
+**Planned edges are red**, hardcoded as `color="red"` at four sites in
+`_add_edges` and four more in `build_layer_subgraph`. An earlier
+`PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
+and has been deleted — red is what ships and what the README documents.
+
+**`solid_edges` records solid edges only.** It exists to suppress a dashed
+edge that duplicates a solid one in the same direction. Adding a dashed edge to
+it would also suppress the planned (red) dashed edge between the same pair,
+which is a real bug `build_layer_subgraph` used to have.
 
 ## Special features
 

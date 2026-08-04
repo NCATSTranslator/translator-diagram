@@ -70,7 +70,7 @@ ignored, and any column may be absent):
 | `id` | Unique machine-readable identifier (kebab-case preferred) |
 | `Name` | Human-readable display name shown in the diagram |
 | `Owner` | Team that owns the component; controls node colour |
-| `URL` | Link to the component's repo or docs; makes the node clickable in SVG output |
+| `URL` | Link to the component's repo or docs; makes the node clickable in SVG output. Must be `http://` or `https://` — anything else is dropped with a warning |
 | `Component in ITRB` | ITRB category (informational only) |
 | `Refactor status` | Lifecycle status — see filtering below |
 | `Gets results from` | Comma-separated IDs this component receives data from |
@@ -249,10 +249,13 @@ deliberate decision — publish everything, gate it behind an opt-in `Public`
 column in the sheet, or strip the free-text fields. Until then nothing
 generated is committed; `data/` stays gitignored.
 
+Note that the SVG carries more than the picture shows: every node's hover
+tooltip embeds its owner, refactor status and `Notes`, and `components.json`
+carries every parsed column. "Strip the free-text fields" therefore means
+stripping tooltips and JSON keys, not just labels.
+
 ## Possible future improvements
 
-- **Commit `.dot` and `.json` to Git** — move these outputs outside `data/` so
-  they are version-controlled and reviewable without running the tool.
 - **Grouping / filtering by ITRB category** — the `Component in ITRB` column
   is loaded but not currently used; it could drive an alternative colour scheme
   or a `--group-by itrb` flag.
