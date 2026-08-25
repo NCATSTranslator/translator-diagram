@@ -10,6 +10,7 @@ from generate_diagram import (
     ColorAssigner,
     FALLBACK_COLORS,
     _parse_bool,
+    _valid_url,
     build_graph,
     index_by_id,
     load_components,
@@ -550,3 +551,31 @@ class TestEdgeStyles:
                  if "b -> a" in ln]
         assert len(edges) == 1
         assert "dashed" not in edges[0]
+
+
+# --- regressions from the PR #1 review -------------------------------------
+
+
+class TestShortCsvRows:
+    def test_row_missing_trailing_fields_parses(self, tmp_path):
+        # csv.DictReader defaults absent trailing fields to None, not "".
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("id,Name,Owner,Refactor status,Notes\na\n")
+        comps = load_components(csv_path)
+        assert [c.id for c in comps] == ["a"]
+        assert comps[0].name == ""
+        assert comps[0].owner == "None"
+
+    def test_owner_colors_row_missing_the_colour_reports_it(self, tmp_path):
+        path = tmp_path / "owner-colors.csv"
+        path.write_text("owner,color\nRENCI\n")
+        with pytest.raises(click.ClickException, match="not\n?\\s*a six-digit hex"):
+            load_owner_colors(path)
+
+
+class TestValidUrl:
+    def test_uppercase_scheme_is_accepted(self):
+        assert _valid_url("HTTPS://example.org", "a") == "HTTPS://example.org"
+
+    def test_javascript_url_is_dropped(self):
+        assert _valid_url("javascript:alert(1)", "a") == ""

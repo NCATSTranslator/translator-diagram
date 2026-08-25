@@ -182,7 +182,9 @@ def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
     if not path.exists():
         raise click.ClickException(f"Owner-colors file not found: {path}")
     with path.open(newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
+        # restval="" so a short row reports a bad colour rather than raising
+        # AttributeError on None.strip() — see load_components.
+        reader = csv.DictReader(f, restval="")
         missing_cols = {"owner", "color"} - set(reader.fieldnames or [])
         if missing_cols:
             raise click.ClickException(
@@ -208,7 +210,9 @@ def _valid_url(url: str, comp_id: str) -> str:
     Pages view inlines that SVG — so a 'javascript:' URL pasted into the sheet
     would otherwise become executable on a public page.
     """
-    if not url or url.startswith(URL_SCHEMES):
+    # Schemes are case-insensitive per RFC 3986, and the sheet contains what
+    # people pasted, so compare lowercased.
+    if not url or url.lower().startswith(URL_SCHEMES):
         return url
     click.echo(
         f"WARNING: '{comp_id}' has URL '{url}', which is not http(s); ignoring it",
@@ -232,7 +236,10 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
     # utf-8-sig strips a UTF-8 BOM if present (Excel-resaved or Windows-edited
     # files), otherwise the first header would read as "﻿id" and KeyError.
     with csv_path.open(newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
+        # restval="" because DictReader defaults missing trailing fields to
+        # None, and every .strip() below would then raise AttributeError. The
+        # Sheets export pads its rows, but a hand-edited CSV need not.
+        reader = csv.DictReader(f, restval="")
         rows: list[Component] = []
         for row in reader:
             comp_id = row.get("id", "").strip()
