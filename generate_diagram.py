@@ -651,6 +651,11 @@ def _add_edges(
         if match.hide:
             return None
         if match.ubiquitous:
+            # Ubiquitous components are in active_set when their status passes
+            # the filter; they're just drawn per-caller instead of centrally.
+            # Without this check an excluded one still renders, at full colour.
+            if match.id not in active_set:
+                return None
             clone_id = f"{caller_id}__{match.id}"
             if clone_id not in emitted_clones:
                 _emit_component_node(dot, match, clone_id, colors)
@@ -660,6 +665,17 @@ def _add_edges(
             return match.id
         return None
 
+    # Two passes: a solid edge is registered by its *target* component but
+    # suppresses a dashed edge emitted by its *source*, so a single pass only
+    # dedupes when the target happens to sort first. edge_target is idempotent.
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = edge_target(comp.id, ref)
+            if t is not None:
+                solid_edges.add((t, comp.id))
+
     for comp in components:
         if comp.id not in active_set or comp.ubiquitous:
             continue
@@ -667,7 +683,6 @@ def _add_edges(
             t = edge_target(comp.id, ref)
             if t is not None:
                 dot.edge(t, comp.id)  # B → A: B provides results to A
-                solid_edges.add((t, comp.id))
         for ref in comp.depends_on_planned:
             t = edge_target(comp.id, ref)
             if t is not None and (t, comp.id) not in solid_edges:
@@ -689,12 +704,6 @@ def _add_edges(
                 dot.edge(comp.id, t, style="dashed", color="red")
 
 
-def _ext_node_id(name: str) -> str:
-    """Stable graphviz node ID derived from an external-entity name."""
-    safe = "".join(c if c.isalnum() else "_" for c in name.lower())
-    return f"_ext_{safe}"
-
-
 def _add_external_nodes_and_edges(
     dot: graphviz.Digraph,
     components: list[Component],
@@ -706,26 +715,30 @@ def _add_external_nodes_and_edges(
     (direction "out") become double-oval nodes at rank=max.  Multiple
     components can reference the same external name — one node is emitted
     and one edge per referencing component is drawn.
+
+    A name used in *both* directions gets a single sink-shaped node and no rank
+    constraint, since rank=min and rank=max on one node contradict each other.
     """
-    in_nodes: dict[str, str] = {}            # node_id → display name
-    out_nodes: dict[str, str] = {}           # node_id → display name
-    in_edges: list[tuple[str, str]] = []     # (ext_id, comp_id)
-    out_edges: list[tuple[str, str]] = []    # (comp_id, ext_id)
+    ext_dirs: dict[str, set[str]] = {}       # display name → {"in", "out"}
+    in_edges: list[tuple[str, str]] = []     # (external name, comp_id)
+    out_edges: list[tuple[str, str]] = []    # (comp_id, external name)
 
     for comp in components:
         if comp.id not in active_set or comp.ubiquitous:
             continue
         for direction, name in comp.externals:
-            nid = _ext_node_id(name)
+            ext_dirs.setdefault(name, set()).add(direction)
             if direction == "in":
-                in_nodes[nid] = name
-                in_edges.append((nid, comp.id))
+                in_edges.append((name, comp.id))
             else:
-                out_nodes[nid] = name
-                out_edges.append((comp.id, nid))
+                out_edges.append((comp.id, name))
 
-    if not in_nodes and not out_nodes:
+    if not ext_dirs:
         return
+
+    # Deterministic: components are sorted, so ext_dirs is in a stable order.
+    taken: dict[str, str] = {}
+    ext_ids = {name: f"ext_{_unique_svg_id(name, taken)}" for name in ext_dirs}
 
     ext_attrs = dict(
         style="filled",
@@ -735,29 +748,28 @@ def _add_external_nodes_and_edges(
         penwidth="2.5",
     )
 
-    for nid, name in in_nodes.items():
-        dot.node(nid, label=name, shape="cylinder", id=nid, tooltip=name, **ext_attrs)
-    for nid, name in out_nodes.items():
-        dot.node(
-            nid, label=name, shape="oval", peripheries="2",
-            id=nid, tooltip=name, **ext_attrs,
-        )
+    for name, dirs in ext_dirs.items():
+        nid = ext_ids[name]
+        if dirs == {"in"}:
+            dot.node(nid, label=name, shape="cylinder", id=nid, tooltip=name, **ext_attrs)
+        else:
+            dot.node(
+                nid, label=name, shape="oval", peripheries="2",
+                id=nid, tooltip=name, **ext_attrs,
+            )
 
-    if in_nodes:
-        with dot.subgraph() as s:
-            s.attr(rank="min")
-            for nid in in_nodes:
-                s.node(nid)
-    if out_nodes:
-        with dot.subgraph() as s:
-            s.attr(rank="max")
-            for nid in out_nodes:
-                s.node(nid)
+    for rank, wanted in (("min", {"in"}), ("max", {"out"})):
+        ranked = [ext_ids[n] for n, dirs in ext_dirs.items() if dirs == wanted]
+        if ranked:
+            with dot.subgraph() as s:
+                s.attr(rank=rank)
+                for nid in ranked:
+                    s.node(nid)
 
-    for src, dst in in_edges:
-        dot.edge(src, dst)
-    for src, dst in out_edges:
-        dot.edge(src, dst)
+    for name, dst in in_edges:
+        dot.edge(ext_ids[name], dst)
+    for src, name in out_edges:
+        dot.edge(src, ext_ids[name])
 
 
 _LEGEND_CLUSTER_ATTRS = dict(
@@ -1059,6 +1071,10 @@ def build_layer_subgraph(
         if match is None or match.hide:
             return None
         if match.ubiquitous:
+            # active_set, not visible: visible excludes ubiquitous components
+            # by construction, but the status filter still has to apply.
+            if match.id not in active_set:
+                return None
             if caller_id in in_layer:
                 clone_id = f"{caller_id}__{match.id}"
                 if clone_id not in emitted_clones:
@@ -1068,6 +1084,16 @@ def build_layer_subgraph(
             return None
         return match.id if match.id in visible else None
 
+    # Collected in a first pass for the same reason as in _add_edges: the
+    # suppression below is otherwise sensitive to component order.
+    for comp in components:
+        if comp.id not in visible or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer):
+                solid_edges.add((t, comp.id))
+
     for comp in components:
         if comp.id not in visible or comp.ubiquitous:
             continue
@@ -1075,7 +1101,6 @@ def build_layer_subgraph(
             t = _sub_target(comp.id, ref)
             if t is not None and (t in in_layer or comp.id in in_layer):
                 dot.edge(t, comp.id)
-                solid_edges.add((t, comp.id))
         for ref in comp.depends_on_planned:
             t = _sub_target(comp.id, ref)
             if t is not None and (t in in_layer or comp.id in in_layer) and (t, comp.id) not in solid_edges:

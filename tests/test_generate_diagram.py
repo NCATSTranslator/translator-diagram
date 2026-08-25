@@ -599,6 +599,52 @@ class TestSvgIds:
         assert _unique_svg_id("User agent", taken) == "user_agent"
 
 
+class TestExternals:
+    def test_a_name_used_both_ways_emits_one_node(self):
+        a = _comp("a", refactor_status="New in Refactor")
+        a.externals = [("in", "User")]
+        b = _comp("b", refactor_status="New in Refactor")
+        b.externals = [("out", "User")]
+        source = _source_for([a, b])
+        # One node declaration, and no rank constraint at all — rank=min and
+        # rank=max on the same node contradict each other.
+        lines = source.splitlines()
+        assert len([ln for ln in lines
+                    if "ext_user" in ln and "label=User" in ln]) == 1
+        ranked = {lines[i + 1].strip() for i, ln in enumerate(lines)
+                  if ln.strip() in ("rank=min", "rank=max")}
+        assert "ext_user" not in ranked
+
+    def test_names_that_sanitise_alike_stay_separate(self):
+        a = _comp("a", refactor_status="New in Refactor")
+        a.externals = [("in", "User agent"), ("in", "User/agent")]
+        source = _source_for([a])
+        assert "ext_user_agent " in source or "ext_user_agent\t" in source
+        assert "ext_user_agent_2" in source
+
+
+class TestUbiquitousFiltering:
+    def test_excluded_ubiquitous_target_is_not_rendered(self):
+        u = _comp("u", refactor_status="Removed in Refactor", ubiquitous=True)
+        a = _comp("a", refactor_status="New in Refactor", uses=["u"])
+        source = _source_for([a, u])
+        assert "a__u" not in source
+
+
+class TestEdgeStyleOrdering:
+    def test_solid_suppresses_dashed_when_the_target_sorts_last(self):
+        # Mirror of the existing test with the ids swapped: the solid edge is
+        # registered by z, which the iteration reaches after a.
+        components = [
+            _comp("a", refactor_status="New in Refactor", uses=["z"]),
+            _comp("z", refactor_status="New in Refactor", depends_on=["a"]),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> z" in ln]
+        assert len(edges) == 1
+        assert "dashed" not in edges[0]
+
+
 class TestValidUrl:
     def test_uppercase_scheme_is_accepted(self):
         assert _valid_url("HTTPS://example.org", "a") == "HTTPS://example.org"
