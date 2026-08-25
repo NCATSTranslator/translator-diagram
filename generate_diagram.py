@@ -1209,8 +1209,9 @@ def build_layer_subgraph(
     show_default=True,
     help="CSV column name to use for layer-based sub-figures (e.g. 'Layer'). "
          "When set, one PNG sub-figure is written per distinct value found in "
-         "that column, showing in-layer nodes at full color and direct "
-         "neighbors from other layers greyed out. Leave empty to skip.",
+         "that column, showing in-layer nodes with a bold border and their "
+         "direct neighbors from other layers at normal weight. "
+         "Leave empty to skip.",
 )
 def main(
     input_path: Path,
@@ -1257,15 +1258,19 @@ def main(
             with urllib.request.urlopen(url, timeout=30) as response:
                 content_type = response.headers.get("Content-Type", "")
                 body = response.read()
-        except urllib.error.URLError as exc:
+        # A stall during read() raises a bare TimeoutError, which is not a
+        # URLError; without it here a scheduled job dies with a traceback.
+        except (urllib.error.URLError, TimeoutError) as exc:
             raise click.ClickException(
-                f"Failed to download Google Sheet ({url}): {exc}"
+                f"Failed to download Google Sheet (gid {sheet_gid}): {exc}"
             ) from exc
         if "text/csv" not in content_type.lower():
+            # The sheet ID is a shareable secret and these messages end up in
+            # CI logs, so it stays out of both of them.
             raise click.ClickException(
                 f"Google Sheet response was not CSV (Content-Type: "
                 f"{content_type or 'unset'}). The sheet may be private, "
-                f"the ID may be wrong, or the gid may not exist. URL: {url}"
+                f"GOOGLE_SHEET_ID may be wrong, or gid {sheet_gid} may not exist."
             )
         download_path.write_bytes(body)
         input_path = download_path
