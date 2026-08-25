@@ -10,6 +10,8 @@ from generate_diagram import (
     ColorAssigner,
     FALLBACK_COLORS,
     _parse_bool,
+    _svg_id,
+    _unique_svg_id,
     _valid_url,
     build_graph,
     index_by_id,
@@ -573,9 +575,55 @@ class TestShortCsvRows:
             load_owner_colors(path)
 
 
+class TestSvgIds:
+    def test_punctuated_id_becomes_a_valid_xml_id(self):
+        assert _svg_id("ARS 2.0") == "ars_2_0"
+
+    def test_leading_digit_is_prefixed(self):
+        # XML IDs may not start with a digit, so getElementById would fail.
+        assert _svg_id("2fast").startswith("n_")
+
+    def test_node_id_attribute_is_sanitised(self):
+        source = _source_for([_comp("ARS 2.0", refactor_status="New in Refactor")])
+        assert "id=ars_2_0" in source
+
+    def test_ids_differing_only_in_punctuation_are_an_error(self, capsys):
+        assert validate([_comp("ARS 2.0"), _comp("ARS/2/0")]) is False
+        assert "SVG id" in capsys.readouterr().err
+
+    def test_unique_svg_id_separates_colliding_labels(self):
+        taken: dict[str, str] = {}
+        assert _unique_svg_id("User agent", taken) == "user_agent"
+        assert _unique_svg_id("User/agent", taken) == "user_agent_2"
+        # Re-asking for one already assigned returns the same id.
+        assert _unique_svg_id("User agent", taken) == "user_agent"
+
+
 class TestValidUrl:
     def test_uppercase_scheme_is_accepted(self):
         assert _valid_url("HTTPS://example.org", "a") == "HTTPS://example.org"
 
     def test_javascript_url_is_dropped(self):
         assert _valid_url("javascript:alert(1)", "a") == ""
+
+
+class TestLabelCollisionWarnings:
+    def test_part_of_labels_differing_only_in_punctuation_warn(self, capsys):
+        a, b = _comp("a"), _comp("b")
+        a.part_of, b.part_of = "Core Bits", "Core/Bits"
+        # A warning, not an error — both groups are still drawn.
+        assert validate([a, b]) is True
+        assert "Part of names 'Core Bits' and 'Core/Bits'" in capsys.readouterr().err
+
+    def test_external_names_differing_only_in_punctuation_warn(self, capsys):
+        a = _comp("a")
+        a.externals = [("in", "User agent"), ("out", "User/agent")]
+        assert validate([a]) is True
+        assert "Externals names" in capsys.readouterr().err
+
+    def test_the_same_label_on_two_components_does_not_warn(self, capsys):
+        a, b = _comp("a"), _comp("b")
+        a.part_of = b.part_of = "Core Bits"
+        a.externals = b.externals = [("in", "User")]
+        assert validate([a, b]) is True
+        assert capsys.readouterr().err == ""

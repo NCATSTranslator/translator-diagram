@@ -64,7 +64,8 @@ commit or two. `grep -n '^def '` finds any of these instantly.
 | `_add_ghost_nodes` | Emits dimmed nodes for excluded-but-referenced components |
 | `_add_group_clusters` | Wraps `Part of` groups in labelled dotted-border subgraphs |
 | `_add_edges` | Emits all dependency edges; also emits ubiquitous clones via its inner `edge_target` |
-| `_ext_node_id`, `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
+| `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
+| `_svg_id`, `_unique_svg_id` | XML-ID-safe handles for SVG `id` attributes and cluster names |
 | `_owner_legend_html`, `_add_owner_cluster`, `_add_edge_cluster`, `_add_legend` | The embedded legend (`--no-split-legends`) |
 | `_build_owners_graph`, `_build_edge_legend_graph` | The standalone legend PNGs (the default) |
 | `build_graph` | Top-level assembler — calls all the above in order |

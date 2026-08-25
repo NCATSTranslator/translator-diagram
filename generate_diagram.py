@@ -43,6 +43,32 @@ HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 # Node URLs come from the sheet and become live <a xlink:href> in the SVG. Only
 # ordinary web links are allowed through — see _valid_url.
 URL_SCHEMES = ("http://", "https://")
+# Graphviz accepts any node name, but the SVG "id" attribute it lands in must be
+# a valid XML ID — no spaces or slashes, and no leading digit — or the planned
+# Pages view can't retrieve the node with getElementById. See _svg_id.
+_ID_UNSAFE_RE = re.compile(r"[^0-9A-Za-z]+")
+
+
+def _svg_id(text: str) -> str:
+    """Lowercase, XML-ID-safe handle for text, for use as an SVG <g id="...">."""
+    safe = _ID_UNSAFE_RE.sub("_", text.lower()).strip("_")
+    return safe if safe[:1].isalpha() else f"n_{safe}"
+
+
+def _unique_svg_id(text: str, taken: dict[str, str]) -> str:
+    """_svg_id(text), suffixed if a *different* string already claimed that id.
+
+    Free-text labels sanitise alike more often than ids do ("User/agent" and
+    "User agent" both give "user_agent"), and without this the second one
+    silently merges into the first's node or cluster. taken maps each id
+    handed out to the text that claimed it, and callers share one dict.
+    """
+    base = _svg_id(text)
+    candidate, n = base, 1
+    while taken.setdefault(candidate, text) != text:
+        n += 1
+        candidate = f"{base}_{n}"
+    return candidate
 
 
 class ColorAssigner:
@@ -311,6 +337,41 @@ def validate(components: list[Component]) -> bool:
         else:
             seen[key] = comp.id
 
+    # Two ids that differ only in punctuation ("ARS 2.0" vs "ARS/2/0") produce
+    # one SVG id, so the Pages view would bind both rows to the same node.
+    # Treated like a duplicate id, because that is what it becomes downstream.
+    by_svg_id: dict[str, str] = {}
+    for comp in components:
+        clash = by_svg_id.setdefault(_svg_id(comp.id), comp.id)
+        if clash != comp.id:
+            click.echo(
+                f"ERROR: ids '{clash}' and '{comp.id}' both become the SVG id "
+                f"'{_svg_id(comp.id)}'; make them differ by more than punctuation",
+                err=True,
+            )
+            ok = False
+
+    # Free-text labels get the same treatment, but only as a warning: they are
+    # kept as separate clusters/nodes (the later one takes a _2 suffix), which
+    # is the right outcome if they really are two things and a legible symptom
+    # if one is a typo. Warned here rather than in _unique_svg_id, which runs
+    # again for every layer sub-figure.
+    for kind, labels in (
+        ("Part of", [c.part_of for c in components]),
+        ("Externals", [n for c in components for _, n in c.externals]),
+    ):
+        by_label_id: dict[str, str] = {}
+        for label in dict.fromkeys(labels):
+            if not label:
+                continue
+            clash = by_label_id.setdefault(_svg_id(label), label)
+            if clash != label:
+                click.echo(
+                    f"WARNING: {kind} names '{clash}' and '{label}' differ only "
+                    f"in punctuation; keeping both, but check for a typo",
+                    err=True,
+                )
+
     index = index_by_id(components)
     for comp in components:
         for ref in comp.all_refs():
@@ -336,6 +397,9 @@ def write_json(components: list[Component], out_path: Path) -> None:
     exportable = [
         {
             "id": c.id,
+            # The SVG <g id="..."> for this component, so a consumer can find
+            # the node without re-deriving the sanitising rule.
+            "node_id": _svg_id(c.id),
             "Name": c.name,
             "Owner": c.owner,
             "Component in ITRB": c.itrb,
@@ -435,7 +499,7 @@ def _emit_component_node(
     # URL makes graphviz wrap the node in <a xlink:href=...> in SVG output, which
     # is clickable component documentation with no JavaScript at all. Both are
     # inert in PNG output, so this changes nothing about today's diagrams.
-    extra: dict[str, str] = {"id": node_id, "tooltip": _node_tooltip(comp)}
+    extra: dict[str, str] = {"id": _svg_id(node_id), "tooltip": _node_tooltip(comp)}
     if comp.url:
         extra["URL"] = comp.url
         extra["target"] = "_blank"
@@ -500,7 +564,7 @@ def _emit_ghost_node(
         style="filled,rounded,dashed",
         fontcolor=GHOST_FONT_COLOR,
         color=GHOST_BORDER_COLOR,
-        id=ghost_id,
+        id=_svg_id(ghost_id),
         tooltip=f"{name} ({ghost_id}) — excluded by the current filter",
     )
 
@@ -527,8 +591,9 @@ def _add_group_clusters(
     colors: ColorAssigner,
 ) -> None:
     """Wrap each Part-of group in a labeled dotted-border cluster subgraph."""
+    taken: dict[str, str] = {}
     for group_label, node_ids in sorted(groups.items()):
-        safe = group_label.lower().replace(" ", "_").replace("/", "_")
+        safe = _unique_svg_id(group_label, taken)
         with dot.subgraph(name=f"cluster_group_{safe}") as sg:
             tab_label = (
                 f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3">'
@@ -947,8 +1012,9 @@ def build_layer_subgraph(
         groups.setdefault(comp.part_of, []).append(comp.id)
     grouped_in_layer = {nid for ids in groups.values() for nid in ids}
 
+    taken: dict[str, str] = {}
     for group_label, node_ids in sorted(groups.items()):
-        safe = group_label.lower().replace(" ", "_").replace("/", "_")
+        safe = _unique_svg_id(group_label, taken)
         with dot.subgraph(name=f"cluster_group_{safe}") as sg:
             tab_label = (
                 f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3">'

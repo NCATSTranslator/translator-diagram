@@ -178,8 +178,11 @@ In SVG output every component node carries:
 - an `<a xlink:href>` wrapper when the row has a `URL`, so the node is a
   clickable link to that component's repo or docs — no JavaScript needed;
 - a hover tooltip with the owner, refactor status and notes;
-- a stable `id` matching the component's `id`, so a web page can address nodes
-  directly from `components.json`.
+- a stable `id`, so a web page can address nodes directly from
+  `components.json`. XML IDs can't contain spaces or slashes or start with a
+  digit, so it is a sanitised form of the component's `id` (`ARS 2.0` becomes
+  `ars_2_0`) and `components.json` carries it verbatim as `node_id`. Two ids
+  that sanitise alike are a validation error.
 
 These attributes are inert in PNG output. They exist to support the planned
 interactive GitHub Pages view of this diagram — see below.
