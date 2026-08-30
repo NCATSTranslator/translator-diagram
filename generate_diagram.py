@@ -1057,6 +1057,30 @@ def _layer_filename(layer: str) -> str:
     return safe or "layer"
 
 
+def _layer_filenames(layers: list[str]) -> dict[str, str]:
+    """Layer label -> unique filename stem, warning on labels that collide.
+
+    "Tier 1" and "Tier-1" both reduce to "tier_1", and the second sub-figure
+    silently overwrote the first — three layers announced, two files on disk.
+    """
+    taken: dict[str, str] = {}
+    stems: dict[str, str] = {}
+    for layer in layers:
+        base = _layer_filename(layer)
+        stem, n = base, 1
+        while taken.setdefault(stem, layer) != layer:
+            n += 1
+            stem = f"{base}_{n}"
+        if stem != base:
+            click.echo(
+                f"WARNING: layer names '{taken[base]}' and '{layer}' both give "
+                f"the filename '{base}'; writing the second as '{stem}'",
+                err=True,
+            )
+        stems[layer] = stem
+    return stems
+
+
 def build_layer_subgraph(
     components: list[Component],
     layer_value: str,
@@ -1469,6 +1493,7 @@ def main(
                 f"Generating {len(layers)} layer sub-figure(s) "
                 f"from '{layer_column}' column ..."
             )
+            stems = _layer_filenames(layers)
             for layer_value in layers:
                 in_layer_count = sum(
                     1 for c in components
@@ -1486,7 +1511,7 @@ def main(
                 layer_dot = build_layer_subgraph(
                     components, layer_value, _active_set, _index, direction, colors
                 )
-                stem = f"{output_name}_{_layer_filename(layer_value)}"
+                stem = f"{output_name}_{stems[layer_value]}"
                 layer_dot_path = output_dir / f"{stem}.dot"
                 layer_dot_path.write_text(layer_dot.source, encoding="utf-8")
                 layer_dot.render(

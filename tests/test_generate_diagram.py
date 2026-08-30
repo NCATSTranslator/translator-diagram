@@ -14,6 +14,7 @@ from generate_diagram import (
     Component,
     ColorAssigner,
     FALLBACK_COLORS,
+    _layer_filenames,
     _parse_bool,
     _svg_id,
     _unique_svg_id,
@@ -782,6 +783,19 @@ class TestComponentsJson:
         hidden.hide = True
         components = [_comp("ars", uses=["log"]), hidden]
         assert [c["id"] for c in self._written(tmp_path, components)] == ["ars"]
+
+
+class TestLayerFilenames:
+    def test_labels_that_reduce_to_one_stem_get_separate_files(self, capsys):
+        stems = _layer_filenames(["Tier 1", "Tier-1", "Tier 2"])
+        assert stems == {"Tier 1": "tier_1", "Tier-1": "tier_1_2", "Tier 2": "tier_2"}
+        assert "both give the filename 'tier_1'" in capsys.readouterr().err
+
+    def test_distinct_labels_are_left_alone(self, capsys):
+        assert _layer_filenames(["Tier 1", "Tier 2"]) == {
+            "Tier 1": "tier_1", "Tier 2": "tier_2",
+        }
+        assert capsys.readouterr().err == ""
 
 
 class TestGoogleSheetEnv:
