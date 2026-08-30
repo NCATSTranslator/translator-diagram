@@ -159,7 +159,7 @@ class Component:
 
 
 def _parse_bool(value: str) -> bool:
-    """Parse a CSV boolean cell — accepts TRUE/yes/1 (case-insensitive)."""
+    """Parse a CSV boolean cell — accepts TRUE/yes/y/1 (case-insensitive)."""
     return value.strip().lower() in ("true", "yes", "y", "1")
 
 

@@ -46,7 +46,7 @@ commit or two. `grep -n '^def '` finds any of these instantly.
 | `Component` | Dataclass — one CSV row after parsing |
 | `_parse_bool`, `parse_id_list`, `parse_externals` | CSV cell parsing |
 | `load_owner_colors`, `load_components`, `index_by_id` | Data loading |
-| `validate` | Duplicate-ID and unknown-reference checking |
+| `validate` | Duplicate-ID, unknown-reference and SVG-id-collision checking |
 | `write_json` | Serialises every non-hidden component to `components.json` |
 | Graph construction | `_compute_*`, `_emit_*`, `_add_*`, `build_graph` — see below |
 | `main` | The `click` CLI: one `@click.option` per flag, then the run sequence |
@@ -86,16 +86,20 @@ CSV column → `Component` field:
 | `Gets results from` | `depends_on` / `depends_on_planned` | Comma-separated IDs; `~` prefix = planned |
 | `Calls` | `uses` / `uses_planned` | Comma-separated IDs; `~` prefix = planned |
 | `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip |
-| `Ubiquitous` | `ubiquitous` | TRUE/yes/1 → render as per-caller clones |
-| `Hide` | `hide` | TRUE/yes/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
+| `Ubiquitous` | `ubiquitous` | TRUE/yes/y/1 → render as per-caller clones |
+| `Hide` | `hide` | TRUE/yes/y/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
 | `Part of` | `part_of` | Groups the node into a named cluster subgraph |
 | `Hosted at` | `hosted_at` | `ITRB` is the default and shows nothing; others get a third label line, e.g. `Hosted at: RENCI 🌐` |
 | `Externals` | `externals` | `<Source` = data in, `>Sink` = data out |
 | *(`--layer-column`)* | `layer` | Whichever column that flag names. In the current sheet it is `Tier`, not `Layer`. |
 
-Every column is optional at parse time — `load_components` uses `row.get(...)`
-throughout, so an older sheet export missing a column yields empty values
-rather than a `KeyError`. Keep it that way.
+Every column but `id` is optional at parse time — `load_components` uses
+`row.get(...)` throughout, so an older sheet export missing a column yields
+empty values rather than a `KeyError`. Keep it that way. `id` is the one
+exception: without that column every row parses as id-less, and the run used
+to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
+produces. A missing `id` column, and a file whose rows are all id-less, are
+`ClickException`s.
 
 ## Common change patterns
 
@@ -123,11 +127,18 @@ nodes, `_add_ghost_nodes` for ghosts. The bold "New in Refactor" border is the
 **Change graph layout** (dpi, ranksep, splines) → the `graph_attr` dict in
 `build_graph`.
 
-**Add a new CSV column** → four places: the `Component` dataclass,
-`load_components`, `write_json`, and the table above.
+**Add a new CSV column** → five places: the `Component` dataclass,
+`load_components`, `write_json`, the table above, and the CSV-format table in
+the README.
 
 **Add a new CLI flag** → an `@click.option` above `main`, plus the matching
-parameter in the `main` signature.
+parameter in the `main` signature, plus the options block in the README (it is
+a hand-maintained paraphrase of `--help`, not generated).
+
+**Add anything that lands in the SVG with an id** → route it through the
+namespace: give it an id shape that cannot collide (see below), and claim it
+in `validate` so a collision is caught at parse time rather than in a
+browser.
 
 ## Things that look wrong but aren't
 

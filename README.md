@@ -50,8 +50,8 @@ uv run generate-diagram --google-sheet --layer-column Tier
 ### Google Sheet
 
 The canonical source of truth is a world-readable Google Sheet. Its ID is
-stored in `.env` at the repository root (gitignored; never committed). Copy
-[`env.default`](env.default) to `.env` and fill it in:
+stored in `.env` (gitignored; never committed). Copy [`env.default`](env.default)
+to `.env` and fill it in:
 
 ```
 GOOGLE_SHEET_ID=<paste the sheet ID here>
@@ -60,10 +60,16 @@ GOOGLE_SHEET_ID=<paste the sheet ID here>
 Run with `--google-sheet` to download the latest CSV export into `data/` and
 use it immediately. The downloaded file is also gitignored.
 
+The `.env` in the working directory (or the nearest one above it) is read
+first; the one beside `generate_diagram.py` is a fallback for running the tool
+from elsewhere, and cannot override it.
+
 ### CSV format
 
-The sheet must have these columns (order does not matter; unknown columns are
-ignored, and any column may be absent):
+The sheet must have an `id` column; everything else is optional (order does
+not matter, and unknown columns are ignored). A CSV with no `id` column at all
+is an error rather than an empty diagram — that is what pointing `--sheet-gid`
+at the wrong tab looks like.
 
 | Column | Description |
 |---|---|
@@ -75,15 +81,17 @@ ignored, and any column may be absent):
 | `Refactor status` | Lifecycle status — see filtering below |
 | `Gets results from` | Comma-separated IDs this component receives data from |
 | `Calls` | Comma-separated IDs this component makes optional API calls to |
-| `Externals` | Entities outside the diagram — `<Name` feeds in, `>Name` receives out |
+| `Externals` | Entities outside the diagram — `<Name` feeds in, `>Name` receives out. A name with neither prefix has no direction to draw and is dropped with a warning |
 | `Part of` | Groups this component into a named cluster box |
 | `Hosted at` | Deployment location; `ITRB` is the default and shown as nothing |
 | `Ubiquitous` | `TRUE` to render this component as a per-caller clone (see below) |
 | `Hide` | `TRUE` to suppress the component entirely: not as a ghost node, and not in `components.json` either |
 | `Notes` | Free-text notes; shown as an SVG hover tooltip, not in the diagram |
 
-IDs are matched case-insensitively; a case mismatch is a warning, an unknown ID
-or a duplicate ID is a hard error that stops the run.
+IDs are matched case-insensitively; a case mismatch is a warning. An unknown
+ID, a duplicate ID, and two things that would end up sharing one SVG id (see
+[SVG output and links](#svg-output-and-links)) are hard errors that stop the
+run.
 
 #### Planned (not-yet-implemented) relationships
 
@@ -121,9 +129,14 @@ All outputs go to `data/` (gitignored) by default.
 | `data/diagram.pdf` | `--format pdf` | Vector format for presentations |
 | `data/diagram.svg` | `--format svg` | Vector format for web embedding |
 | `data/diagram_<layer>.png` | `--layer-column` | One sub-figure per distinct column value |
+| `data/diagram_<layer>.dot` | `--layer-column` | Graphviz source for each sub-figure |
 
 The two legend files are written separately by default; `--no-split-legends`
 embeds them in the main diagram instead.
+
+`<layer>` is the layer's value with punctuation folded to `_`. Two values that
+fold to the same stem (`Tier 1` and `Tier-1`) would overwrite each other, so
+the second gets a `_2` suffix and a warning.
 
 ## Diagram conventions
 
@@ -215,8 +228,11 @@ uv run generate-diagram [OPTIONS]
   --split-legends/--no-split-legends
                                    Write the legends as separate PNGs rather than
                                    embedding them  [default: split-legends]
-  --layer-column TEXT              Column to drive per-layer sub-figures. In the
-                                   current sheet this column is named `Tier`.
+  --layer-column TEXT              Column to drive per-layer sub-figures, with
+                                   in-layer nodes bold-bordered and their
+                                   neighbours from other layers at normal
+                                   weight. In the current sheet this column is
+                                   named `Tier`.
   --help                           Show this message and exit.
 ```
 
@@ -235,7 +251,7 @@ translator-diagram/
 ├── README.md             # This file
 └── data/                 # Gitignored — all inputs and outputs go here
     ├── components.csv    # Downloaded from Google Sheet
-    ├── components.json   # Parsed component data (all statuses)
+    ├── components.json   # Parsed component data (all statuses, minus hidden rows)
     ├── diagram.dot       # Graphviz source
     └── diagram.png       # Rendered diagram
 ```
@@ -260,8 +276,8 @@ generated is committed; `data/` stays gitignored.
 
 Note that the SVG carries more than the picture shows: every node's hover
 tooltip embeds its owner, refactor status and `Notes`, and `components.json`
-carries every parsed column of every non-hidden row. "Strip the free-text fields" therefore means
-stripping tooltips and JSON keys, not just labels.
+carries every parsed column of every non-hidden row. "Strip the free-text
+fields" therefore means stripping tooltips and JSON keys, not just labels.
 
 ## Possible future improvements
 
