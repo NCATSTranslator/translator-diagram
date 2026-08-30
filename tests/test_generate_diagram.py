@@ -18,6 +18,7 @@ from generate_diagram import (
     _unique_svg_id,
     _valid_url,
     build_graph,
+    external_svg_ids,
     index_by_id,
     load_components,
     load_owner_colors,
@@ -615,17 +616,17 @@ class TestExternals:
         # rank=max on the same node contradict each other.
         lines = source.splitlines()
         assert len([ln for ln in lines
-                    if "ext_user" in ln and "label=User" in ln]) == 1
+                    if "ext__user" in ln and "label=User" in ln]) == 1
         ranked = {lines[i + 1].strip() for i, ln in enumerate(lines)
                   if ln.strip() in ("rank=min", "rank=max")}
-        assert "ext_user" not in ranked
+        assert "ext__user" not in ranked
 
     def test_names_that_sanitise_alike_stay_separate(self):
         a = _comp("a", refactor_status="New in Refactor")
         a.externals = [("in", "User agent"), ("in", "User/agent")]
         source = _source_for([a])
-        assert "ext_user_agent " in source or "ext_user_agent\t" in source
-        assert "ext_user_agent_2" in source
+        assert "ext__user_agent " in source or "ext__user_agent\t" in source
+        assert "ext__user_agent_2" in source
 
 
 class TestUbiquitousFiltering:
@@ -681,6 +682,63 @@ class TestLabelCollisionWarnings:
 
 
 # --- regressions from the second PR #1 review ------------------------------
+
+
+def _ubiquitous_pair():
+    """A caller, a ubiquitous target, and a component whose id collides.
+
+    "ARS" calling ubiquitous "LOG" used to clone into the SVG id "ars_log",
+    which is also what the separate component "ARS LOG" sanitises to.
+    """
+    return [
+        _comp("ARS", refactor_status="New in Refactor", uses=["LOG"]),
+        _comp("ARS LOG", refactor_status="New in Refactor"),
+        _comp("LOG", refactor_status="New in Refactor", ubiquitous=True),
+    ]
+
+
+class TestSvgIdNamespace:
+    def test_clone_id_does_not_collide_with_a_component_id(self):
+        source = _source_for(_ubiquitous_pair())
+        assert "id=ars__log" in source
+        assert "id=ars_log" in source
+        assert validate(_ubiquitous_pair()) is True
+
+    def test_a_component_claiming_another_ones_anchor_id_is_an_error(self, capsys):
+        # Graphviz wraps a tooltip-carrying node in <g id="a_{node id}">, so
+        # "A Foo" would claim the wrapper graphviz emits around "Foo".
+        assert validate([_comp("Foo"), _comp("A Foo")]) is False
+        err = capsys.readouterr().err
+        assert "a_foo" in err
+        # Reported once, not once for the node and again for its wrapper.
+        assert err.count("ERROR") == 1
+
+    def test_an_external_colliding_with_a_clone_is_an_error(self, capsys):
+        # Component "ext" calling ubiquitous "log" clones into "ext__log",
+        # which is also the id of an external entity named "log".
+        zz = _comp("zz", refactor_status="New in Refactor")
+        zz.externals = [("in", "log")]
+        components = [
+            _comp("ext", refactor_status="New in Refactor", uses=["log"]),
+            _comp("log", refactor_status="New in Refactor", ubiquitous=True),
+            zz,
+        ]
+        assert validate(components) is False
+        assert "ext__log" in capsys.readouterr().err
+
+    def test_hidden_components_do_not_claim_an_id(self):
+        # Nothing is emitted for a hidden row, so its id is free.
+        hidden = _comp("ARS/2/0")
+        hidden.hide = True
+        assert validate([_comp("ARS 2.0"), hidden]) is True
+
+    def test_external_ids_are_stable_across_the_status_filter(self):
+        # The layer sub-figures and the main diagram must agree on them.
+        a = _comp("a", refactor_status="New in Refactor")
+        a.externals = [("in", "User")]
+        b = _comp("b", refactor_status="Removed after Refactor")
+        b.externals = [("out", "User")]
+        assert external_svg_ids([a, b])["User"] == "ext__user"
 
 
 class TestGoogleSheetEnv:

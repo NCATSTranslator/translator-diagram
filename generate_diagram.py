@@ -55,6 +55,18 @@ def _svg_id(text: str) -> str:
     return safe if safe[:1].isalpha() else f"n_{safe}"
 
 
+def _clone_svg_id(caller_id: str, target_id: str) -> str:
+    """SVG id for the per-caller clone of a ubiquitous component.
+
+    Built by joining two already-sanitised ids with a double underscore, which
+    _svg_id itself can never produce (it collapses runs of punctuation to one
+    "_"), so a clone can never claim a component's id — the ids "ARS", "LOG"
+    and "ARS LOG" used to give the clone and the component both "ars_log".
+    validate() still checks the whole namespace, for the cases that survive.
+    """
+    return f"{_svg_id(caller_id)}__{_svg_id(target_id)}"
+
+
 def _unique_svg_id(text: str, taken: dict[str, str]) -> str:
     """_svg_id(text), suffixed if a *different* string already claimed that id.
 
@@ -312,6 +324,19 @@ def index_by_id(components: list[Component]) -> dict[str, Component]:
     return {c.id.lower(): c for c in components}
 
 
+def external_svg_ids(components: list[Component]) -> dict[str, str]:
+    """External display name -> SVG node id, for every external in the sheet.
+
+    Computed over all components rather than the filtered set, so an external
+    keeps one id across the main diagram, every layer sub-figure and
+    validate(). The "ext__" prefix is safe from component ids for the same
+    reason as _clone_svg_id's joiner.
+    """
+    taken: dict[str, str] = {}
+    names = dict.fromkeys(n for c in components for _, n in c.externals)
+    return {name: f"ext__{_unique_svg_id(name, taken)}" for name in names}
+
+
 def validate(components: list[Component]) -> bool:
     """Print messages for any reference issues.
 
@@ -337,19 +362,57 @@ def validate(components: list[Component]) -> bool:
         else:
             seen[key] = comp.id
 
-    # Two ids that differ only in punctuation ("ARS 2.0" vs "ARS/2/0") produce
-    # one SVG id, so the Pages view would bind both rows to the same node.
-    # Treated like a duplicate id, because that is what it becomes downstream.
-    by_svg_id: dict[str, str] = {}
+    index = index_by_id(components)
+
+    # Everything the SVG can carry an id for shares one namespace: component
+    # nodes, the per-caller clones of ubiquitous components, external-entity
+    # nodes, and the "a_"-prefixed <g> graphviz wraps around each of them (they
+    # all carry a tooltip). Two of those claiming one id is a duplicate XML id,
+    # and getElementById then silently returns whichever graphviz emitted
+    # first — so this is a hard error, like the duplicate ids above.
+    claimed: dict[str, str] = {}
+
+    def claim(svg_id: str, what: str) -> bool:
+        nonlocal ok
+        first = claimed.setdefault(svg_id, what)
+        if first == what:
+            return True
+        click.echo(
+            f"ERROR: {first} and {what} both become the SVG id "
+            f"'{svg_id}'; make them differ by more than punctuation",
+            err=True,
+        )
+        ok = False
+        return False
+
+    def claim_node(svg_id: str, what: str) -> None:
+        # Graphviz wraps every node carrying a tooltip or URL in
+        # <g id="a_{node id}">, so claiming "foo" also spoken for is "a_foo" —
+        # exactly what a component named "A Foo" sanitises to. The wrapper is
+        # claimed only if the node id itself was free, so one collision is
+        # reported once rather than twice.
+        if claim(svg_id, what):
+            claim(f"a_{svg_id}", f"the <a> wrapper around {what}")
+
+    # Hidden components are skipped: nothing is emitted for them, so an id
+    # they would have claimed is free, and flagging it would block a run over
+    # a collision that never reaches the SVG.
     for comp in components:
-        clash = by_svg_id.setdefault(_svg_id(comp.id), comp.id)
-        if clash != comp.id:
-            click.echo(
-                f"ERROR: ids '{clash}' and '{comp.id}' both become the SVG id "
-                f"'{_svg_id(comp.id)}'; make them differ by more than punctuation",
-                err=True,
-            )
-            ok = False
+        if not comp.hide:
+            claim_node(_svg_id(comp.id), f"component '{comp.id}'")
+    for comp in components:
+        if comp.hide or comp.ubiquitous:
+            # Ubiquitous components never call out from a node of their own.
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is not None and match.ubiquitous and not match.hide:
+                claim_node(
+                    _clone_svg_id(comp.id, match.id),
+                    f"the '{match.id}' clone beside '{comp.id}'",
+                )
+    for name, ext_id in external_svg_ids(components).items():
+        claim_node(ext_id, f"external '{name}'")
 
     # Free-text labels get the same treatment, but only as a warning: they are
     # kept as separate clusters/nodes (the later one takes a _2 suffix), which
@@ -372,7 +435,6 @@ def validate(components: list[Component]) -> bool:
                     err=True,
                 )
 
-    index = index_by_id(components)
     for comp in components:
         for ref in comp.all_refs():
             match = index.get(ref.lower())
@@ -478,11 +540,13 @@ def _emit_component_node(
     node_id: str,
     colors: ColorAssigner,
     penwidth: str | None = None,
+    svg_id: str | None = None,
 ) -> None:
     """Render a Component as a graphviz node at the given id.
 
-    Used both for primary node placement and for per-caller ubiquitous clones
-    (which use a synthetic id like "{caller}__{target}").
+    Used both for primary node placement and for per-caller ubiquitous clones,
+    whose node_id is already an SVG id (see _clone_svg_id) and is passed
+    through as svg_id rather than sanitised a second time.
     penwidth overrides the default (2.0 for "New in Refactor", 1.0 otherwise).
     """
     fill = colors.get(comp.owner)
@@ -499,7 +563,10 @@ def _emit_component_node(
     # URL makes graphviz wrap the node in <a xlink:href=...> in SVG output, which
     # is clickable component documentation with no JavaScript at all. Both are
     # inert in PNG output, so this changes nothing about today's diagrams.
-    extra: dict[str, str] = {"id": _svg_id(node_id), "tooltip": _node_tooltip(comp)}
+    extra: dict[str, str] = {
+        "id": svg_id if svg_id is not None else _svg_id(node_id),
+        "tooltip": _node_tooltip(comp),
+    }
     if comp.url:
         extra["URL"] = comp.url
         extra["target"] = "_blank"
@@ -656,9 +723,9 @@ def _add_edges(
             # Without this check an excluded one still renders, at full colour.
             if match.id not in active_set:
                 return None
-            clone_id = f"{caller_id}__{match.id}"
+            clone_id = _clone_svg_id(caller_id, match.id)
             if clone_id not in emitted_clones:
-                _emit_component_node(dot, match, clone_id, colors)
+                _emit_component_node(dot, match, clone_id, colors, svg_id=clone_id)
                 emitted_clones.add(clone_id)
             return clone_id
         if match.id in active_set or match.id in ghost_ids:
@@ -736,9 +803,9 @@ def _add_external_nodes_and_edges(
     if not ext_dirs:
         return
 
-    # Deterministic: components are sorted, so ext_dirs is in a stable order.
-    taken: dict[str, str] = {}
-    ext_ids = {name: f"ext_{_unique_svg_id(name, taken)}" for name in ext_dirs}
+    # Ids come from the unfiltered component list, so an external keeps the
+    # same id in the main diagram and in every layer sub-figure.
+    ext_ids = external_svg_ids(components)
 
     ext_attrs = dict(
         style="filled",
@@ -1076,9 +1143,9 @@ def build_layer_subgraph(
             if match.id not in active_set:
                 return None
             if caller_id in in_layer:
-                clone_id = f"{caller_id}__{match.id}"
+                clone_id = _clone_svg_id(caller_id, match.id)
                 if clone_id not in emitted_clones:
-                    _emit_component_node(dot, match, clone_id, colors)
+                    _emit_component_node(dot, match, clone_id, colors, svg_id=clone_id)
                     emitted_clones.add(clone_id)
                 return clone_id
             return None
