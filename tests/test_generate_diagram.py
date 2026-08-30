@@ -798,6 +798,22 @@ class TestLayerFilenames:
         assert capsys.readouterr().err == ""
 
 
+class TestMissingIdColumn:
+    def test_a_csv_without_an_id_column_is_an_error(self, tmp_path):
+        # The wrong --sheet-gid returns a real CSV from the wrong tab, and
+        # every row was then skipped as id-less, leaving a blank diagram.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("Name,Owner\nARS,NCATS\n", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="no 'id' column"):
+            load_components(csv_path)
+
+    def test_an_empty_file_is_an_error(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="no columns at all"):
+            load_components(csv_path)
+
+
 class TestGoogleSheetEnv:
     @pytest.fixture(autouse=True)
     def _no_sheet_id_in_the_environment(self):

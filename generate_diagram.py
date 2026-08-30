@@ -262,6 +262,9 @@ def _valid_url(url: str, comp_id: str) -> str:
 def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
     """Parse the CSV into a sorted list of Components.
 
+    A file with no "id" column at all is an error, not an empty result: that
+    is what a wrong --sheet-gid looks like.
+
     Rows with a blank id are skipped: they are spacer or trailing rows from the
     sheet, and keeping them yields an unnamed graphviz node, or a baffling
     "duplicate id: '' and ''" error once there are two of them. A skipped row
@@ -278,6 +281,16 @@ def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
         # None, and every .strip() below would then raise AttributeError. The
         # Sheets export pads its rows, but a hand-edited CSV need not.
         reader = csv.DictReader(f, restval="")
+        # Without an "id" column every row is skipped as id-less and the run
+        # ends with an empty diagram and exit 0 — which is what a wrong
+        # --sheet-gid looks like, and a scheduled job would then publish that
+        # blank diagram over the good one.
+        if not reader.fieldnames or "id" not in reader.fieldnames:
+            found = ", ".join(reader.fieldnames or []) or "no columns at all"
+            raise click.ClickException(
+                f"{csv_path} has no 'id' column (found: {found}). "
+                "If this came from --google-sheet, check --sheet-gid."
+            )
         rows: list[Component] = []
         for row in reader:
             comp_id = row.get("id", "").strip()
@@ -1412,6 +1425,12 @@ def main(
     click.echo(f"Loading {input_path} ...")
     components = load_components(input_path, layer_column=layer_column)
     click.echo(f"Loaded {len(components)} components.")
+    if not components:
+        # Every row was id-less. Rendering the empty diagram that follows would
+        # let a scheduled run overwrite good output with a blank picture.
+        raise click.ClickException(
+            f"No components found in {input_path}; every row is missing an id."
+        )
 
     click.echo("Validating references ...")
     if not validate(components):
