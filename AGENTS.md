@@ -40,14 +40,14 @@ commit or two. `grep -n '^def '` finds any of these instantly.
 
 | Section | What's there |
 |---|---|
-| Constants | `DEFAULT_STATUSES`, `FALLBACK_COLORS`, `HOSTED_AT_EMOJI`, and the ghost / external / planned colour constants |
+| Constants | `DEFAULT_STATUSES`, `FALLBACK_COLORS`, `HOSTED_AT_EMOJI`, and the ghost / external colour constants |
 | `ColorAssigner` | Maps owners to fill colours, falling back to a rotating palette |
 | `text_color_for` | Picks black or white label text for contrast against a fill hex (Rec. 709 luminance) |
 | `Component` | Dataclass — one CSV row after parsing |
 | `_parse_bool`, `parse_id_list`, `parse_externals` | CSV cell parsing |
 | `load_owner_colors`, `load_components`, `index_by_id` | Data loading |
 | `validate` | Duplicate-ID and unknown-reference checking |
-| `write_json` | Serialises all components to `components.json` |
+| `write_json` | Serialises every non-hidden component to `components.json` |
 | Graph construction | `_compute_*`, `_emit_*`, `_add_*`, `build_graph` — see below |
 | `main` | The `click` CLI: one `@click.option` per flag, then the run sequence |
 
@@ -65,11 +65,11 @@ commit or two. `grep -n '^def '` finds any of these instantly.
 | `_add_group_clusters` | Wraps `Part of` groups in labelled dotted-border subgraphs |
 | `_add_edges` | Emits all dependency edges; also emits ubiquitous clones via its inner `edge_target` |
 | `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
-| `_svg_id`, `_unique_svg_id` | XML-ID-safe handles for SVG `id` attributes and cluster names |
+| `_svg_id`, `_unique_svg_id`, `_clone_svg_id`, `external_svg_ids`, `_svg_node_ids` | XML-ID-safe handles for SVG `id` attributes and cluster names — see the SVG id namespace below |
 | `_owner_legend_html`, `_add_owner_cluster`, `_add_edge_cluster`, `_add_legend` | The embedded legend (`--no-split-legends`) |
 | `_build_owners_graph`, `_build_edge_legend_graph` | The standalone legend PNGs (the default) |
 | `build_graph` | Top-level assembler — calls all the above in order |
-| `_layer_filename`, `build_layer_subgraph` | Per-layer sub-figures (`--layer-column`) |
+| `_layer_filename`, `_layer_filenames`, `build_layer_subgraph` | Per-layer sub-figures (`--layer-column`) |
 
 ## Data model
 
@@ -87,7 +87,7 @@ CSV column → `Component` field:
 | `Calls` | `uses` / `uses_planned` | Comma-separated IDs; `~` prefix = planned |
 | `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip |
 | `Ubiquitous` | `ubiquitous` | TRUE/yes/1 → render as per-caller clones |
-| `Hide` | `hide` | TRUE/yes/1 → suppress entirely, not even as a ghost |
+| `Hide` | `hide` | TRUE/yes/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
 | `Part of` | `part_of` | Groups the node into a named cluster subgraph |
 | `Hosted at` | `hosted_at` | `ITRB` is the default and shows nothing; others get a third label line, e.g. `Hosted at: RENCI 🌐` |
 | `Externals` | `externals` | `<Source` = data in, `>Sink` = data out |
@@ -152,8 +152,8 @@ saved as `components.csv` and fail confusingly much later.
 **Components are sorted by lowercase `id`** in `load_components` so the `.dot`
 and `.json` output is stable when someone reorders rows in the sheet.
 
-**Planned edges are red**, hardcoded as `color="red"` at four sites in
-`_add_edges` and four more in `build_layer_subgraph`. An earlier
+**Planned edges are red**, hardcoded as `color="red"` at two sites in
+`_add_edges` and two more in `build_layer_subgraph`. An earlier
 `PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
 and has been deleted — red is what ships and what the README documents.
 
@@ -169,9 +169,24 @@ edge — a real bug `build_layer_subgraph` used to have. `_add_edges` and
 
 **Ubiquitous components** (telemetry, logging, name resolution): set
 `Ubiquitous=TRUE`. Instead of one central node with long converging edges, a
-clone is emitted next to each caller with a synthetic id `{caller}__{target}`.
+clone is emitted next to each caller with a synthetic id from `_clone_svg_id`.
 No central node exists, so these are skipped by `_add_active_nodes` and
-`_compute_ghost_ids`; the logic is in `edge_target()` inside `_add_edges`.
+`_compute_ghost_ids`; the logic is in `edge_target()` inside `_add_edges`. A
+ubiquitous component therefore has *no* node bearing its own id, which is why
+`components.json` gives every row a `node_ids` list rather than one id.
+
+**The SVG id namespace has four families**, and no two members of it may
+claim the same id — a duplicate XML id makes `getElementById` return whichever
+graphviz emitted first. The families are component nodes (`_svg_id`), the
+per-caller clones of ubiquitous components (`_clone_svg_id`), external
+entities (`external_svg_ids`), and the `a_`-prefixed `<g>` graphviz wraps
+around every node carrying a tooltip or a URL — which here is all of them.
+Clone and external ids use a `__` joiner, which `_svg_id` can never produce
+because it collapses runs of punctuation to a single `_`; that keeps them off
+component ids by construction. `validate` then folds all four families into
+one dict and hard-errors on any remaining collision, so `Foo` plus `A Foo`
+(whose id is `Foo`'s wrapper id) fails the run rather than silently rebinding
+a node.
 
 **Ghost nodes**: an active component referencing a filtered-out one makes that
 component appear dimmed and labelled `(excluded)`, so cross-boundary edges stay

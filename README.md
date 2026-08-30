@@ -79,7 +79,7 @@ ignored, and any column may be absent):
 | `Part of` | Groups this component into a named cluster box |
 | `Hosted at` | Deployment location; `ITRB` is the default and shown as nothing |
 | `Ubiquitous` | `TRUE` to render this component as a per-caller clone (see below) |
-| `Hide` | `TRUE` to suppress the component entirely, not even as a ghost node |
+| `Hide` | `TRUE` to suppress the component entirely: not as a ghost node, and not in `components.json` either |
 | `Notes` | Free-text notes; shown as an SVG hover tooltip, not in the diagram |
 
 IDs are matched case-insensitively; a case mismatch is a warning, an unknown ID
@@ -115,7 +115,7 @@ All outputs go to `data/` (gitignored) by default.
 |---|---|---|
 | `data/diagram.png` | yes | Main shareable diagram |
 | `data/diagram.dot` | yes | Graphviz source — useful for debugging or tweaking |
-| `data/components.json` | yes | All components parsed (all statuses, not filtered) |
+| `data/components.json` | yes | Every parsed component except the hidden ones (all statuses, not status-filtered) |
 | `data/diagram_owners.png` | default | Owner-colour legend |
 | `data/diagram_legend.png` | default | Edge-style legend |
 | `data/diagram.pdf` | `--format pdf` | Vector format for presentations |
@@ -181,8 +181,13 @@ In SVG output every component node carries:
 - a stable `id`, so a web page can address nodes directly from
   `components.json`. XML IDs can't contain spaces or slashes or start with a
   digit, so it is a sanitised form of the component's `id` (`ARS 2.0` becomes
-  `ars_2_0`) and `components.json` carries it verbatim as `node_id`. Two ids
-  that sanitise alike are a validation error.
+  `ars_2_0`), and `components.json` carries the ids verbatim as `node_ids`.
+  That is a *list*: a ubiquitous component has no node of its own, only one
+  clone per caller (`ars__log`, `ara__log`), and a component nothing
+  references has none at all. Two things that would end up sharing one id —
+  including a component whose id collides with a clone, an external entity, or
+  the `a_`-prefixed wrapper graphviz puts around a linked node — are a
+  validation error.
 
 These attributes are inert in PNG output. They exist to support the planned
 interactive GitHub Pages view of this diagram — see below.
@@ -255,7 +260,7 @@ generated is committed; `data/` stays gitignored.
 
 Note that the SVG carries more than the picture shows: every node's hover
 tooltip embeds its owner, refactor status and `Notes`, and `components.json`
-carries every parsed column. "Strip the free-text fields" therefore means
+carries every parsed column of every non-hidden row. "Strip the free-text fields" therefore means
 stripping tooltips and JSON keys, not just labels.
 
 ## Possible future improvements
