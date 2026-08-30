@@ -55,6 +55,11 @@ def _svg_id(text: str) -> str:
     return safe if safe[:1].isalpha() else f"n_{safe}"
 
 
+# Escaping the "a_" prefix inside _svg_id instead of validating against it
+# looks tempting and does not work: any escape has to be something _svg_id can
+# produce, so it collides in turn ("A Foo" -> "a__foo" is what a component "A"
+# cloning ubiquitous "foo" already gets), and "n_"-prefixing just moves the
+# clash to "N A Foo". validate() owning the whole namespace is the way out.
 def _clone_svg_id(caller_id: str, target_id: str) -> str:
     """SVG id for the per-caller clone of a ubiquitous component.
 
