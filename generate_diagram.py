@@ -12,7 +12,7 @@ from pathlib import Path
 
 import click
 import graphviz
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
@@ -1231,11 +1231,16 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if google_sheet:
-        # Look for .env in cwd first (standard dotenv behavior, walks up the
-        # tree), then fall back to one next to the script for users who run
-        # the tool from a different directory. override=False keeps the cwd
-        # value winning when both files exist.
-        load_dotenv()
+        # Look for .env in the working directory (and its parents) first, then
+        # fall back to one next to the script for users who run the tool from
+        # a different directory; override=False keeps the first value winning.
+        # usecwd=True is load-bearing: a bare load_dotenv() resolves via
+        # find_dotenv(), which searches from *this module's* file, so it would
+        # quietly read the repo's own .env — and its GOOGLE_SHEET_ID — for
+        # someone who ran the tool in a directory with a .env of their own.
+        cwd_env = find_dotenv(usecwd=True)
+        if cwd_env:
+            load_dotenv(cwd_env)
         load_dotenv(Path(__file__).parent / ".env", override=False)
         sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
         if not sheet_id:
