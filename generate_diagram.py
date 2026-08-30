@@ -454,14 +454,50 @@ def validate(components: list[Component]) -> bool:
     return ok
 
 
+def _svg_node_ids(components: list[Component]) -> dict[str, list[str]]:
+    """Component id -> the SVG node ids that component is drawn under.
+
+    One id for an ordinary component. A ubiquitous one has no central node —
+    it is cloned next to each caller — so it gets one id per caller, and none
+    at all if nothing references it. Hidden components get none: they are not
+    drawn. Computed over every row, unfiltered, to match components.json; a
+    component the refactor-status filter excludes has no node in that
+    particular rendering, and a consumer has to tolerate a missing element.
+    """
+    index = index_by_id(components)
+    ids = {
+        c.id: ([] if c.ubiquitous else [_svg_id(c.id)])
+        for c in components if not c.hide
+    }
+    for comp in components:
+        if comp.hide or comp.ubiquitous:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is None or not match.ubiquitous or match.hide:
+                continue
+            clone = _clone_svg_id(comp.id, match.id)
+            if clone not in ids[match.id]:
+                ids[match.id].append(clone)
+    return ids
+
+
 def write_json(components: list[Component], out_path: Path) -> None:
-    """Serialise components to JSON, preserving the original CSV column names."""
+    """Serialise components to JSON, preserving the original CSV column names.
+
+    Rows with Hide=TRUE are left out. "Hide" means the component is suppressed
+    entirely, and this file is what the planned Pages view fetches from a
+    public site — exporting a hidden row would publish its Notes verbatim.
+    """
+    node_ids = _svg_node_ids(components)
     exportable = [
         {
             "id": c.id,
-            # The SVG <g id="..."> for this component, so a consumer can find
-            # the node without re-deriving the sanitising rule.
-            "node_id": _svg_id(c.id),
+            # The SVG <g id="..."> values for this component, so a consumer can
+            # find its node(s) without re-deriving the sanitising rule. A list
+            # because a ubiquitous component is drawn once per caller — see
+            # _svg_node_ids.
+            "node_ids": node_ids[c.id],
             "Name": c.name,
             "Owner": c.owner,
             "Component in ITRB": c.itrb,
@@ -479,7 +515,7 @@ def write_json(components: list[Component], out_path: Path) -> None:
             "uses": c.uses,
             "uses_planned": c.uses_planned,
         }
-        for c in components
+        for c in components if not c.hide
     ]
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(exportable, f, indent=2, ensure_ascii=False)
