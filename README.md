@@ -147,6 +147,11 @@ data-flow edges the diagram is built from. `schema/component.schema.json` is
 the field reference, and `tests/test_components.py` checks every file against
 it.
 
+[`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
+platform that no component file claims yet — currently the OpenTelemetry
+service names that could not be attributed. Entries leave it by being promoted
+into a component file or confirmed out of use.
+
 **Nothing reads these files yet** — the generator still loads the sheet CSV.
 They are a proposal, and the case for them is in
 [`docs/component-metadata.md`](docs/component-metadata.md); the survey of what
@@ -278,8 +283,10 @@ translator-diagram/
 │   └── data/             # owner-colors.csv, shipped with the package
 ├── components/           # One YAML file per component (proposal; nothing
 │                         # reads these yet — see docs/component-metadata.md)
+├── unknown.yaml          # Identifiers no component file claims yet
 ├── schema/
-│   └── component.schema.json  # JSON Schema for a components/*.yaml file
+│   ├── component.schema.json  # JSON Schema for a components/*.yaml file
+│   └── unknown.schema.json    # JSON Schema for unknown.yaml
 ├── docs/                 # The component-metadata proposal and its research
 ├── config/
 │   └── owner-colors.csv  # Owner → fill colour mapping (edit me)

@@ -149,6 +149,17 @@ case-insensitively; every id in `gets_results_from`/`calls` has a file (which
 is why `docmetadata-api` has one — `ui` calls it); every `owner` appears in
 `config/owner-colors.csv`; `endpoints` values are relative paths, never URLs.
 
+`unknown.yaml` collects identifiers observed in the platform that no
+component file claims — today, the OpenTelemetry service names that could not
+be attributed. Do not delete an entry to make a test pass: an entry is removed
+only when its identifier moves into a component file. The tests enforce that
+no identifier is claimed twice, and that a `not-recorded` entry whose
+component now has a file fails until it is promoted.
+
+Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
+`datetime.date`, which is not a JSON Schema string, and the failure message
+points at the schema rather than the quoting.
+
 `pyyaml` and `jsonschema` are **dev-only** dependencies on purpose. Moving
 them to `[project.dependencies]` is the signal that `loading.py` has actually
 switched over — don't do it before then.
