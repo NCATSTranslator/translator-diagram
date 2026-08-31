@@ -16,6 +16,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 COMPONENTS_DIR = ROOT / "components"
 SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
+UNKNOWN_PATH = ROOT / "unknown.yaml"
+UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
 
 COMPONENT_FILES = sorted(COMPONENTS_DIR.glob("*.yaml"))
 
@@ -27,6 +29,11 @@ def _load(path: Path) -> dict:
 @pytest.fixture(scope="module")
 def schema() -> dict:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def unknown() -> dict:
+    return _load(UNKNOWN_PATH)
 
 
 @pytest.fixture(scope="module")
@@ -114,4 +121,53 @@ class TestEndpoints:
                 continue
             assert not value.startswith(("http://", "https://", "/")), (
                 f"{path.name}: endpoints.{kind} must be relative, got {value!r}"
+            )
+
+
+class TestUnknown:
+    """unknown.yaml — the holding pen for identifiers no component claims."""
+
+    def test_validates(self, unknown):
+        schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator.check_schema(schema)
+        errors = sorted(
+            jsonschema.Draft202012Validator(schema).iter_errors(unknown),
+            key=lambda e: list(e.path),
+        )
+        assert not errors, "\n".join(
+            f"unknown.yaml: {'/'.join(str(p) for p in e.path)}: {e.message}"
+            for e in errors
+        )
+
+    def test_otel_names_are_claimed_once(self, components, unknown):
+        # An identifier claimed in two places is worse than one claimed
+        # nowhere: the second claim is invisible, and whichever consumer reads
+        # first wins.
+        owners: dict[str, str] = {}
+        for cid, data in components.items():
+            for name in (data.get("identifiers") or {}).get("otel_services") or []:
+                assert name not in owners, (
+                    f"OTel service {name!r} claimed by both {owners[name]} and {cid}"
+                )
+                owners[name] = cid
+        for entry in unknown.get("otel_services") or []:
+            name = entry["name"]
+            assert name not in owners, (
+                f"OTel service {name!r} is in unknown.yaml but is already "
+                f"claimed by components/{owners[name]}.yaml — promote it by "
+                f"deleting the unknown.yaml entry"
+            )
+            owners[name] = "unknown.yaml"
+
+    def test_not_recorded_entries_really_have_no_file(self, components, unknown):
+        # `not-recorded` means "a component we know of that has no file yet".
+        # Once the file exists the entry is stale and should have been
+        # promoted, so this fails rather than letting it rot.
+        for entry in unknown.get("otel_services") or []:
+            if entry["status"] != "not-recorded":
+                continue
+            assert entry["component"] not in components, (
+                f"unknown.yaml: {entry['name']!r} is marked not-recorded but "
+                f"components/{entry['component']}.yaml exists — move the name "
+                f"into that file's identifiers.otel_services"
             )

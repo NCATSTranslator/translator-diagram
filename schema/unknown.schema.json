@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NCATSTranslator/translator-diagram/schema/unknown.schema.json",
+  "title": "Unattributed identifiers",
+  "description": "Identifiers and URLs observed in the Translator platform that have not been attributed to a component in components/. A holding pen, not a component: entries leave it by being promoted into a component file or by being confirmed out of use.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "otel_services": {
+      "description": "OpenTelemetry service names seen in a Jaeger collector that no components/*.yaml claims.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
+    "urls": {
+      "description": "URLs seen in the wild that no component claims.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "required": [
+        "name",
+        "status",
+        "first_seen"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The identifier exactly as it appears at the source.",
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "description": "unattributed: we do not know what this is. operation: a processing step reported as its own service, not a component. not-recorded: it is a known component that has no file yet, named by `component`. not-in-use: confirmed retired, kept so it is not investigated twice.",
+          "enum": [
+            "unattributed",
+            "operation",
+            "not-recorded",
+            "not-in-use"
+          ]
+        },
+        "first_seen": {
+          "description": "ISO date this identifier was first observed. Quote it: YAML would otherwise parse a bare date into a date object, which is not a JSON Schema string.",
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "environments": {
+          "description": "Which environments it was observed in.",
+          "type": "array",
+          "items": {
+            "enum": [
+              "dev",
+              "ci",
+              "test",
+              "prod"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "component": {
+          "description": "The component id this belongs to, once known. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "description": "How we know what we think we know. Say what was observed, not what was assumed.",
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "not-recorded"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "component"
+            ],
+            "properties": {
+              "component": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
