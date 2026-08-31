@@ -18,6 +18,7 @@ COMPONENTS_DIR = ROOT / "components"
 SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
 UNKNOWN_PATH = ROOT / "unknown.yaml"
 UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+ENRICHED_EXAMPLE_PATH = ROOT / "docs" / "examples" / "name-lookup-enriched.yaml"
 
 COMPONENT_FILES = sorted(COMPONENTS_DIR.glob("*.yaml"))
 
@@ -171,3 +172,17 @@ class TestUnknown:
                 f"components/{entry['component']}.yaml exists — move the name "
                 f"into that file's identifiers.otel_services"
             )
+
+
+class TestEnrichedExample:
+    def test_recorded_block_matches_the_component_file(self):
+        # The example's whole argument is that `pulled:` comes from `recorded:`
+        # and nothing else. If the two drift, it argues for a file that does
+        # not exist — which is how it went wrong once already, when
+        # name-lookup gained otel_services and the example did not.
+        example = _load(ENRICHED_EXAMPLE_PATH)["recorded"]
+        component = _load(COMPONENTS_DIR / "name-lookup.yaml")
+        assert example == component, (
+            "docs/examples/name-lookup-enriched.yaml's `recorded:` block is no "
+            "longer components/name-lookup.yaml verbatim"
+        )

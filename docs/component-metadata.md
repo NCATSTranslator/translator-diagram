@@ -20,7 +20,7 @@ source that could go out of date."*
 ## What this repo is actually for
 
 **Establishing identifiers.** Translator components are named independently in
-at least five places, and no two of those names can be computed from each
+at least six places, and no two of those names can be computed from each
 other. Name Lookup is:
 
 | Naming space | Name |
@@ -130,7 +130,7 @@ diagram:                         # the part nothing upstream knows
 Not every identifier we find belongs to a component we know about. The 41
 OpenTelemetry service names reporting to the three collectors include seven
 that are Shepherd *operations* rather than components, twelve that belong to
-components with no file yet, and four we simply cannot place.
+components with no file yet, and three we cannot place.
 
 Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
 the evidence for whatever we do believe. Entries leave it in one of two ways:

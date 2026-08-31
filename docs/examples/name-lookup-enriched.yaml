@@ -5,9 +5,10 @@
 # how much that little is worth.
 #
 # Everything under `recorded:` is copied verbatim from components/name-lookup.yaml
-# — 27 lines, hand-maintained. Everything under `pulled:` was fetched from the
-# live sources on 2026-08-31 using only those pointers, and would live in the
-# gitignored data/ rather than in git.
+# — hand-maintained, and checked against that file by tests/test_components.py.
+# Everything under `pulled:` was fetched from the live sources on 2026-08-31
+# using only those pointers, and would live in the gitignored data/ rather than
+# in git.
 
 recorded:
   id: name-lookup
@@ -21,6 +22,9 @@ recorded:
     itrb_app: name-lookup
     itrb_group: SRI-Ranking
     translator_all_wiki: Name-Resolution-Service
+    otel_services:
+      - Nameres
+      - infores:sri-name-resolver
   repositories:
     - url: https://github.com/NCATSTranslator/NameResolution
       role: source
