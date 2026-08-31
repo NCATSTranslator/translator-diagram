@@ -12,6 +12,25 @@ See [README.md](README.md) for user-facing documentation.
   whether the picture *reads* well: crossing edges, cramped clusters, a legend
   in an awkward place. That is the operator's call, so report what changed and
   let them look rather than declaring the result good.
+- **Look at the dashboard before saying it is fine.** Structural checks do not
+  catch visual bugs: this page once passed 301 tests, `node --check`, a
+  self-containment assertion and a payload-consistency check while shipping a
+  badge on 27 of 45 cells that drowned the table, a tile that counted 74 things
+  where there were 41, and two environment columns unreachable at narrow
+  widths. Render it and look — Firefox does this with no extra tooling, and
+  needs its own profile because yours is probably already running:
+
+  ```bash
+  uv run build-dashboard
+  MOZ_NO_REMOTE=1 /Applications/Firefox.app/Contents/MacOS/firefox \
+    --headless --new-instance --profile /tmp/ffprofile \
+    --screenshot /tmp/dash.png --window-size=1700,1400 \
+    "file://$PWD/data/dashboard/index.html"
+  ```
+
+  Shoot it narrow (`--window-size=760,1000`) too; the column-dropping rules
+  only misbehave there. Whether the result *reads* well is still the
+  operator's call — report what you saw and let them look.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`

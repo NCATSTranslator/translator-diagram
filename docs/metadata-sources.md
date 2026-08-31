@@ -208,6 +208,45 @@ surprising parentage (`retriever` appears as a parent of `shepherd-server`),
 and a trace only shows the edges that were exercised, so absence proves
 nothing.
 
+## The ITRB hostname convention
+
+Deployments follow a fixed pattern, so knowing one environment's host says
+where to look for the others:
+
+| Environment | Hostname |
+|---|---|
+| ci | `<stem>.ci.transltr.io` |
+| test | `<stem>.test.transltr.io` |
+| prod | `<stem>.transltr.io` |
+
+This matters because SmartAPI registration is manual and routinely
+incomplete. `answer-appraiser` registers only production, and is deployed to
+ci and test as well — where it runs two minor versions and a TRAPI version
+ahead of the prod its registration describes.
+
+`sync-components` derives the missing hosts and probes them. **Deriving is not
+guessing, and the confirmation step is the difference**: a candidate is
+believed only if the document it returns reports the same `infores` the
+component records. Where a component records no infores there is nothing to
+check against and the candidate is dropped. A host that answers 200 with
+something else has its body deleted rather than cached — several Translator
+hosts answer 200 with an HTML error page, and a later run would read one as
+real.
+
+`dev` is not derivable. Development deployments live at RENCI, at BioThings
+and elsewhere, with no convention to follow.
+
+### What the convention does not buy
+
+Guessing a hostname from a component's **id** or its **ITRB app name**, rather
+than deriving it from a host already known, finds nothing. Tried across the
+ten components with no known deployment at all — `dingo-ingest`, the three
+`dogpark-*`, `test-harness`, `translator-sdk`,
+`translator-component-toolkit`, `smartapi`, `docmetadata-api`,
+`ars-test-server` — it produced 42 candidates and 42 DNS failures. Those
+components have no transltr.io deployment to find, and this is worth not
+retrying: it is the obvious next idea.
+
 ## Helm charts
 
 The public charts are in
