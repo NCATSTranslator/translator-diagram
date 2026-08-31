@@ -7,7 +7,7 @@ root. See [README.md](README.md) for user-facing documentation.
 ## Working agreements
 
 - **After changing code, run `uv run pytest`. Do _not_ run
-  `uv run generate-diagram` yourself** — Gaurav runs it and eyeballs the output.
+  `uv run generate-diagram` yourself** — the operator runs it and eyeballs the output.
   Rendering is a visual judgement, not something to verify from a diff.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
   temporary files, sample CSVs, cloned repos, or anything else you need to
