@@ -18,6 +18,8 @@ identifiers:
   smartapi: "7a12feb2fbd8fe4af532a77ee19b7800"
   itrb_app: retriever-ci-pipeline
   itrb_group: Retriever
+  otel_services:
+    - retriever
 
 repositories:
   - url: https://github.com/BioPack-team/retriever

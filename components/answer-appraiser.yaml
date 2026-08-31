@@ -20,6 +20,8 @@ identifiers:
   itrb_app: answer-appraiser
   itrb_group: SRI-Ranking
   translator_all_wiki: SRI-Answer-Appraiser
+  otel_services:
+    - ANSWER-APPRAISER
 
 repositories:
   - url: https://github.com/TranslatorSRI/answer-appraiser

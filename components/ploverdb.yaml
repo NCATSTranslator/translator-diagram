@@ -17,6 +17,8 @@ identifiers:
   itrb_app: Ploverdb
   itrb_group: TeamExpander
   translator_all_wiki: RTX-KG2
+  otel_services:
+    - rtx-kg2-plover
 
 repositories:
   - url: https://github.com/RTXteam/PloverDB

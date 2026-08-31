@@ -19,6 +19,9 @@ identifiers:
   helm_chart: shepherd
   itrb_app: shepherd-ci-pipeline
   itrb_group: shepherd
+  otel_services:
+    - arax
+    - arax.pathfinder
 
 repositories:
   - url: https://github.com/BioPack-team/shepherd

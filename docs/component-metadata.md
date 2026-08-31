@@ -30,6 +30,7 @@ other. Name Lookup is:
 | Information Resource | `infores:sri-name-resolver` |
 | Deployment hostname | `name-lookup.ci.transltr.io` |
 | Translator-All wiki | `Name-Resolution-Service` |
+| OpenTelemetry service | `Nameres`, and also `infores:sri-name-resolver` |
 
 Nothing upstream reconciles those. Until something does, we cannot say "ARS
 gets its results from Shepherd-ARAX" in a way a machine can follow, because
@@ -60,6 +61,7 @@ requirements — we *point at* rather than copy.
 | Container image, resources, data downloads | Helm `values.yaml` |
 | Prose documentation | the repo, the wiki, the tech docs site |
 | Knowledge level, agent type, consumers | the infores catalog |
+| Which services actually call which | the OpenTelemetry collectors |
 
 [`metadata-sources.md`](metadata-sources.md) records what each of those
 actually offers today, and where each one falls short.
@@ -91,6 +93,9 @@ identifiers:                     # this component's name everywhere else
   itrb_app: name-lookup
   itrb_group: SRI-Ranking
   translator_all_wiki: Name-Resolution-Service
+  otel_services:                 # a list: components report under several
+    - Nameres
+    - infores:sri-name-resolver
 
 repositories:
   - url: https://github.com/NCATSTranslator/NameResolution
@@ -119,6 +124,30 @@ diagram:                         # the part nothing upstream knows
   calls: [jaeger]
   externals: []
 ```
+
+### `unknown.yaml`
+
+Not every identifier we find belongs to a component we know about. The 41
+OpenTelemetry service names reporting to the three collectors include seven
+that are Shepherd *operations* rather than components, twelve that belong to
+components with no file yet, and four we simply cannot place.
+
+Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
+the evidence for whatever we do believe. Entries leave it in one of two ways:
+
+- **promoted** — we learn which component it belongs to, so the identifier
+  moves into that component's file (or gets a new component file) and the
+  entry is deleted;
+- **retired** — someone confirms it is out of use, so it stays with
+  `status: not-in-use` and nobody investigates it twice.
+
+`tests/test_components.py` enforces the part that would otherwise rot: no
+identifier may be claimed by a component *and* sit in `unknown.yaml`, no two
+components may claim the same one, and a `not-recorded` entry naming a
+component that now has a file fails until it is promoted.
+
+The same file takes other kinds of unattributed identifier as they turn up —
+`urls:` is already in the schema.
 
 ### Conventions
 
@@ -188,11 +217,18 @@ plausible place to require it. The counter-argument is coverage: only 5 of the
 26 components here have a chart in the public `translator-devops` repo, and
 SmartAPI and GitHub already cover far more.
 
-**3. Is `diagram:` the right nesting?** Grouping the drawing-only fields keeps
+**3. Should the OpenTelemetry call graph check the recorded data flow?**
+The collectors observe which service actually called which, which is the same
+question `gets_results_from` and `calls` answer by hand. Comparing the two
+would catch both a stale edge and a dependency nobody declared. It is not
+free: service names are a naming space of their own, async work distorts span
+parentage, and a trace only shows edges that were exercised.
+
+**4. Is `diagram:` the right nesting?** Grouping the drawing-only fields keeps
 it obvious which fields describe the component and which describe the picture.
 It also means a consumer that only wants the data flow reads one key.
 
-**4. How much should be pulled versus pinned?** A fetched value is always
+**5. How much should be pulled versus pinned?** A fetched value is always
 current and sometimes unavailable; a pinned value is always available and
 sometimes wrong. This proposal pulls everything it can and pins nothing, on
 the grounds that a wrong answer is worse than a missing one.

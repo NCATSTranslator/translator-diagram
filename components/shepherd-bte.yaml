@@ -19,6 +19,9 @@ identifiers:
   helm_chart: shepherd
   itrb_app: shepherd-ci-pipeline
   itrb_group: shepherd
+  otel_services:
+    - bte
+    - bte.lookup
 
 repositories:
   - url: https://github.com/BioPack-team/shepherd

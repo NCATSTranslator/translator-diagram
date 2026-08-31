@@ -19,6 +19,8 @@ identifiers:
   itrb_app: arax
   itrb_group: TeamExpander
   translator_all_wiki: Expander-Agent
+  otel_services:
+    - ARAX
 
 repositories:
   - url: https://github.com/RTXteam/RTX

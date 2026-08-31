@@ -20,6 +20,9 @@ identifiers:
   itrb_app: name-lookup
   itrb_group: SRI-Ranking
   translator_all_wiki: Name-Resolution-Service
+  otel_services:
+    - Nameres
+    - infores:sri-name-resolver
 
 repositories:
   - url: https://github.com/NCATSTranslator/NameResolution

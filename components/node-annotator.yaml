@@ -17,6 +17,8 @@ identifiers:
   smartapi: "5a4c41bf2076b469a0e9cfcf2f2b8f29"
   itrb_app: Biothings annotator
   itrb_group: Exploring-Agent
+  otel_services:
+    - BioThingsAnnotator
 
 repositories:
   - url: https://github.com/biothings/biothings_annotator

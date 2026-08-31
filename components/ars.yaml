@@ -19,6 +19,8 @@ identifiers:
   itrb_app: ARS
   itrb_group: NCATS
   translator_all_wiki: Autonomous-Relay-System-(ARS)
+  otel_services:
+    - ARS
 
 repositories:
   - url: https://github.com/NCATSTranslator/Relay

@@ -19,6 +19,12 @@ identifiers:
   helm_chart: shepherd
   itrb_app: shepherd-ci-pipeline
   itrb_group: shepherd
+  otel_services:
+    - aragorn
+    - aragorn.lookup
+    - aragorn.omnicorp
+    - aragorn.pathfinder
+    - aragorn.score
 
 repositories:
   - url: https://github.com/BioPack-team/shepherd

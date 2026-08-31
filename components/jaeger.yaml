@@ -25,6 +25,21 @@ repositories:
     role: helm-chart
     visibility: public
 
+endpoints:
+  services: api/services
+  docs: search
+
+environments:
+  ci:
+    url: https://translator-otel.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://translator-otel.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://translator-otel.transltr.io/
+    location: ITRB
+
 diagram:
   refactor_status: Continues into Refactor
   layer: Shared services

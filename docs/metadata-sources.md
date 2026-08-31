@@ -16,6 +16,7 @@ This is the research behind
 | OpenAPI `info` | every registered API | Title, version, description, `x-translator`, `x-trapi` | **Yes** |
 | GitHub | every component | Source, README, releases, issue tracker | **Yes**, but six orgs |
 | `/status` | some components | Software version, data release, liveness | Partly — no shared schema |
+| OpenTelemetry | 41 service names | Runtime service identity, and the real call graph | **Yes**, with attribution work |
 | Helm charts | 5 of our 26 | Image, resources, storage, data downloads | Partly — see below |
 | infores catalog | 496 resources | Stable CURIE, knowledge level, consumers | As a cross-reference only |
 | Technical Documentation | ~15 components | Prose architecture pages | Sparse and stale |
@@ -141,6 +142,71 @@ What it uniquely offers is **data provenance**: `babel_version` and
 `biolink_model.tag` are a different axis from software version, and nothing
 else exposes them at runtime. `?full=true` adds JVM/OS/cache detail; the
 default is cheap enough for a liveness probe.
+
+## OpenTelemetry collectors
+
+One Jaeger per environment, all three publicly readable:
+
+| Environment | Collector | Services reporting |
+|---|---|---|
+| ci | <https://translator-otel.ci.transltr.io/> | 26 |
+| test | <https://translator-otel.test.transltr.io/> | 33 |
+| prod | <https://translator-otel.transltr.io/> | 15 |
+
+```bash
+curl -s https://translator-otel.ci.transltr.io/api/services
+curl -s 'https://translator-otel.ci.transltr.io/api/traces?service=ARS&limit=6&lookback=168h'
+```
+
+41 distinct service names across the three, and **the three sets barely
+overlap** — only `ARAX` and `infores:sri-name-resolver` report in all of them.
+Prod is still running the pre-refactor architecture (`strider`, `molepro`,
+`automat-*`, `COHD`), while ci and test run Shepherd and Retriever. So the
+service list is also a rough picture of what each environment actually is.
+
+### Service names are not component names
+
+They are a sixth naming space, and a messier one than the rest:
+
+- **A component reports under several names.** `shepherd-aragorn` emits as
+  `aragorn`, `aragorn.lookup`, `aragorn.omnicorp`, `aragorn.pathfinder` and
+  `aragorn.score`. So `identifiers.otel_services` is a list, not a scalar.
+- **Case distinguishes different components.** `ARAX` is the standalone ARAX;
+  lowercase `arax` is the Shepherd worker that calls it. The call graph shows
+  `arax -> ARAX` directly, which is the only reason we can tell.
+- **One name is an infores CURIE.** Name Lookup reports as both `Nameres` and
+  `infores:sri-name-resolver`, so the naming spaces have already started to
+  leak into each other.
+- **Processing steps get their own service names.** `merge_message`,
+  `score_paths`, `filter_results_top_n` and four others are child spans of
+  `shepherd-server` and appear in the service list beside real components.
+- **The same component is named differently per environment.**
+  `answer-appraiser` is `ANSWER-APPRAISER` in prod; `strider` is
+  `STRIDER-DEV` in test.
+
+### Traces carry the call graph
+
+This is what the other sources cannot give us. Span parent/child
+relationships across services, from 15 traces in ci:
+
+```text
+ARS              -> shepherd-server, NodeNorm
+shepherd-server  -> aragorn, arax, bte, and the seven operations
+arax             -> ARAX
+retriever        -> gandalf
+ARAX             -> NodeNorm, retriever
+```
+
+Every one of those edges is an observation, not a declaration, which makes it
+the natural check on the `gets_results_from` / `calls` we record by hand. It
+is also how the ambiguous service names above were attributed at all: `gandalf`
+is `dogpark-tier-0` because `retriever` calls it, and `arax` is the Shepherd
+worker because it calls `ARAX`.
+
+Two cautions before treating the graph as truth: async work shows up with
+surprising parentage (`retriever` appears as a parent of `shepherd-server`),
+and a trace only shows the edges that were exercised, so absence proves
+nothing.
 
 ## Helm charts
 
