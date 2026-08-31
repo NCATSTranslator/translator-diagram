@@ -1,8 +1,8 @@
 # translator-diagram
 
 Generates Graphviz dependency diagrams for Translator platform components from
-a Google Sheet CSV. Single Python module, `generate_diagram.py`, at the repo
-root. See [README.md](README.md) for user-facing documentation.
+a Google Sheet CSV. The tool is the `translator_diagram` package under `src/`.
+See [README.md](README.md) for user-facing documentation.
 
 ## Working agreements
 
@@ -33,25 +33,44 @@ uv run generate-diagram --google-sheet --all         # no refactor-status filter
 uv run generate-diagram --google-sheet --layer-column Tier
 ```
 
-## Script layout (`generate_diagram.py`)
+## Package layout (`src/translator_diagram/`)
 
-Roughly in file order. No line numbers here on purpose — they rot within a
-commit or two. `grep -n '^def '` finds any of these instantly.
+One module per subject, and one test file per module. No line numbers here on
+purpose — they rot within a commit or two.
 
-| Section | What's there |
+| Module | What's there |
 |---|---|
-| Constants | `DEFAULT_STATUSES`, `FALLBACK_COLORS`, `HOSTED_AT_EMOJI`, and the ghost / external colour constants |
-| `ColorAssigner` | Maps owners to fill colours, falling back to a rotating palette |
-| `text_color_for` | Picks black or white label text for contrast against a fill hex (Rec. 709 luminance) |
-| `Component` | Dataclass — one CSV row after parsing |
-| `_parse_bool`, `parse_id_list`, `parse_externals` | CSV cell parsing |
-| `load_owner_colors`, `load_components`, `index_by_id` | Data loading |
-| `validate` | Duplicate-ID, unknown-reference and SVG-id-collision checking |
-| `write_json` | Serialises every non-hidden component to `components.json` |
-| Graph construction | `_compute_*`, `_emit_*`, `_add_*`, `build_graph` — see below |
-| `main` | The `click` CLI: one `@click.option` per flag, then the run sequence |
+| `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
+| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
+| `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
+| `loading.py` | `_parse_bool`, `parse_id_list`, `parse_externals`, `_valid_url`, `load_components`, and `download_sheet_csv` for `--google-sheet` |
+| `validation.py` | `validate` — duplicate IDs, unknown references, SVG id collisions |
+| `render.py` | `build_graph`, `build_layer_subgraph`, and the `_compute_*` / `_emit_*` / `_add_*` helpers below |
+| `legend.py` | The owner and edge-style legends, embedded (`--no-split-legends`) or standalone |
+| `export.py` | `write_json` — every non-hidden component, into `components.json` |
+| `cli.py` | The `click` command: one `@click.option` per flag, then the run sequence |
 
-### Graph construction
+**Imports run one way**, and a new one must not break it:
+
+```
+model → naming → {validation, export, render}
+colors → {render, legend}
+render → legend
+cli → everything
+```
+
+Nothing imports `cli`. The palette constants live in `colors.py` rather than
+`render.py` for exactly this reason: `render` and `legend` both need
+`EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
+other.
+
+**`build_graph` and `build_layer_subgraph` share `render.py` on purpose.** They
+duplicate the edge-suppression rules, drift between them has already caused a
+real bug (see the two suppression sets, below), and a file boundary would make
+the next drift easier to miss. Deduplicating them is worth doing; splitting
+them without deduplicating them is not.
+
+### Inside render.py
 
 | Function | Purpose |
 |---|---|
@@ -65,11 +84,8 @@ commit or two. `grep -n '^def '` finds any of these instantly.
 | `_add_group_clusters` | Wraps `Part of` groups in labelled dotted-border subgraphs |
 | `_add_edges` | Emits all dependency edges; also emits ubiquitous clones via its inner `edge_target` |
 | `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
-| `_svg_id`, `_unique_svg_id`, `_clone_svg_id`, `external_svg_ids`, `_svg_node_ids` | XML-ID-safe handles for SVG `id` attributes and cluster names — see the SVG id namespace below |
-| `_owner_legend_html`, `_add_owner_cluster`, `_add_edge_cluster`, `_add_legend` | The embedded legend (`--no-split-legends`) |
-| `_build_owners_graph`, `_build_edge_legend_graph` | The standalone legend PNGs (the default) |
 | `build_graph` | Top-level assembler — calls all the above in order |
-| `_layer_filename`, `_layer_filenames`, `build_layer_subgraph` | Per-layer sub-figures (`--layer-column`) |
+| `build_layer_subgraph` | One per-layer sub-figure (`--layer-column`) |
 
 ## Data model
 
@@ -103,14 +119,17 @@ produces. A missing `id` column, and a file whose rows are all id-less, are
 
 ## Common change patterns
 
-**Change owner node colours** → edit `owner-colors.csv`. No code change. Row
-order is legend order. Keeping this a data file is deliberate: project managers
-change colours without touching Python. Don't move it into a constant.
+**Change owner node colours** → edit `config/owner-colors.csv`. No code
+change. Row order is legend order. Keeping this a data file is deliberate:
+project managers change colours without touching Python. Don't move it into a
+constant. `src/translator_diagram/data/owner-colors.csv` is the copy shipped
+with the package for installs that have no checkout to read; keep the two in
+step, and see `load_owner_colors` for the resolution order.
 
-**Change ghost or external node colours** → the `GHOST_*` / `EXTERNAL_FILL_COLOR`
-constants near the top of the module.
+**Change ghost or external node colours** → the `GHOST_*` /
+`EXTERNAL_FILL_COLOR` constants in `colors.py`.
 
-**Change which statuses count as active** → `DEFAULT_STATUSES`.
+**Change which statuses count as active** → `DEFAULT_STATUSES` in `cli.py`.
 
 **Change node label format** → `_emit_component_node`. Labels are
 `display_name\nid`, plus a third line for non-ITRB hosts; the emoji map is
@@ -127,16 +146,16 @@ nodes, `_add_ghost_nodes` for ghosts. The bold "New in Refactor" border is the
 **Change graph layout** (dpi, ranksep, splines) → the `graph_attr` dict in
 `build_graph`.
 
-**Add a new CSV column** → five places: the `Component` dataclass,
-`load_components`, `write_json`, the table above, and the CSV-format table in
-the README.
+**Add a new CSV column** → five places: the `Component` dataclass in
+`model.py`, `load_components` in `loading.py`, `write_json` in `export.py`, the
+data-model table below, and the CSV-format table in the README.
 
-**Add a new CLI flag** → an `@click.option` above `main`, plus the matching
-parameter in the `main` signature, plus the options block in the README (it is
-a hand-maintained paraphrase of `--help`, not generated).
+**Add a new CLI flag** → an `@click.option` above `main` in `cli.py`, plus the
+matching parameter in the `main` signature, plus the options block in the
+README (it is a hand-maintained paraphrase of `--help`, not generated).
 
-**Add anything that lands in the SVG with an id** → route it through the
-namespace: give it an id shape that cannot collide (see below), and claim it
+**Add anything that lands in the SVG with an id** → route it through
+`naming.py`: give it an id shape that cannot collide (see below), and claim it
 in `validate` so a collision is caught at parse time rather than in a
 browser.
 
@@ -164,7 +183,7 @@ saved as `components.csv` and fail confusingly much later.
 and `.json` output is stable when someone reorders rows in the sheet.
 
 **Planned edges are red**, hardcoded as `color="red"` at two sites in
-`_add_edges` and two more in `build_layer_subgraph`. An earlier
+`_add_edges` and two more in `build_layer_subgraph`, both in `render.py`. An earlier
 `PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
 and has been deleted — red is what ships and what the README documents.
 
@@ -190,7 +209,7 @@ ubiquitous component therefore has *no* node bearing its own id, which is why
 claim the same id — a duplicate XML id makes `getElementById` return whichever
 graphviz emitted first. The families are component nodes (`_svg_id`), the
 per-caller clones of ubiquitous components (`_clone_svg_id`), external
-entities (`external_svg_ids`), and the `a_`-prefixed `<g>` graphviz wraps
+entities (`external_svg_ids`) — all in `naming.py` — and the `a_`-prefixed `<g>` graphviz wraps
 around every node carrying a tooltip or a URL — which here is all of them.
 Clone and external ids use a `__` joiner, which `_svg_id` can never produce
 because it collapses runs of punctuation to a single `_`; that keeps them off

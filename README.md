@@ -60,9 +60,9 @@ GOOGLE_SHEET_ID=<paste the sheet ID here>
 Run with `--google-sheet` to download the latest CSV export into `data/` and
 use it immediately. The downloaded file is also gitignored.
 
-The `.env` in the working directory (or the nearest one above it) is read
-first; the one beside `generate_diagram.py` is a fallback for running the tool
-from elsewhere, and cannot override it.
+The `.env` in the working directory, or the nearest one above it, is the one
+that is read — so run the tool from your checkout, or set `GOOGLE_SHEET_ID` in
+the environment.
 
 ### CSV format
 
@@ -142,9 +142,14 @@ the second gets a `_2` suffix and a warning.
 
 ### Node colours (by Owner)
 
-Owner-to-colour mappings live in [`owner-colors.csv`](owner-colors.csv)
-(two columns: `owner`, `color`). Edit that file to add a new owner,
-re-order the legend, or change a colour — no Python edit required.
+Owner-to-colour mappings live in
+[`config/owner-colors.csv`](config/owner-colors.csv) (two columns: `owner`,
+`color`). Edit that file to add a new owner, re-order the legend, or change a
+colour — no Python edit required.
+
+The tool looks for that file in the working directory, and falls back to the
+copy shipped inside the package, so an installed `generate-diagram` has colours
+wherever it runs. `--owner-colors PATH` overrides both.
 
 New owners not listed there receive fallback colours automatically.
 
@@ -214,7 +219,8 @@ uv run generate-diagram [OPTIONS]
 
   --input FILE                     Local CSV file  [default: data/components.csv]
   --google-sheet                   Download CSV from Google Sheet (reads
-                                   GOOGLE_SHEET_ID from .env) instead of --input
+                                   GOOGLE_SHEET_ID from .env in the current
+                                   directory or above) instead of --input
   --sheet-gid INTEGER              Google Sheet tab GID (0 = first tab)  [default: 0]
   --output-dir DIRECTORY           Directory for output files  [default: data]
   --output-name TEXT               Base filename for outputs  [default: diagram]
@@ -228,6 +234,8 @@ uv run generate-diagram [OPTIONS]
   --split-legends/--no-split-legends
                                    Write the legends as separate PNGs rather than
                                    embedding them  [default: split-legends]
+  --owner-colors FILE              Owner-colour CSV to use instead of
+                                   config/owner-colors.csv
   --layer-column TEXT              Column to drive per-layer sub-figures, with
                                    in-layer nodes bold-bordered and their
                                    neighbours from other layers at normal
@@ -240,9 +248,20 @@ uv run generate-diagram [OPTIONS]
 
 ```
 translator-diagram/
-├── generate_diagram.py   # The tool
-├── owner-colors.csv      # Owner → fill colour mapping (edit me)
-├── tests/                # pytest suite for the pure functions
+├── src/translator_diagram/   # The tool
+│   ├── model.py          # Component, index_by_id
+│   ├── naming.py         # SVG ids and output filename stems
+│   ├── colors.py         # Owner colours and the palette
+│   ├── loading.py        # CSV parsing and the Google Sheet download
+│   ├── validation.py     # Reference and id checks
+│   ├── render.py         # The diagram and the per-layer sub-figures
+│   ├── legend.py         # The two legends
+│   ├── export.py         # components.json
+│   ├── cli.py            # The command line
+│   └── data/             # owner-colors.csv, shipped with the package
+├── config/
+│   └── owner-colors.csv  # Owner → fill colour mapping (edit me)
+├── tests/                # One test file per module
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
 ├── env.default           # Template for .env
@@ -290,6 +309,22 @@ is the live list. Ideas that started here:
   `--all-tabs` mode could merge or overlay several views. Not filed as an issue:
   whether it is worth anything depends on how the sheet ends up structured,
   which is part of #7.
+
+## Contributing
+
+```bash
+uv sync            # first-time setup
+uv run pytest      # the test suite
+uv run ruff check  # Python lint
+uv run rumdl check # Markdown lint
+```
+
+All four run in CI on every pull request. The source is one module per subject
+under `src/translator_diagram/`, and `tests/` has one file per module — a
+change to `loading.py` belongs in `tests/test_loading.py`.
+[AGENTS.md](AGENTS.md) has the module map, the rule about which module may
+import which, and the non-obvious decisions worth knowing before changing
+rendering.
 
 ## Licence
 
