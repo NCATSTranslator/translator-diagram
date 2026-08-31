@@ -134,6 +134,25 @@ to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
 produces. A missing `id` column, and a file whose rows are all id-less, are
 `ClickException`s.
 
+## components/ — the metadata proposal
+
+`components/<id>.yaml` holds one file per component, validated by
+`schema/component.schema.json` and `tests/test_components.py`. **Nothing in
+`src/` reads them**: `loading.py` still parses the sheet CSV, and the import
+graph above is unchanged. They exist to be argued about — the rationale is in
+`docs/component-metadata.md` and the upstream survey in
+`docs/metadata-sources.md`.
+
+Rules the tests enforce, so a change that breaks one fails CI rather than
+sitting there wrong: the filename stem equals `id`; ids are unique
+case-insensitively; every id in `gets_results_from`/`calls` has a file (which
+is why `docmetadata-api` has one — `ui` calls it); every `owner` appears in
+`config/owner-colors.csv`; `endpoints` values are relative paths, never URLs.
+
+`pyyaml` and `jsonschema` are **dev-only** dependencies on purpose. Moving
+them to `[project.dependencies]` is the signal that `loading.py` has actually
+switched over — don't do it before then.
+
 ## Common change patterns
 
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
