@@ -159,8 +159,10 @@ Collapsing the two would send a fetcher back to the same dead ends forever.
 **Endpoints are relative paths, not URLs.** One line covers all four
 environments instead of four near-identical absolute URLs per endpoint kind.
 Where an environment does not follow the shared pattern, it carries its own
-`endpoints:` block — `node-annotator` is the live example, and the reason the
-override exists.
+`endpoints:` block. `node-annotator` is the live example and the reason the
+override exists: ci and test serve `webapp/openapi.json`, prod serves
+`openapi.json`, and ci and test are the intended convention going forward — so
+the override records the exception rather than the rule.
 
 **Environments are recorded only where SmartAPI cannot supply them.** For a
 registered component the block should be *absent*, and a fetcher fills it in.
@@ -188,10 +190,11 @@ this repo publishable without a per-field review.
 
 These are the parts worth arguing about before anyone fills in 96 files.
 
-**1. Is the kebab-case id the right identifier?** It is readable and it is
-what the sheet already uses, so this proposal keeps it. But it is *our*
-invention, which means we have to maintain it. Two alternatives are
-unambiguous and externally maintained:
+**1. Is the kebab-case id the right identifier? — decided, for now: yes.**
+It is readable, it is what the sheet already uses, and every reference in
+these files already resolves through it. The cost is that it is *our*
+invention, so we maintain it. Two alternatives are unambiguous and externally
+maintained, and both are worth revisiting before we scale past 26 files:
 
 - the **GitHub repository** (`NCATSTranslator/NameResolution`) — universal,
   every component has one, easy to look up. But some components map to several
@@ -206,6 +209,12 @@ We could also adopt `infores:` outright, but it does not cover us: several
 components here (`dogpark-tier-0`, `dingo-ingest`, `shepherd`'s siblings
 partially) have no infores, and the catalog mixes upstream data sources in
 with Translator software with no field distinguishing the two.
+
+Nothing is lost by deciding this later: `identifiers` already records the
+GitHub repository and the ITRB app name, so a switch is a rename plus a
+reference rewrite, not a re-survey. What would be lost is doing it *twice* —
+so the question wants an answer before the remaining 70 components get
+files.
 
 **2. Should Helm charts become a required metadata source?** Today
 `Chart.yaml` is boilerplate — see [`metadata-sources.md`](metadata-sources.md)
