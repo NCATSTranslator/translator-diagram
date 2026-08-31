@@ -1,0 +1,49 @@
+# Node Annotator (node-annotator)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: node-annotator
+name: Node Annotator
+owner: Core Components WG
+component_type: Utility
+
+identifiers:
+  smartapi: "5a4c41bf2076b469a0e9cfcf2f2b8f29"
+  itrb_app: Biothings annotator
+  itrb_group: Exploring-Agent
+
+repositories:
+  - url: https://github.com/biothings/biothings_annotator
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: webapp/openapi.json
+
+environments:
+  ci:
+    url: https://annotator.ci.transltr.io/
+    location: ITRB
+
+diagram:
+  refactor_status: Continues into Refactor
+  layer: Shared services
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: []
+  calls: [~jaeger, pending-api]
+  externals: []
+
+notes: >-
+  Registered in SmartAPI without an infores, and its ci/test servers carry
+  no x-maturity and are declared http:// not https://. SmartAPI registers it
+  at biothings.ci.transltr.io/annotator, which does not serve the OpenAPI
+  document; annotator.ci.transltr.io does. Both were live on 2026-08-31, so
+  the ci base URL is recorded here rather than pulled.

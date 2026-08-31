@@ -1,0 +1,40 @@
+# BioThings Explorer (BTE) (shepherd-bte)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: shepherd-bte
+name: BioThings Explorer (BTE)
+owner: DOGSURF
+component_type: ARA
+
+identifiers:
+  infores: infores:shepherd-bte
+  smartapi: "a196993bc45af84a5b47b48faed6a787"
+  helm_chart: shepherd
+  itrb_app: shepherd-ci-pipeline
+  itrb_group: shepherd
+
+repositories:
+  - url: https://github.com/BioPack-team/shepherd
+    role: source
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/shepherd
+    role: helm-chart
+    visibility: public
+
+diagram:
+  refactor_status: New in Refactor
+  layer: Shepherd
+  part_of: Shepherd
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: [retriever]
+  calls: [jaeger]
+  externals: []

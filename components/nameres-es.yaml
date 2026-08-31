@@ -1,0 +1,40 @@
+# NameRes ES (nameres-es)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: nameres-es
+name: NameRes ES
+owner: Core Components WG
+
+identifiers:
+  itrb_app: NameresolutionAPI
+  itrb_group: Nodenorm
+
+repositories:
+  - url: https://github.com/biothings/NameResolutionAPI
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: webapp/openapi.json
+
+environments:
+  ci:
+    url: https://namelookup-es.ci.transltr.io/
+    location: ITRB
+
+diagram:
+  refactor_status: In development
+  layer: Shared services
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: []
+  calls: []
+  externals: []

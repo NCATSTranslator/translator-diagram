@@ -1,0 +1,37 @@
+# KGX Storage (kgx-storage-pipeline)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: kgx-storage-pipeline
+name: KGX Storage
+owner: DINGO
+
+identifiers:
+  itrb_app: kgx-storage-pipeline
+  itrb_group: KGX
+
+repositories:
+  - url: https://github.com/RTXteam/kgx-storage
+    role: source
+    visibility: public
+
+environments:
+  ci:
+    url: https://kgx-storage.ci.transltr.io/
+    location: ITRB
+
+diagram:
+  refactor_status: New in Refactor
+  layer: KGX Storage
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: [dingo-ingest]
+  calls: []
+  externals: []

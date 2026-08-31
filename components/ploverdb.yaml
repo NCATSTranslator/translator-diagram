@@ -1,0 +1,45 @@
+# Ploverdb (ploverdb)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: ploverdb
+name: Ploverdb
+owner: CATRAX
+
+identifiers:
+  smartapi: "a6b575139cfd429b0a87f825a625d036"
+  itrb_app: Ploverdb
+  itrb_group: TeamExpander
+  translator_all_wiki: RTX-KG2
+
+repositories:
+  - url: https://github.com/RTXteam/PloverDB
+    role: source
+    visibility: public
+
+documentation:
+  - url: https://github.com/NCATSTranslator/Translator-All/wiki/RTX-KG2
+    kind: wiki
+
+endpoints:
+  openapi: null
+
+diagram:
+  refactor_status: Continues into Refactor
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: []
+  calls: []
+  externals: []
+
+notes: >-
+  The SmartAPI record is registered as infores:rtx-kg2 — the knowledge graph
+  — not as PloverDB, the server that hosts it. Its servers are
+  kg2cploverdb.*.transltr.io.

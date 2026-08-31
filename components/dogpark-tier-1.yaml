@@ -1,0 +1,31 @@
+# Tier 1: ElasticSearch (KGX split out by data source) (dogpark-tier-1)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: dogpark-tier-1
+name: "Tier 1: ElasticSearch (KGX split out by data source)"
+owner: DOGSURF
+
+identifiers:
+  itrb_app: retriever-ci-pipeline
+  itrb_group: Retriever
+
+diagram:
+  refactor_status: New in Refactor
+  layer: DogPark and Retriever
+  part_of: Dog Park
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: [dogpark-ranger]
+  calls: []
+  externals: []
+
+notes: >-
+  Actual data later, called by retriever

@@ -1,0 +1,36 @@
+# Translator Component Toolkit (translator-component-toolkit)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: translator-component-toolkit
+name: Translator Component Toolkit
+owner: CATRAX
+
+identifiers:
+  itrb_group: null
+
+repositories:
+  - url: https://github.com/NCATSTranslator/Translator_component_toolkit
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: null
+
+diagram:
+  refactor_status: Continues into Refactor
+  layer: TSDK/TCT
+  hosted_at: Local
+  ubiquitous: false
+  hide: false
+  gets_results_from: [ars, shepherd-arax, shepherd-aragorn, shepherd-bte, retriever]
+  calls: [translator-sdk, smartapi]
+  externals:
+    - direction: out
+      name: Super User

@@ -1,0 +1,42 @@
+# Translator UI (ui)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: ui
+name: Translator UI
+owner: UI
+
+identifiers:
+  itrb_app: translator-ui-ci-pipeline
+  itrb_group: UI
+
+repositories:
+  - url: https://github.com/NCATSTranslator/ui-fe
+    role: source
+    visibility: public
+  - url: https://github.com/NCATSTranslator/ui-be
+    role: source
+    visibility: public
+
+environments:
+  ci:
+    url: https://ui.ci.transltr.io/
+    location: ITRB
+
+diagram:
+  refactor_status: Continues into Refactor
+  layer: ARS and UI
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: [ars]
+  calls: [docmetadata-api, name-lookup]
+  externals:
+    - direction: out
+      name: User

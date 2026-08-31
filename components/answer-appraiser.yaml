@@ -1,0 +1,44 @@
+# Answer Appraiser (answer-appraiser)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: answer-appraiser
+name: Answer Appraiser
+owner: DOGSLED
+component_type: Utility
+
+identifiers:
+  infores: infores:sri-answer-appraiser
+  smartapi: "6dcc5454fe4e0095090d8a956781c438"
+  helm_chart: answer-appraiser
+  itrb_app: answer-appraiser
+  itrb_group: SRI-Ranking
+  translator_all_wiki: SRI-Answer-Appraiser
+
+repositories:
+  - url: https://github.com/TranslatorSRI/answer-appraiser
+    role: source
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/answer-appraiser
+    role: helm-chart
+    visibility: public
+
+documentation:
+  - url: https://github.com/NCATSTranslator/Translator-All/wiki/SRI-Answer-Appraiser
+    kind: wiki
+
+diagram:
+  refactor_status: Continues into Refactor
+  layer: ARS and UI
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: []
+  calls: []
+  externals: []

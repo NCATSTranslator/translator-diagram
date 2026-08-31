@@ -1,0 +1,45 @@
+# RTX/ARAX (arax)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: arax
+name: RTX/ARAX
+owner: CATRAX
+component_type: ARA
+
+identifiers:
+  infores: infores:arax
+  smartapi: "03e63fbd5ed251bce08cb5801b6b169b"
+  itrb_app: arax
+  itrb_group: TeamExpander
+  translator_all_wiki: Expander-Agent
+
+repositories:
+  - url: https://github.com/RTXteam/RTX
+    role: source
+    visibility: public
+
+documentation:
+  - url: https://github.com/NCATSTranslator/Translator-All/wiki/Expander-Agent
+    kind: wiki
+  - url: https://ncatstranslator.github.io/TranslatorTechnicalDocumentation/architecture/ara/arax/
+    kind: technical-documentation
+
+diagram:
+  refactor_status: Continues into Refactor
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: []
+  calls: []
+  externals: []
+
+notes: >-
+  SmartAPI registers the TRAPI base URL with the API version in the path
+  (.../api/arax/v1.4), so the version moves when TRAPI does.

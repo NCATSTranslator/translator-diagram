@@ -1,0 +1,43 @@
+# ARS (ars)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: ars
+name: ARS
+owner: NCATS
+component_type: ARS
+
+identifiers:
+  infores: infores:ars
+  smartapi: "4c12efd48ced755ac4b72b1922202ec2"
+  itrb_app: ARS
+  itrb_group: NCATS
+  translator_all_wiki: Autonomous-Relay-System-(ARS)
+
+repositories:
+  - url: https://github.com/NCATSTranslator/Relay
+    role: source
+    visibility: public
+
+documentation:
+  - url: https://github.com/NCATSTranslator/Translator-All/wiki/Autonomous-Relay-System-(ARS)
+    kind: wiki
+
+diagram:
+  refactor_status: Continues into Refactor
+  layer: ARS and UI
+  hosted_at: ITRB
+  ubiquitous: false
+  hide: false
+  gets_results_from: [shepherd-arax, shepherd-aragorn, shepherd-bte]
+  calls: [nodenorm-es, jaeger, answer-appraiser, node-annotator, smartapi]
+  externals: []
+
+notes: >-
+  Calls SmartAPI on boot to fetch registration data
