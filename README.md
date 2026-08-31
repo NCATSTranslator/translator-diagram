@@ -153,13 +153,51 @@ platform that no component file claims yet — currently the OpenTelemetry
 service names that could not be attributed. Entries leave it by being promoted
 into a component file or confirmed out of use.
 
-**Nothing reads these files yet** — the generator still loads the sheet CSV.
-They are a proposal, and the case for them is in
+**The dashboard reads these files; the diagram does not.**
+`build-dashboard` follows their pointers, but `generate-diagram` still loads
+the sheet CSV — switching it over is
+[issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
+The case for the format is in
 [`docs/component-metadata.md`](docs/component-metadata.md); the survey of what
 each upstream source actually offers is in
 [`docs/metadata-sources.md`](docs/metadata-sources.md), and
 [`docs/examples/name-lookup-enriched.yaml`](docs/examples/name-lookup-enriched.yaml)
-shows what a fetcher would build from one of them.
+shows what a fetcher builds from one of them.
+
+## The overview dashboard
+
+A single self-contained HTML page with one row per component, ordered the way
+data flows — sources at the top, the user at the bottom — and a column per
+environment showing the deployed URL and the version running there.
+
+```bash
+uv run sync-components     # follow the pointers, cache into data/sync/
+uv run build-dashboard     # compile           into data/dashboard/
+open data/dashboard/index.html
+```
+
+The two steps are split because fetching is slow and rendering is iterated on:
+one sync serves any number of rebuilds. `sync-components` re-fetches only what
+is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
+A service being down is recorded rather than fatal, so the run still succeeds
+and the page shows what was reachable.
+
+It exists to test whether the metadata in `components/` is worth keeping. Two
+things it reports are the answer:
+
+- **Where each version came from.** A version is read from the live OpenAPI
+  document where possible, then the registered SmartAPI copy, then `/status`,
+  then the Helm chart — and each cell says which, so "is OpenAPI a good enough
+  source?" has a number rather than an opinion.
+- **Which environments disagree.** A version in the minority for its component
+  is tinted, so drift between dev, ci, test and prod is visible without reading
+  every cell.
+
+Filters live in the URL, so a filtered view can be pasted to someone else and
+arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
+which inlines its own data and so works straight from disk, and
+`overview.json`, the same payload as a file for anything that wants to consume
+it.
 
 ## Diagram conventions
 
@@ -282,8 +320,8 @@ translator-diagram/
 │   ├── export.py         # components.json
 │   ├── cli.py            # The command line
 │   └── data/             # owner-colors.csv, shipped with the package
-├── components/           # One YAML file per component (proposal; nothing
-│                         # reads these yet — see docs/component-metadata.md)
+├── components/           # One YAML file per component — see
+│                         # docs/component-metadata.md
 ├── unknown.yaml          # Identifiers no component file claims yet
 ├── schema/
 │   ├── component.schema.json  # JSON Schema for a components/*.yaml file

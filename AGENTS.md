@@ -36,6 +36,11 @@ uv run pytest                                        # after every change
 uv run ruff check                                    # Python lint, gated in CI
 uv run rumdl check .                                 # Markdown lint, gated in CI
 
+# The dashboard: fetch, then render. Split because fetching is slow and
+# rendering is iterated on — one sync serves a hundred rebuilds.
+uv run sync-components                               # -> data/sync/
+uv run build-dashboard                               # -> data/dashboard/
+
 # These must stay easy for a human to run; run them yourself when it helps.
 # --google-sheet reaches the real sheet, so prefer a local CSV for testing.
 uv run generate-diagram --google-sheet               # most common
@@ -61,19 +66,42 @@ purpose — they rot within a commit or two.
 | `export.py` | `write_json` — every non-hidden component, into `components.json` |
 | `cli.py` | The `click` command: one `@click.option` per flag, then the run sequence |
 
+The dashboard is a second, parallel stack over the same components:
+
+| Module | What's there |
+|---|---|
+| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `DEFAULT_ENDPOINT_PATHS` |
+| `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
+| `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
+| `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
+| `dashboard_cli.py` | `sync-components` and `build-dashboard` |
+| `data/dashboard.css`, `data/dashboard.js` | Inlined into the generated page |
+
 **Imports run one way**, and a new one must not break it:
 
 ```text
+# the diagram
 model → naming → {validation, export, render}
 colors → {render, legend}
 legend → render
-cli → everything
+cli → everything above
+
+# the dashboard
+components → {flow, sync, dashboard}
+flow → dashboard
+colors → dashboard
+dashboard_cli → everything above
 ```
 
-Nothing imports `cli`. The palette constants live in `colors.py` rather than
-`render.py` for exactly this reason: `render` and `legend` both need
+Nothing imports either CLI. The palette constants live in `colors.py` rather
+than `render.py` for exactly this reason: `render` and `legend` both need
 `EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
 other.
+
+**The two halves meet only at `colors`.** `model.py` parses a sheet row and
+`components.py` parses a YAML file; they describe the same components but not
+the same data, and neither imports the other. Merging them is what issue #19
+is for — doing it early would mean one of the two losing fields it needs.
 
 `tests/test_package_layout.py` enforces it, so a wrong-direction import fails
 CI rather than sitting there working. Widening its `ALLOWED` map to silence a
@@ -134,14 +162,17 @@ to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
 produces. A missing `id` column, and a file whose rows are all id-less, are
 `ClickException`s.
 
-## components/ — the metadata proposal
+## components/ — the component metadata files
 
-`components/<id>.yaml` holds one file per component, validated by
-`schema/component.schema.json` and `tests/test_components.py`. **Nothing in
-`src/` reads them**: `loading.py` still parses the sheet CSV, and the import
-graph above is unchanged. They exist to be argued about — the rationale is in
-`docs/component-metadata.md` and the upstream survey in
-`docs/metadata-sources.md`.
+`components/<id>.yaml` holds one file per component, validated against
+`schema/component.schema.json` by `tests/test_component_files.py` and parsed
+by `components.py` (whose own tests are `tests/test_components.py`).
+
+**The dashboard reads them; the diagram does not.** `sync`, `flow` and
+`dashboard` are built on them, while `loading.py` still parses the sheet CSV.
+The two stacks meet only at `colors`, and merging them is issue #19. The
+rationale for the format is in `docs/component-metadata.md`, the upstream
+survey in `docs/metadata-sources.md`.
 
 Rules the tests enforce, so a change that breaks one fails CI rather than
 sitting there wrong: the filename stem equals `id`; ids are unique
@@ -162,9 +193,10 @@ Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
 `datetime.date`, which is not a JSON Schema string, and the failure message
 points at the schema rather than the quoting.
 
-`pyyaml` and `jsonschema` are **dev-only** dependencies on purpose. Moving
-them to `[project.dependencies]` is the signal that `loading.py` has actually
-switched over — don't do it before then.
+`pyyaml` is a **runtime** dependency because the dashboard reads
+`components/*.yaml` at run time. `jsonschema` stays **dev-only**: nothing but
+the tests validates those files, and a schema library in the runtime
+dependency set would suggest otherwise.
 
 ## Common change patterns
 
@@ -209,6 +241,19 @@ data-model table below, and the CSV-format table in the README.
 **Add a new CLI flag** → an `@click.option` above `main` in `cli.py`, plus the
 matching parameter in the `main` signature, plus the options block in the
 README (it is a hand-maintained paraphrase of `--help`, not generated).
+
+**Add a column to the dashboard** → `build_cell` or `build_rows` in
+`dashboard.py` for the value, `envCell` or `rowHtml` in `data/dashboard.js` for
+the markup, and `data/dashboard.css` if it needs a style. The payload written
+to `overview.json` is a contract a scheduled job would publish, so adding a key
+is safe and renaming one is not.
+
+**Add a new upstream source** → a fetch in `sync.py` and a tier in the
+version-source chain in `dashboard.build_cell`. Order that chain by how close
+the source is to what is actually running: a live endpoint, then a manual
+registration, then a chart describing what should have been deployed. Whatever
+you add must appear in `SOURCE_LABELS` so the badge names it — a version whose
+provenance is invisible is the thing the dashboard exists to avoid.
 
 **Add anything that lands in the SVG with an id** → route it through
 `naming.py`: give it an id shape that cannot collide (see below), and claim it
