@@ -144,6 +144,24 @@ class TestLoadOwnerColors:
         monkeypatch.chdir(tmp_path)
         assert load_owner_colors() == {"OnlyHere": "#123456"}
 
+    def test_a_subdirectory_of_the_checkout_still_finds_it(
+        self, tmp_path, monkeypatch
+    ):
+        # The .env holding GOOGLE_SHEET_ID is found with
+        # find_dotenv(usecwd=True), which walks parents. If this lookup did
+        # not, running from data/ — the scratch directory AGENTS.md points
+        # agents at — would take the sheet ID from the checkout but the
+        # colours from the packaged copy, with nothing said.
+        config = tmp_path / "config"
+        config.mkdir()
+        (config / "owner-colors.csv").write_text(
+            "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
+        )
+        scratch = tmp_path / "data"
+        scratch.mkdir()
+        monkeypatch.chdir(scratch)
+        assert load_owner_colors() == {"OnlyHere": "#123456"}
+
     def test_falls_back_to_the_packaged_copy(self, tmp_path, monkeypatch):
         # An installed generate-diagram run from anywhere has no config/ to
         # read, and resolving the packaged copy via __file__ would not survive

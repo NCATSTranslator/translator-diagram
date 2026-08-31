@@ -11,9 +11,15 @@ import click
 # non-Python edits can change it. Row order in the CSV doubles as legend order
 # in the diagram.
 #
-# Looked for in the working directory first, so a checkout's own colours win;
-# the packaged copy is the fallback that makes an installed generate-diagram
-# work from anywhere. --owner-colors overrides both.
+# Looked for in the working directory and the directories above it, so a
+# checkout's own colours win from anywhere inside it; the packaged copy is the
+# fallback that makes an installed generate-diagram work. --owner-colors
+# overrides both.
+#
+# Walking the parents keeps this lookup in step with the .env lookup in
+# loading.py, which uses find_dotenv(usecwd=True) and so walks them too.
+# Without it, running from a subdirectory of the checkout took the sheet ID
+# from the repo's .env but the colours from the packaged copy.
 CONFIG_OWNER_COLORS_PATH = Path("config") / "owner-colors.csv"
 PACKAGED_OWNER_COLORS = ("translator_diagram", "data/owner-colors.csv")
 
@@ -82,18 +88,30 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
 
     Order is preserved from the file; that order also determines legend order.
 
-    With no path, config/owner-colors.csv under the working directory wins, and
-    the copy shipped inside the package is the fallback. The packaged copy is
-    reached through importlib.resources rather than __file__, which need not be
-    a real filesystem path in a non-editable install.
+    With no path, config/owner-colors.csv in the working directory or any
+    directory above it wins, and the copy shipped inside the package is the
+    fallback. The packaged copy is reached through importlib.resources rather
+    than __file__, which need not be a real filesystem path in a non-editable
+    install.
     """
     if path is not None:
         return _read_owner_colors(path)
-    if CONFIG_OWNER_COLORS_PATH.exists():
-        return _read_owner_colors(CONFIG_OWNER_COLORS_PATH)
+    found = _find_config_owner_colors()
+    if found is not None:
+        return _read_owner_colors(found)
     package, member = PACKAGED_OWNER_COLORS
     with resources.as_file(resources.files(package) / member) as packaged:
         return _read_owner_colors(packaged)
+
+
+def _find_config_owner_colors() -> Path | None:
+    """config/owner-colors.csv in the working directory or the nearest parent."""
+    cwd = Path.cwd()
+    for directory in (cwd, *cwd.parents):
+        candidate = directory / CONFIG_OWNER_COLORS_PATH
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _read_owner_colors(path: Path) -> dict[str, str]:
