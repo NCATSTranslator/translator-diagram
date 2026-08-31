@@ -6,9 +6,17 @@ See [README.md](README.md) for user-facing documentation.
 
 ## Working agreements
 
-- **After changing code, run `uv run pytest`. Do *not* run
-  `uv run generate-diagram` yourself** — the operator runs it and eyeballs the output.
-  Rendering is a visual judgement, not something to verify from a diff.
+- **After changing code, run `uv run pytest`.** Running
+  `uv run generate-diagram` yourself is fine and often the right check — write
+  its output somewhere under `data/`. What you cannot do from a diff is judge
+  whether the picture *reads* well: crossing edges, cramped clusters, a legend
+  in an awkward place. That is the operator's call, so report what changed and
+  let them look rather than declaring the result good.
+- **When a change should not alter the output, prove it.** Generate from a
+  sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
+  `.png` are all byte-identical for a change that only moves code. (A `.pdf`
+  never is: it embeds a creation timestamp.) This is stronger than reading the
+  diff, and it does not need an aesthetic judgement.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
   temporary files, sample CSVs, cloned repos, or anything else you need to
   write while working. Never commit anything from it.
@@ -24,9 +32,12 @@ See [README.md](README.md) for user-facing documentation.
 
 ```bash
 uv sync                                              # first-time setup
-uv run pytest                                        # the only thing you should run
+uv run pytest                                        # after every change
+uv run ruff check                                    # Python lint, gated in CI
+uv run rumdl check .                                 # Markdown lint, gated in CI
 
-# For reference — these must be easy for humans to run, but coding agents can run them when useful:
+# These must stay easy for a human to run; run them yourself when it helps.
+# --google-sheet reaches the real sheet, so prefer a local CSV for testing.
 uv run generate-diagram --google-sheet               # most common
 uv run generate-diagram --input data/components.csv  # from a local CSV
 uv run generate-diagram --google-sheet --all         # no refactor-status filter
