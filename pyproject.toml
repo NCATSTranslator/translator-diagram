@@ -17,6 +17,11 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.16.5",
     "rumdl>=0.2.62",
+    # Only the components/*.yaml checks need these. Nothing at runtime reads
+    # YAML yet — the generator still parses the sheet CSV — so they stay out
+    # of [project.dependencies] until loading.py actually switches over.
+    "pyyaml>=6.0",
+    "jsonschema>=4.0",
 ]
 
 [build-system]
