@@ -3,7 +3,12 @@
 import click
 import pytest
 
-from translator_diagram.colors import ColorAssigner, FALLBACK_COLORS, load_owner_colors, text_color_for
+from translator_diagram.colors import (
+    FALLBACK_COLORS,
+    ColorAssigner,
+    load_owner_colors,
+    text_color_for,
+)
 
 
 class TestColorAssigner:

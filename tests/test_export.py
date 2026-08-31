@@ -2,8 +2,8 @@
 
 import json
 
-from translator_diagram.export import write_json
 from tests.helpers import _comp, _source_for
+from translator_diagram.export import write_json
 
 
 class TestComponentsJson:

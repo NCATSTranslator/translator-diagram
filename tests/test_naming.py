@@ -5,10 +5,13 @@ namespace they protect is this module's contract, so they are tested
 here with the helpers that hand the names out.
 """
 
-from translator_diagram.cli import main
 from tests.helpers import _comp, _source_for
-from translator_diagram.model import Component
-from translator_diagram.naming import _layer_filenames, _svg_id, _unique_svg_id, external_svg_ids
+from translator_diagram.naming import (
+    _layer_filenames,
+    _svg_id,
+    _unique_svg_id,
+    external_svg_ids,
+)
 from translator_diagram.validation import validate
 
 

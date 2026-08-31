@@ -11,7 +11,6 @@ from dotenv import find_dotenv, load_dotenv
 
 from .model import Component
 
-
 # Node URLs come from the sheet and become live <a xlink:href> in the SVG. Only
 # ordinary web links are allowed through — see _valid_url.
 URL_SCHEMES = ("http://", "https://")

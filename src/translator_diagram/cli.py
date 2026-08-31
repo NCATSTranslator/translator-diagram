@@ -13,7 +13,6 @@ from .naming import _layer_filenames
 from .render import _compute_active_set, build_graph, build_layer_subgraph
 from .validation import validate
 
-
 # Refactor status values that indicate active components
 DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
 

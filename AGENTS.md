@@ -6,7 +6,7 @@ See [README.md](README.md) for user-facing documentation.
 
 ## Working agreements
 
-- **After changing code, run `uv run pytest`. Do _not_ run
+- **After changing code, run `uv run pytest`. Do *not* run
   `uv run generate-diagram` yourself** — the operator runs it and eyeballs the output.
   Rendering is a visual judgement, not something to verify from a diff.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
@@ -52,7 +52,7 @@ purpose — they rot within a commit or two.
 
 **Imports run one way**, and a new one must not break it:
 
-```
+```text
 model → naming → {validation, export, render}
 colors → {render, legend}
 render → legend
@@ -209,8 +209,9 @@ ubiquitous component therefore has *no* node bearing its own id, which is why
 claim the same id — a duplicate XML id makes `getElementById` return whichever
 graphviz emitted first. The families are component nodes (`_svg_id`), the
 per-caller clones of ubiquitous components (`_clone_svg_id`), external
-entities (`external_svg_ids`) — all in `naming.py` — and the `a_`-prefixed `<g>` graphviz wraps
-around every node carrying a tooltip or a URL — which here is all of them.
+entities (`external_svg_ids`) — all in `naming.py` — and the `a_`-prefixed
+`<g>` graphviz wraps around every node carrying a tooltip or a URL, which here
+is all of them.
 Clone and external ids use a `__` joiner, which `_svg_id` can never produce
 because it collapses runs of punctuation to a single `_`; that keeps them off
 component ids by construction. `validate` then folds all four families into

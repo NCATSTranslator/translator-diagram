@@ -13,7 +13,6 @@ from translator_diagram.loading import (
     parse_externals,
     parse_id_list,
 )
-from translator_diagram.model import Component
 from translator_diagram.validation import validate
 
 
@@ -98,7 +97,7 @@ class TestLoadComponents:
         # An Excel resave can prepend a UTF-8 BOM. With plain utf-8 the
         # first header would become "﻿id" and KeyError on c.id.
         csv_path = tmp_path / "components.csv"
-        csv_path.write_bytes("﻿".encode("utf-8") + CSV_FIXTURE.encode("utf-8"))
+        csv_path.write_bytes("﻿".encode() + CSV_FIXTURE.encode("utf-8"))
         components = load_components(csv_path)
         assert components[0].id == "aaa"
 
@@ -268,7 +267,8 @@ class TestDownloadSheetCsv:
 
     def _fake_urlopen(self, content_type, body):
         class Response:
-            headers = {"Content-Type": content_type}
+            def __init__(self):
+                self.headers = {"Content-Type": content_type}
 
             def read(self):
                 return body

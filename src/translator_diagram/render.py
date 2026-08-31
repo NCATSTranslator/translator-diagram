@@ -27,7 +27,6 @@ from .naming import (
     external_svg_ids,
 )
 
-
 # Emoji labels for non-default hosting locations (ITRB is the default and shown as nothing).
 HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Scripps": "🌐", "Local": "💻", "Unknown": "❓"}
 
@@ -354,13 +353,13 @@ def _add_external_nodes_and_edges(
     # same id in the main diagram and in every layer sub-figure.
     ext_ids = external_svg_ids(components)
 
-    ext_attrs = dict(
-        style="filled",
-        fillcolor=EXTERNAL_FILL_COLOR,
-        fontname="Helvetica",
-        fontsize="13",
-        penwidth="2.5",
-    )
+    ext_attrs = {
+        "style": "filled",
+        "fillcolor": EXTERNAL_FILL_COLOR,
+        "fontname": "Helvetica",
+        "fontsize": "13",
+        "penwidth": "2.5",
+    }
 
     for name, dirs in ext_dirs.items():
         nid = ext_ids[name]

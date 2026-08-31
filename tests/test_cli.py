@@ -3,8 +3,8 @@
 import os
 import urllib.error
 
-from click.testing import CliRunner
 import pytest
+from click.testing import CliRunner
 
 from translator_diagram import loading
 from translator_diagram.cli import main

@@ -6,15 +6,14 @@ import graphviz
 
 from .colors import EXTERNAL_FILL_COLOR, ColorAssigner
 
-
-_LEGEND_CLUSTER_ATTRS = dict(
-    style="filled,rounded",
-    fillcolor="#FAFAFA",
-    color="#AAAAAA",
-    fontname="Helvetica",
-    fontsize="11",
-    margin="12",
-)
+_LEGEND_CLUSTER_ATTRS = {
+    "style": "filled,rounded",
+    "fillcolor": "#FAFAFA",
+    "color": "#AAAAAA",
+    "fontname": "Helvetica",
+    "fontsize": "11",
+    "margin": "12",
+}
 
 
 def _owner_legend_html(colors: ColorAssigner) -> str:
@@ -62,10 +61,10 @@ def _add_edge_cluster(dot: graphviz.Digraph) -> None:
         leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
         leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dashed", minlen="5")
 
-        _ext = dict(
-            fillcolor=EXTERNAL_FILL_COLOR, style="filled",
-            fontname="Helvetica", fontsize="13", penwidth="2.5",
-        )
+        _ext = {
+            "fillcolor": EXTERNAL_FILL_COLOR, "style": "filled",
+            "fontname": "Helvetica", "fontsize": "13", "penwidth": "2.5",
+        }
         leg.node("_leg_src",  label="Database", shape="cylinder", **_ext)
         leg.node("_leg_sink", label="User/agent", shape="oval",
                  peripheries="2", **_ext)

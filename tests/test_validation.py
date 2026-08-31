@@ -1,7 +1,6 @@
 """Tests for translator_diagram.validation."""
 
 from tests.helpers import _comp
-from translator_diagram.render import build_graph
 from translator_diagram.validation import validate
 
 

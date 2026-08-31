@@ -53,7 +53,7 @@ The canonical source of truth is a world-readable Google Sheet. Its ID is
 stored in `.env` (gitignored; never committed). Copy [`env.default`](env.default)
 to `.env` and fill it in:
 
-```
+```dotenv
 GOOGLE_SHEET_ID=<paste the sheet ID here>
 ```
 
@@ -98,7 +98,7 @@ run.
 Prefix any ID in `Gets results from` or `Calls` with `~` to mark it as
 planned but not yet implemented:
 
-```
+```text
 Gets results from: nodenorm-es, ~new-service
 Calls: ars, ~future-api
 ```
@@ -214,7 +214,7 @@ interactive GitHub Pages view of this diagram — see below.
 
 Run `uv run generate-diagram --help` for the authoritative list.
 
-```
+```text
 uv run generate-diagram [OPTIONS]
 
   --input FILE                     Local CSV file  [default: data/components.csv]
@@ -246,7 +246,7 @@ uv run generate-diagram [OPTIONS]
 
 ## Repository layout
 
-```
+```text
 translator-diagram/
 ├── src/translator_diagram/   # The tool
 │   ├── model.py          # Component, index_by_id

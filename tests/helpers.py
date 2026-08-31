@@ -2,7 +2,7 @@
 
 import textwrap
 
-from translator_diagram.colors import ColorAssigner, FALLBACK_COLORS
+from translator_diagram.colors import FALLBACK_COLORS, ColorAssigner
 from translator_diagram.model import Component
 from translator_diagram.render import build_graph
 

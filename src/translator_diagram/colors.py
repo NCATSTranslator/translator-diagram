@@ -7,7 +7,6 @@ from pathlib import Path
 
 import click
 
-
 # Owner → fill color mapping lives in a CSV rather than in code so that
 # non-Python edits can change it. Row order in the CSV doubles as legend order
 # in the diagram.

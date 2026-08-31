@@ -12,7 +12,6 @@ import click
 
 from .model import Component, index_by_id
 
-
 # Graphviz accepts any node name, but the SVG "id" attribute it lands in must be
 # a valid XML ID — no spaces or slashes, and no leading digit — or the planned
 # Pages view can't retrieve the node with getElementById. See _svg_id.

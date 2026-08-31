@@ -15,6 +15,8 @@ generate-diagram = "translator_diagram.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.16.5",
+    "rumdl>=0.2.62",
 ]
 
 [build-system]
@@ -29,3 +31,9 @@ packages = ["src/translator_diagram"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.rumdl]
+# Code blocks hold CLI help text and a directory tree, both of which are
+# reproductions rather than prose — rewrapping them would make them wrong.
+[tool.rumdl.MD013]
+code_blocks = false
