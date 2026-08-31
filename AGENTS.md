@@ -66,7 +66,7 @@ purpose — they rot within a commit or two.
 ```text
 model → naming → {validation, export, render}
 colors → {render, legend}
-render → legend
+legend → render
 cli → everything
 ```
 
