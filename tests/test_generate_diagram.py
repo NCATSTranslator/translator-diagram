@@ -15,28 +15,31 @@ import click
 import pytest
 from click.testing import CliRunner
 
-import generate_diagram
-from generate_diagram import (
-    Component,
-    ColorAssigner,
+from translator_diagram import loading
+from translator_diagram.cli import main
+from translator_diagram.colors import (
     FALLBACK_COLORS,
-    _layer_filenames,
-    _parse_bool,
-    _svg_id,
-    _unique_svg_id,
-    _valid_url,
-    build_graph,
-    external_svg_ids,
-    index_by_id,
-    load_components,
+    ColorAssigner,
     load_owner_colors,
-    main,
+    text_color_for,
+)
+from translator_diagram.export import write_json
+from translator_diagram.loading import (
+    _parse_bool,
+    _valid_url,
+    load_components,
     parse_externals,
     parse_id_list,
-    text_color_for,
-    validate,
-    write_json,
 )
+from translator_diagram.model import Component, index_by_id
+from translator_diagram.naming import (
+    _layer_filenames,
+    _svg_id,
+    _unique_svg_id,
+    external_svg_ids,
+)
+from translator_diagram.render import build_graph
+from translator_diagram.validation import validate
 
 
 # --- Shared helpers ---------------------------------------------------------
@@ -819,7 +822,7 @@ class TestGoogleSheetEnv:
             raise urllib.error.URLError("no network in tests")
 
         monkeypatch.setattr(
-            generate_diagram.urllib.request, "urlopen", fake_urlopen
+            loading.urllib.request, "urlopen", fake_urlopen
         )
         result = CliRunner().invoke(
             main, ["--google-sheet", "--output-dir", str(tmp_path / "out")]
@@ -835,7 +838,7 @@ class TestGoogleSheetEnv:
             raise urllib.error.URLError("no network in tests")
 
         monkeypatch.setattr(
-            generate_diagram.urllib.request, "urlopen", fake_urlopen
+            loading.urllib.request, "urlopen", fake_urlopen
         )
         result = CliRunner().invoke(
             main, ["--google-sheet", "--output-dir", str(tmp_path / "out")]
