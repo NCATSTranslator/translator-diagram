@@ -138,6 +138,12 @@ with the package for installs that have no checkout to read; a test fails if
 the two diverge, so edit `config/` and copy it across. See `load_owner_colors`
 for the resolution order.
 
+Generating the packaged copy from `config/` at build time is the obvious way to
+drop one of them, and it does not work: hatchling's `force-include` reaches the
+wheel but not an editable install, so `uv sync` would leave every developer
+without the fallback that wheel users have — and CI, which installs editable,
+would never exercise it. Two files and a test is the cheaper trade.
+
 **Change ghost or external node colours** → the `GHOST_*` /
 `EXTERNAL_FILL_COLOR` constants in `colors.py`.
 
