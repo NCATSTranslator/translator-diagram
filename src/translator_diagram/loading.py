@@ -217,4 +217,4 @@ def download_sheet_csv(sheet_gid: int, output_dir: Path) -> Path:
             f"GOOGLE_SHEET_ID may be wrong, or gid {sheet_gid} may not exist."
         )
     download_path.write_bytes(body)
-    input_path = download_path
+    return download_path

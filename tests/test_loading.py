@@ -3,9 +3,16 @@
 import click
 import pytest
 
-from translator_diagram.colors import load_owner_colors
 from tests.helpers import CSV_FIXTURE, URL_CSV_HEADER, _comp
-from translator_diagram.loading import _parse_bool, _valid_url, load_components, parse_externals, parse_id_list
+from translator_diagram import loading
+from translator_diagram.colors import load_owner_colors
+from translator_diagram.loading import (
+    _parse_bool,
+    _valid_url,
+    load_components,
+    parse_externals,
+    parse_id_list,
+)
 from translator_diagram.model import Component
 from translator_diagram.validation import validate
 
@@ -253,3 +260,54 @@ class TestMissingIdColumn:
         csv_path.write_text("", encoding="utf-8")
         with pytest.raises(click.ClickException, match="no columns at all"):
             load_components(csv_path)
+
+
+class TestDownloadSheetCsv:
+    """The --google-sheet path. No test covered a *successful* download, which
+    is how download_sheet_csv shipped its first version returning None."""
+
+    def _fake_urlopen(self, content_type, body):
+        class Response:
+            headers = {"Content-Type": content_type}
+
+            def read(self):
+                return body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def urlopen(url, timeout=None):
+            return Response()
+
+        return urlopen
+
+    def test_a_csv_response_is_saved_and_its_path_returned(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("GOOGLE_SHEET_ID", "sheet123")
+        monkeypatch.setattr(
+            loading.urllib.request, "urlopen",
+            self._fake_urlopen("text/csv", b"id,Name\nars,ARS\n"),
+        )
+        out = tmp_path / "out"
+        out.mkdir()
+        path = loading.download_sheet_csv(0, out)
+        assert path == out / "components.csv"
+        assert path.read_text() == "id,Name\nars,ARS\n"
+
+    def test_an_html_login_page_is_refused(self, tmp_path, monkeypatch):
+        # A private or missing sheet answers 200 with HTML, which would
+        # otherwise be saved as components.csv and fail much later.
+        monkeypatch.setenv("GOOGLE_SHEET_ID", "sheet123")
+        monkeypatch.setattr(
+            loading.urllib.request, "urlopen",
+            self._fake_urlopen("text/html; charset=utf-8", b"<html>login</html>"),
+        )
+        out = tmp_path / "out"
+        out.mkdir()
+        with pytest.raises(click.ClickException, match="was not CSV"):
+            loading.download_sheet_csv(0, out)
+        assert not (out / "components.csv").exists()
