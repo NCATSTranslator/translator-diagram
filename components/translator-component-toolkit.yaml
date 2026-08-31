@@ -13,6 +13,7 @@ name: Translator Component Toolkit
 owner: CATRAX
 
 identifiers:
+  helm_chart: null
   itrb_group: null
 
 repositories:
