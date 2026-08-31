@@ -2,15 +2,21 @@
 
 import csv
 import re
+from importlib import resources
 from pathlib import Path
 
 import click
 
 
-# Owner → fill color mapping lives in owner-colors.csv (alongside the script)
-# so non-Python edits can change it without touching code. Row order in the
-# CSV doubles as legend order in the diagram.
-DEFAULT_OWNER_COLORS_PATH = Path(__file__).parent / "data" / "owner-colors.csv"
+# Owner → fill color mapping lives in a CSV rather than in code so that
+# non-Python edits can change it. Row order in the CSV doubles as legend order
+# in the diagram.
+#
+# Looked for in the working directory first, so a checkout's own colours win;
+# the packaged copy is the fallback that makes an installed generate-diagram
+# work from anywhere. --owner-colors overrides both.
+CONFIG_OWNER_COLORS_PATH = Path("config") / "owner-colors.csv"
+PACKAGED_OWNER_COLORS = ("translator_diagram", "data/owner-colors.csv")
 
 
 FALLBACK_COLORS = [
@@ -72,11 +78,27 @@ def text_color_for(fill_hex: str) -> str:
     return "black" if luminance > 0.5 else "white"
 
 
-def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
+def load_owner_colors(path: Path | None = None) -> dict[str, str]:
     """Load the owner→color mapping from a CSV with columns owner,color.
 
     Order is preserved from the file; that order also determines legend order.
+
+    With no path, config/owner-colors.csv under the working directory wins, and
+    the copy shipped inside the package is the fallback. The packaged copy is
+    reached through importlib.resources rather than __file__, which need not be
+    a real filesystem path in a non-editable install.
     """
+    if path is not None:
+        return _read_owner_colors(path)
+    if CONFIG_OWNER_COLORS_PATH.exists():
+        return _read_owner_colors(CONFIG_OWNER_COLORS_PATH)
+    package, member = PACKAGED_OWNER_COLORS
+    with resources.as_file(resources.files(package) / member) as packaged:
+        return _read_owner_colors(packaged)
+
+
+def _read_owner_colors(path: Path) -> dict[str, str]:
+    """Parse one owner-colors CSV, checking every colour on the way through."""
     if not path.exists():
         raise click.ClickException(f"Owner-colors file not found: {path}")
     with path.open(newline="", encoding="utf-8-sig") as f:

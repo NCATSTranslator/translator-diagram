@@ -94,6 +94,13 @@ DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
          "them from the main diagram. Use --no-split-legends to embed them.",
 )
 @click.option(
+    "--owner-colors", "owner_colors_path",
+    default=None,
+    type=click.Path(dir_okay=False, exists=True, path_type=Path),
+    help="Owner-colour CSV to use, instead of config/owner-colors.csv in the "
+         "current directory or the copy shipped with the package.",
+)
+@click.option(
     "--layer-column", "layer_column",
     default="",
     show_default=True,
@@ -115,6 +122,7 @@ def main(
     direction: str,
     concentrate: bool,
     split_legends: bool,
+    owner_colors_path: Path | None,
     layer_column: str,
 ) -> None:
     """Validate components CSV and generate a Graphviz dependency diagram."""
@@ -164,7 +172,7 @@ def main(
             + ", ".join(sorted(active_statuses))
         )
 
-    colors = ColorAssigner(load_owner_colors(), FALLBACK_COLORS)
+    colors = ColorAssigner(load_owner_colors(owner_colors_path), FALLBACK_COLORS)
     dot = build_graph(
         components, active_statuses, direction, colors,
         concentrate=concentrate, include_legend=not split_legends,

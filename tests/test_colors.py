@@ -113,3 +113,30 @@ class TestLoadOwnerColors:
         result = load_owner_colors()
         assert "NCATS" in result
         assert result["NCATS"].startswith("#")
+
+    def test_the_checkouts_config_copy_wins(self, tmp_path, monkeypatch):
+        config = tmp_path / "config"
+        config.mkdir()
+        (config / "owner-colors.csv").write_text(
+            "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
+        )
+        monkeypatch.chdir(tmp_path)
+        assert load_owner_colors() == {"OnlyHere": "#123456"}
+
+    def test_falls_back_to_the_packaged_copy(self, tmp_path, monkeypatch):
+        # An installed generate-diagram run from anywhere has no config/ to
+        # read, and resolving the packaged copy via __file__ would not survive
+        # a non-editable install.
+        monkeypatch.chdir(tmp_path)
+        assert "NCATS" in load_owner_colors()
+
+    def test_an_explicit_path_beats_both(self, tmp_path, monkeypatch):
+        config = tmp_path / "config"
+        config.mkdir()
+        (config / "owner-colors.csv").write_text(
+            "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
+        )
+        explicit = tmp_path / "other.csv"
+        explicit.write_text("owner,color\nChosen,#654321\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        assert load_owner_colors(explicit) == {"Chosen": "#654321"}
