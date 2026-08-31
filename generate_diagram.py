@@ -1,0 +1,1550 @@
+"""Generate dependency diagrams for Translator platform components."""
+
+import csv
+import html
+import json
+import os
+import re
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import click
+import graphviz
+from dotenv import find_dotenv, load_dotenv
+
+# Refactor status values that indicate active components
+DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
+
+# Owner → fill color mapping lives in owner-colors.csv (alongside the script)
+# so non-Python edits can change it without touching code. Row order in the
+# CSV doubles as legend order in the diagram.
+DEFAULT_OWNER_COLORS_PATH = Path(__file__).parent / "owner-colors.csv"
+
+FALLBACK_COLORS = [
+    "#B0BEC5", "#BCAAA4", "#CE93D8", "#80CBC4",
+    "#EF9A9A", "#FFCC80", "#C5E1A5", "#80DEEA",
+]
+GHOST_BORDER_COLOR = "#999999"
+GHOST_FILL_COLOR = "#D3D3D3"
+GHOST_FONT_COLOR = "#666666"
+# Warm amber for external-entity nodes (sources and sinks) so they stand out
+# clearly against the component fill colors.
+EXTERNAL_FILL_COLOR = "#FFE082"
+# Emoji labels for non-default hosting locations (ITRB is the default and shown as nothing).
+HOSTED_AT_EMOJI: dict[str, str] = {"RENCI": "🌐", "Scripps": "🌐", "Local": "💻", "Unknown": "❓"}
+# Bold border penwidth for in-layer nodes in per-layer sub-figures.
+IN_LAYER_PENWIDTH = "4.0"
+# owner-colors.csv is hand-edited, so its values are checked rather than trusted:
+# text_color_for needs exactly six hex digits, and graphviz would silently render
+# a typo'd color as black.
+HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Node URLs come from the sheet and become live <a xlink:href> in the SVG. Only
+# ordinary web links are allowed through — see _valid_url.
+URL_SCHEMES = ("http://", "https://")
+# Graphviz accepts any node name, but the SVG "id" attribute it lands in must be
+# a valid XML ID — no spaces or slashes, and no leading digit — or the planned
+# Pages view can't retrieve the node with getElementById. See _svg_id.
+_ID_UNSAFE_RE = re.compile(r"[^0-9A-Za-z]+")
+
+
+def _svg_id(text: str) -> str:
+    """Lowercase, XML-ID-safe handle for text, for use as an SVG <g id="...">."""
+    safe = _ID_UNSAFE_RE.sub("_", text.lower()).strip("_")
+    return safe if safe[:1].isalpha() else f"n_{safe}"
+
+
+# Escaping the "a_" prefix inside _svg_id instead of validating against it
+# looks tempting and does not work: any escape has to be something _svg_id can
+# produce, so it collides in turn ("A Foo" -> "a__foo" is what a component "A"
+# cloning ubiquitous "foo" already gets), and "n_"-prefixing just moves the
+# clash to "N A Foo". validate() owning the whole namespace is the way out.
+def _clone_svg_id(caller_id: str, target_id: str) -> str:
+    """SVG id for the per-caller clone of a ubiquitous component.
+
+    Built by joining two already-sanitised ids with a double underscore, which
+    _svg_id itself can never produce (it collapses runs of punctuation to one
+    "_"), so a clone can never claim a component's id — the ids "ARS", "LOG"
+    and "ARS LOG" used to give the clone and the component both "ars_log".
+    validate() still checks the whole namespace, for the cases that survive.
+    """
+    return f"{_svg_id(caller_id)}__{_svg_id(target_id)}"
+
+
+def _unique_svg_id(text: str, taken: dict[str, str]) -> str:
+    """_svg_id(text), suffixed if a *different* string already claimed that id.
+
+    Free-text labels sanitise alike more often than ids do ("User/agent" and
+    "User agent" both give "user_agent"), and without this the second one
+    silently merges into the first's node or cluster. taken maps each id
+    handed out to the text that claimed it, and callers share one dict.
+    """
+    base = _svg_id(text)
+    candidate, n = base, 1
+    while taken.setdefault(candidate, text) != text:
+        n += 1
+        candidate = f"{base}_{n}"
+    return candidate
+
+
+class ColorAssigner:
+    """Assigns fill colors to owners, falling back to a rotating palette."""
+
+    def __init__(self, base_colors: dict[str, str], fallback_colors: list[str]):
+        self.color_map: dict[str, str] = dict(base_colors)
+        self.fallback_colors = fallback_colors
+        self.next_fallback = 0
+        self._used: set[str] = set()
+
+    def get(self, owner: str) -> str:
+        if owner not in self.color_map:
+            self.color_map[owner] = self.fallback_colors[
+                self.next_fallback % len(self.fallback_colors)
+            ]
+            self.next_fallback += 1
+        self._used.add(owner)
+        return self.color_map[owner]
+
+    @property
+    def used_colors(self) -> dict[str, str]:
+        """Color map restricted to owners actually rendered, in original order."""
+        return {k: v for k, v in self.color_map.items() if k in self._used}
+
+
+def text_color_for(fill_hex: str) -> str:
+    """Return "black" or "white" for adequate contrast against a hex fill."""
+    h = fill_hex.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    # Rec. 709 perceptual luminance
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "black" if luminance > 0.5 else "white"
+
+
+@dataclass
+class Component:
+    """A single row of the components CSV after parsing."""
+
+    id: str
+    name: str
+    owner: str
+    itrb: str
+    refactor_status: str
+    notes: str
+    url: str = ""
+    ubiquitous: bool = False
+    hide: bool = False
+    part_of: str = ""
+    hosted_at: str = ""
+    layer: str = ""
+    externals: list[tuple[str, str]] = field(default_factory=list)
+    depends_on: list[str] = field(default_factory=list)
+    depends_on_planned: list[str] = field(default_factory=list)
+    uses: list[str] = field(default_factory=list)
+    uses_planned: list[str] = field(default_factory=list)
+
+    @property
+    def display_name(self) -> str:
+        # Fall back to id when Name is missing — otherwise the label
+        # starts with a blank line.
+        return self.name or self.id
+
+    def all_refs(self) -> list[str]:
+        return (
+            self.depends_on
+            + self.depends_on_planned
+            + self.uses
+            + self.uses_planned
+        )
+
+
+def _parse_bool(value: str) -> bool:
+    """Parse a CSV boolean cell — accepts TRUE/yes/y/1 (case-insensitive)."""
+    return value.strip().lower() in ("true", "yes", "y", "1")
+
+
+def parse_id_list(field_value: str) -> tuple[list[str], list[str]]:
+    """Split a comma-separated field into (implemented_ids, planned_ids).
+
+    IDs prefixed with '~' are planned-but-not-yet-implemented.
+    """
+    implemented, planned = [], []
+    for part in field_value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if part.startswith("~"):
+            planned.append(part[1:].strip())
+        else:
+            implemented.append(part)
+    return implemented, planned
+
+
+def parse_externals(field_value: str, where: str = "") -> list[tuple[str, str]]:
+    """Parse the Externals column into a list of (direction, name) pairs.
+
+    Values are standard CSV (commas as separators, double-quotes for names
+    that contain commas). Each token must start with '<' (external source
+    that sends data *into* this component) or '>' (external sink that
+    receives data *from* this component). A token with neither prefix has no
+    direction to draw, so it is dropped with a warning rather than silently —
+    otherwise a typo in the sheet just makes a node disappear.
+
+    Examples
+    --------
+    ``<External data sources, >User``
+    ``"<Upstream, service", >Researcher``
+    """
+    if not field_value.strip():
+        return []
+    result = []
+    reader = csv.reader([field_value])
+    for row in reader:
+        for token in row:
+            token = token.strip()
+            if not token:
+                continue
+            if token.startswith("<"):
+                result.append(("in", token[1:].strip()))
+            elif token.startswith(">"):
+                result.append(("out", token[1:].strip()))
+            else:
+                click.echo(
+                    f"WARNING: external '{token}' in {where or 'Externals'} has "
+                    f"no '<' or '>' prefix; ignoring it",
+                    err=True,
+                )
+    return result
+
+
+def load_owner_colors(path: Path = DEFAULT_OWNER_COLORS_PATH) -> dict[str, str]:
+    """Load the owner→color mapping from a CSV with columns owner,color.
+
+    Order is preserved from the file; that order also determines legend order.
+    """
+    if not path.exists():
+        raise click.ClickException(f"Owner-colors file not found: {path}")
+    with path.open(newline="", encoding="utf-8-sig") as f:
+        # restval="" so a short row reports a bad colour rather than raising
+        # AttributeError on None.strip() — see load_components.
+        reader = csv.DictReader(f, restval="")
+        missing_cols = {"owner", "color"} - set(reader.fieldnames or [])
+        if missing_cols:
+            raise click.ClickException(
+                f"{path} is missing required columns: "
+                + ", ".join(sorted(missing_cols))
+            )
+        colors = {}
+        for row in reader:
+            owner, color = row["owner"].strip(), row["color"].strip()
+            if not HEX_COLOR_RE.match(color):
+                raise click.ClickException(
+                    f"{path}: owner '{owner}' has color '{color}', which is not "
+                    f"a six-digit hex colour like #EF5350."
+                )
+            colors[owner] = color
+        return colors
+
+
+def _valid_url(url: str, comp_id: str) -> str:
+    """Return url if it is a plain web link, else "" with a warning.
+
+    Node URLs become live <a xlink:href> wrappers in the SVG, and the planned
+    Pages view inlines that SVG — so a 'javascript:' URL pasted into the sheet
+    would otherwise become executable on a public page.
+    """
+    # Schemes are case-insensitive per RFC 3986, and the sheet contains what
+    # people pasted, so compare lowercased.
+    if not url or url.lower().startswith(URL_SCHEMES):
+        return url
+    click.echo(
+        f"WARNING: '{comp_id}' has URL '{url}', which is not http(s); ignoring it",
+        err=True,
+    )
+    return ""
+
+
+def load_components(csv_path: Path, layer_column: str = "") -> list[Component]:
+    """Parse the CSV into a sorted list of Components.
+
+    A file with no "id" column at all is an error, not an empty result: that
+    is what a wrong --sheet-gid looks like.
+
+    Rows with a blank id are skipped: they are spacer or trailing rows from the
+    sheet, and keeping them yields an unnamed graphviz node, or a baffling
+    "duplicate id: '' and ''" error once there are two of them. A skipped row
+    that carries other data warns, since that one is a typo rather than a
+    spacer.
+
+    Sorted by lowercase id for deterministic .dot / .json output across CSV
+    row reorderings.
+    """
+    # utf-8-sig strips a UTF-8 BOM if present (Excel-resaved or Windows-edited
+    # files), otherwise the first header would read as "﻿id" and KeyError.
+    with csv_path.open(newline="", encoding="utf-8-sig") as f:
+        # restval="" because DictReader defaults missing trailing fields to
+        # None, and every .strip() below would then raise AttributeError. The
+        # Sheets export pads its rows, but a hand-edited CSV need not.
+        reader = csv.DictReader(f, restval="")
+        # Without an "id" column every row is skipped as id-less and the run
+        # ends with an empty diagram and exit 0 — which is what a wrong
+        # --sheet-gid looks like, and a scheduled job would then publish that
+        # blank diagram over the good one.
+        if not reader.fieldnames or "id" not in reader.fieldnames:
+            found = ", ".join(reader.fieldnames or []) or "no columns at all"
+            raise click.ClickException(
+                f"{csv_path} has no 'id' column (found: {found}). "
+                "If this came from --google-sheet, check --sheet-gid."
+            )
+        rows: list[Component] = []
+        for row in reader:
+            comp_id = row.get("id", "").strip()
+            if not comp_id:
+                # An entirely blank row is a spacer or a trailing row and is
+                # skipped quietly. A row carrying data but no id is a
+                # data-entry mistake, and would otherwise vanish without trace.
+                if any(isinstance(v, str) and v.strip() for v in row.values()):
+                    click.echo(
+                        f"WARNING: skipping a row with no id "
+                        f"(Name: '{row.get('Name', '').strip()}')",
+                        err=True,
+                    )
+                continue
+            depends_on, depends_on_planned = parse_id_list(
+                row.get("Gets results from", "")
+            )
+            uses, uses_planned = parse_id_list(row.get("Calls", ""))
+            rows.append(Component(
+                id=comp_id,
+                name=row.get("Name", "").strip(),
+                owner=(row.get("Owner") or "None").strip() or "None",
+                itrb=row.get("Component in ITRB", "").strip(),
+                refactor_status=row.get("Refactor status", "").strip(),
+                notes=row.get("Notes", "").strip(),
+                url=_valid_url(row.get("URL", "").strip(), comp_id),
+                ubiquitous=_parse_bool(row.get("Ubiquitous", "")),
+                hide=_parse_bool(row.get("Hide", "")),
+                part_of=row.get("Part of", "").strip(),
+                hosted_at=row.get("Hosted at", "").strip(),
+                layer=row.get(layer_column, "").strip() if layer_column else "",
+                externals=parse_externals(row.get("Externals", ""), comp_id),
+                depends_on=depends_on,
+                depends_on_planned=depends_on_planned,
+                uses=uses,
+                uses_planned=uses_planned,
+            ))
+    rows.sort(key=lambda c: c.id.lower())
+    return rows
+
+
+def index_by_id(components: list[Component]) -> dict[str, Component]:
+    """Case-insensitive lookup from lower(id) to Component."""
+    return {c.id.lower(): c for c in components}
+
+
+def external_svg_ids(components: list[Component]) -> dict[str, str]:
+    """External display name -> SVG node id, for every external in the sheet.
+
+    Computed over all components rather than the filtered set, so an external
+    keeps one id across the main diagram, every layer sub-figure and
+    validate(). The "ext__" prefix is safe from component ids for the same
+    reason as _clone_svg_id's joiner.
+    """
+    taken: dict[str, str] = {}
+    names = dict.fromkeys(n for c in components for _, n in c.externals)
+    return {name: f"ext__{_unique_svg_id(name, taken)}" for name in names}
+
+
+def validate(components: list[Component]) -> bool:
+    """Print messages for any reference issues.
+
+    Returns False on hard errors (duplicate ids, unknown referenced ids).
+    Case-mismatch references are informational and do not flip the return
+    value, because the case-insensitive lookup in build_graph still resolves
+    them to the canonical component.
+    """
+    ok = True
+
+    # Hard error: duplicate ids (case-insensitive). The index below would
+    # silently keep only the last duplicate, so detect them up front.
+    seen: dict[str, str] = {}
+    for comp in components:
+        key = comp.id.lower()
+        if key in seen:
+            click.echo(
+                f"ERROR: duplicate id (case-insensitive): "
+                f"'{seen[key]}' and '{comp.id}'",
+                err=True,
+            )
+            ok = False
+        else:
+            seen[key] = comp.id
+
+    index = index_by_id(components)
+
+    # Everything the SVG can carry an id for shares one namespace: component
+    # nodes, the per-caller clones of ubiquitous components, external-entity
+    # nodes, and the "a_"-prefixed <g> graphviz wraps around each of them (they
+    # all carry a tooltip). Two of those claiming one id is a duplicate XML id,
+    # and getElementById then silently returns whichever graphviz emitted
+    # first — so this is a hard error, like the duplicate ids above.
+    claimed: dict[str, str] = {}
+
+    def claim(svg_id: str, what: str) -> bool:
+        nonlocal ok
+        first = claimed.setdefault(svg_id, what)
+        if first == what:
+            return True
+        click.echo(
+            f"ERROR: {first} and {what} both become the SVG id "
+            f"'{svg_id}'; make them differ by more than punctuation",
+            err=True,
+        )
+        ok = False
+        return False
+
+    def claim_node(svg_id: str, what: str) -> None:
+        # Graphviz wraps every node carrying a tooltip or URL in
+        # <g id="a_{node id}">, so claiming "foo" also spoken for is "a_foo" —
+        # exactly what a component named "A Foo" sanitises to. The wrapper is
+        # claimed only if the node id itself was free, so one collision is
+        # reported once rather than twice.
+        if claim(svg_id, what):
+            claim(f"a_{svg_id}", f"the <a> wrapper around {what}")
+
+    # Hidden components are skipped: nothing is emitted for them, so an id
+    # they would have claimed is free, and flagging it would block a run over
+    # a collision that never reaches the SVG.
+    for comp in components:
+        if not comp.hide:
+            claim_node(_svg_id(comp.id), f"component '{comp.id}'")
+    for comp in components:
+        if comp.hide or comp.ubiquitous:
+            # Ubiquitous components never call out from a node of their own.
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is not None and match.ubiquitous and not match.hide:
+                claim_node(
+                    _clone_svg_id(comp.id, match.id),
+                    f"the '{match.id}' clone beside '{comp.id}'",
+                )
+    for name, ext_id in external_svg_ids(components).items():
+        claim_node(ext_id, f"external '{name}'")
+
+    # Free-text labels get the same treatment, but only as a warning: they are
+    # kept as separate clusters/nodes (the later one takes a _2 suffix), which
+    # is the right outcome if they really are two things and a legible symptom
+    # if one is a typo. Warned here rather than in _unique_svg_id, which runs
+    # again for every layer sub-figure.
+    for kind, labels in (
+        ("Part of", [c.part_of for c in components]),
+        ("Externals", [n for c in components for _, n in c.externals]),
+    ):
+        by_label_id: dict[str, str] = {}
+        for label in dict.fromkeys(labels):
+            if not label:
+                continue
+            clash = by_label_id.setdefault(_svg_id(label), label)
+            if clash != label:
+                click.echo(
+                    f"WARNING: {kind} names '{clash}' and '{label}' differ only "
+                    f"in punctuation; keeping both, but check for a typo",
+                    err=True,
+                )
+
+    for comp in components:
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is None:
+                click.echo(
+                    f"ERROR: '{comp.id}' references unknown id '{ref}' "
+                    f"in Gets results from/Calls",
+                    err=True,
+                )
+                ok = False
+            elif match.id != ref:
+                click.echo(
+                    f"WARNING: '{comp.id}' references '{ref}' but the actual id "
+                    f"is '{match.id}' (case mismatch)",
+                    err=True,
+                )
+    return ok
+
+
+def _svg_node_ids(components: list[Component]) -> dict[str, list[str]]:
+    """Component id -> the SVG node ids that component is drawn under.
+
+    One id for an ordinary component. A ubiquitous one has no central node —
+    it is cloned next to each caller — so it gets one id per caller, and none
+    at all if nothing references it. Hidden components get none: they are not
+    drawn. Computed over every row, unfiltered, to match components.json; a
+    component the refactor-status filter excludes has no node in that
+    particular rendering, and a consumer has to tolerate a missing element.
+    """
+    index = index_by_id(components)
+    ids = {
+        c.id: ([] if c.ubiquitous else [_svg_id(c.id)])
+        for c in components if not c.hide
+    }
+    for comp in components:
+        if comp.hide or comp.ubiquitous:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is None or not match.ubiquitous or match.hide:
+                continue
+            clone = _clone_svg_id(comp.id, match.id)
+            if clone not in ids[match.id]:
+                ids[match.id].append(clone)
+    return ids
+
+
+def write_json(components: list[Component], out_path: Path) -> None:
+    """Serialise components to JSON, preserving the original CSV column names.
+
+    Rows with Hide=TRUE are left out. "Hide" means the component is suppressed
+    entirely, and this file is what the planned Pages view fetches from a
+    public site — exporting a hidden row would publish its Notes verbatim.
+    """
+    node_ids = _svg_node_ids(components)
+    exportable = [
+        {
+            "id": c.id,
+            # The SVG <g id="..."> values for this component, so a consumer can
+            # find its node(s) without re-deriving the sanitising rule. A list
+            # because a ubiquitous component is drawn once per caller — see
+            # _svg_node_ids.
+            "node_ids": node_ids[c.id],
+            "Name": c.name,
+            "Owner": c.owner,
+            "Component in ITRB": c.itrb,
+            "Refactor status": c.refactor_status,
+            "Notes": c.notes,
+            "URL": c.url,
+            "Ubiquitous": c.ubiquitous,
+            "Hide": c.hide,
+            "Part of": c.part_of,
+            "Hosted at": c.hosted_at,
+            "Layer": c.layer,
+            "Externals": [{"direction": d, "name": n} for d, n in c.externals],
+            "depends_on": c.depends_on,
+            "depends_on_planned": c.depends_on_planned,
+            "uses": c.uses,
+            "uses_planned": c.uses_planned,
+        }
+        for c in components if not c.hide
+    ]
+    with out_path.open("w", encoding="utf-8") as f:
+        json.dump(exportable, f, indent=2, ensure_ascii=False)
+    click.echo(f"Wrote {out_path}")
+
+
+# --- Graph construction helpers --------------------------------------------
+
+
+def _compute_active_set(
+    components: list[Component],
+    active_statuses: set[str] | None,
+) -> set[str]:
+    if active_statuses is None:
+        return {c.id for c in components if not c.hide}
+    return {c.id for c in components if c.refactor_status in active_statuses and not c.hide}
+
+
+def _compute_ghost_ids(
+    components: list[Component],
+    index: dict[str, Component],
+    active_set: set[str],
+) -> set[str]:
+    ghost: set[str] = set()
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match is None or match.ubiquitous or match.hide:
+                # Ubiquitous targets render as per-caller clones, never as ghosts.
+                # Hidden components are suppressed entirely — not even as ghosts.
+                continue
+            if match.id not in active_set:
+                ghost.add(match.id)
+    return ghost
+
+
+def _node_tooltip(comp: Component) -> str:
+    """Hover text for a component node in SVG output.
+
+    Carries the fields that don't fit in the label — owner, status, and notes —
+    so a reader gets them without leaving the diagram.
+    """
+    lines = [f"{comp.display_name} ({comp.id})"]
+    if comp.owner and comp.owner != "None":
+        lines.append(f"Owner: {comp.owner}")
+    if comp.refactor_status:
+        lines.append(f"Status: {comp.refactor_status}")
+    if comp.notes:
+        lines.append(comp.notes)
+    return "\n".join(lines)
+
+
+def _emit_component_node(
+    dot: graphviz.Digraph,
+    comp: Component,
+    node_id: str,
+    colors: ColorAssigner,
+    penwidth: str | None = None,
+    svg_id: str | None = None,
+) -> None:
+    """Render a Component as a graphviz node at the given id.
+
+    Used both for primary node placement and for per-caller ubiquitous clones,
+    whose node_id is already an SVG id (see _clone_svg_id) and is passed
+    through as svg_id rather than sanitised a second time.
+    penwidth overrides the default (2.0 for "New in Refactor", 1.0 otherwise).
+    """
+    fill = colors.get(comp.owner)
+    is_new = comp.refactor_status == "New in Refactor"
+    # Owner is encoded by node color and shown in the legend, not in the label.
+    label = f"{comp.display_name}\n{comp.id}"
+    if comp.hosted_at and comp.hosted_at != "ITRB":
+        emoji = HOSTED_AT_EMOJI.get(comp.hosted_at, "")
+        suffix = f" {emoji}" if emoji else ""
+        label += f"\nHosted at: {comp.hosted_at}{suffix}"
+    # id gives every node a stable, predictable handle in the SVG (<g id="...">)
+    # instead of graphviz's default node1/node2 counter, so the planned GitHub
+    # Pages view can address nodes from components.json without re-parsing DOT.
+    # URL makes graphviz wrap the node in <a xlink:href=...> in SVG output, which
+    # is clickable component documentation with no JavaScript at all. Both are
+    # inert in PNG output, so this changes nothing about today's diagrams.
+    extra: dict[str, str] = {
+        "id": svg_id if svg_id is not None else _svg_id(node_id),
+        "tooltip": _node_tooltip(comp),
+    }
+    if comp.url:
+        extra["URL"] = comp.url
+        extra["target"] = "_blank"
+    dot.node(
+        node_id,
+        label=label,
+        fillcolor=fill,
+        fontcolor=text_color_for(fill),
+        penwidth=penwidth if penwidth is not None else ("2.0" if is_new else "1.0"),
+        **extra,
+    )
+
+
+def _compute_groups(
+    components: list[Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+) -> dict[str, list[str]]:
+    """Map Part-of label → node ids for active (non-ubiquitous) and ghost nodes."""
+    groups: dict[str, list[str]] = {}
+    for comp in components:
+        if not comp.part_of or comp.ubiquitous:
+            continue
+        if comp.id in active_set or comp.id in ghost_ids:
+            groups.setdefault(comp.part_of, []).append(comp.id)
+    return groups
+
+
+def _add_active_nodes(
+    dot: graphviz.Digraph,
+    components: list[Component],
+    active_set: set[str],
+    colors: ColorAssigner,
+    skip_ids: set[str] | None = None,
+) -> None:
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            # Ubiquitous components don't get a central node — they're emitted
+            # per-caller from _add_edges.
+            continue
+        if skip_ids and comp.id in skip_ids:
+            continue
+        _emit_component_node(dot, comp, comp.id, colors)
+
+
+def _emit_ghost_node(
+    dot: graphviz.Digraph,
+    ghost_id: str,
+    index: dict[str, Component],
+) -> None:
+    """Render one excluded-but-referenced component as a dimmed node.
+
+    Called both for free-standing ghosts and for ghosts inside a Part-of
+    cluster, so the two stay in step.
+    """
+    comp = index.get(ghost_id.lower())
+    name = comp.display_name if comp else ghost_id
+    dot.node(
+        ghost_id,
+        label=f"{name}\n{ghost_id}\n(excluded)",
+        fillcolor=GHOST_FILL_COLOR,
+        style="filled,rounded,dashed",
+        fontcolor=GHOST_FONT_COLOR,
+        color=GHOST_BORDER_COLOR,
+        id=_svg_id(ghost_id),
+        tooltip=f"{name} ({ghost_id}) — excluded by the current filter",
+    )
+
+
+def _add_ghost_nodes(
+    dot: graphviz.Digraph,
+    ghost_ids: set[str],
+    index: dict[str, Component],
+    skip_ids: set[str] | None = None,
+) -> None:
+    for ghost_id in sorted(ghost_ids):
+        if skip_ids and ghost_id in skip_ids:
+            continue
+        _emit_ghost_node(dot, ghost_id, index)
+
+
+def _add_group_clusters(
+    dot: graphviz.Digraph,
+    groups: dict[str, list[str]],
+    components: list[Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+    index: dict[str, Component],
+    colors: ColorAssigner,
+) -> None:
+    """Wrap each Part-of group in a labeled dotted-border cluster subgraph."""
+    taken: dict[str, str] = {}
+    for group_label, node_ids in sorted(groups.items()):
+        safe = _unique_svg_id(group_label, taken)
+        with dot.subgraph(name=f"cluster_group_{safe}") as sg:
+            tab_label = (
+                f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3">'
+                f'<TR><TD>'
+                f'<FONT COLOR="white" POINT-SIZE="12"><B>{html.escape(group_label)}</B></FONT>'
+                f'</TD></TR></TABLE>>'
+            )
+            sg.attr(
+                label=tab_label,
+                labelloc="t",
+                style="filled",
+                fillcolor="#DDDDDD",
+                color="#555555",
+                fontname="Helvetica",
+                penwidth="1.5",
+                bgcolor="transparent",
+            )
+            for node_id in sorted(node_ids):
+                comp = index.get(node_id.lower())
+                if comp and node_id in active_set:
+                    _emit_component_node(sg, comp, node_id, colors)
+                elif node_id in ghost_ids:
+                    _emit_ghost_node(sg, node_id, index)
+
+
+def _add_edges(
+    dot: graphviz.Digraph,
+    components: list[Component],
+    index: dict[str, Component],
+    active_set: set[str],
+    ghost_ids: set[str],
+    colors: ColorAssigner,
+) -> None:
+    emitted_clones: set[str] = set()
+    # Track (src, dst) pairs that already have a solid edge so that a
+    # dashed edge between the same two nodes — which concentrate=true
+    # would merge, losing the solid style — is suppressed in favour of solid.
+    solid_edges: set[tuple[str, str]] = set()
+    # Same idea one level down: an implemented "Calls" edge outranks a planned
+    # one to the same target, mirroring how depends_on outranks
+    # depends_on_planned above. Two dashed edges between one pair would merge
+    # under concentrate=true and lose the planned-vs-implemented distinction.
+    dashed_edges: set[tuple[str, str]] = set()
+
+    def edge_target(caller_id: str, ref: str) -> str | None:
+        """Return the graphviz node id to draw an edge to, or None to skip.
+
+        For ubiquitous targets, emit (idempotently) a per-caller clone node and
+        return its synthetic id. The clone uses the same visual style as the
+        original so callers can recognise it.
+        """
+        match = index.get(ref.lower())
+        if match is None:
+            return None
+        if match.hide:
+            return None
+        if match.ubiquitous:
+            # Ubiquitous components are in active_set when their status passes
+            # the filter; they're just drawn per-caller instead of centrally.
+            # Without this check an excluded one still renders, at full colour.
+            if match.id not in active_set:
+                return None
+            clone_id = _clone_svg_id(caller_id, match.id)
+            if clone_id not in emitted_clones:
+                _emit_component_node(dot, match, clone_id, colors, svg_id=clone_id)
+                emitted_clones.add(clone_id)
+            return clone_id
+        if match.id in active_set or match.id in ghost_ids:
+            return match.id
+        return None
+
+    # Two passes: a solid edge is registered by its *target* component but
+    # suppresses a dashed edge emitted by its *source*, so a single pass only
+    # dedupes when the target happens to sort first. edge_target is idempotent.
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = edge_target(comp.id, ref)
+            if t is not None:
+                solid_edges.add((t, comp.id))
+
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = edge_target(comp.id, ref)
+            if t is not None:
+                dot.edge(t, comp.id)  # B → A: B provides results to A
+        for ref in comp.depends_on_planned:
+            t = edge_target(comp.id, ref)
+            if t is not None and (t, comp.id) not in solid_edges:
+                # Planned/in-development "Gets results from" — solid red to stand out
+                dot.edge(t, comp.id, style="solid", color="red")
+        for ref in comp.uses:
+            t = edge_target(comp.id, ref)
+            if t is not None and (comp.id, t) not in solid_edges:
+                dot.edge(comp.id, t, style="dashed")  # A --→ B: API call
+                dashed_edges.add((comp.id, t))
+        for ref in comp.uses_planned:
+            t = edge_target(comp.id, ref)
+            if (
+                t is not None
+                and (comp.id, t) not in solid_edges
+                and (comp.id, t) not in dashed_edges
+            ):
+                # Planned/in-development "Calls" — dashed red to stand out
+                dot.edge(comp.id, t, style="dashed", color="red")
+
+
+def _add_external_nodes_and_edges(
+    dot: graphviz.Digraph,
+    components: list[Component],
+    active_set: set[str],
+) -> None:
+    """Emit external-entity nodes and their edges from the Externals column.
+
+    Sources (direction "in") become cylinder nodes at rank=min; sinks
+    (direction "out") become double-oval nodes at rank=max.  Multiple
+    components can reference the same external name — one node is emitted
+    and one edge per referencing component is drawn.
+
+    A name used in *both* directions gets a single sink-shaped node and no rank
+    constraint, since rank=min and rank=max on one node contradict each other.
+    """
+    ext_dirs: dict[str, set[str]] = {}       # display name → {"in", "out"}
+    in_edges: list[tuple[str, str]] = []     # (external name, comp_id)
+    out_edges: list[tuple[str, str]] = []    # (comp_id, external name)
+
+    for comp in components:
+        if comp.id not in active_set or comp.ubiquitous:
+            continue
+        for direction, name in comp.externals:
+            ext_dirs.setdefault(name, set()).add(direction)
+            if direction == "in":
+                in_edges.append((name, comp.id))
+            else:
+                out_edges.append((comp.id, name))
+
+    if not ext_dirs:
+        return
+
+    # Ids come from the unfiltered component list, so an external keeps the
+    # same id in the main diagram and in every layer sub-figure.
+    ext_ids = external_svg_ids(components)
+
+    ext_attrs = dict(
+        style="filled",
+        fillcolor=EXTERNAL_FILL_COLOR,
+        fontname="Helvetica",
+        fontsize="13",
+        penwidth="2.5",
+    )
+
+    for name, dirs in ext_dirs.items():
+        nid = ext_ids[name]
+        if dirs == {"in"}:
+            dot.node(nid, label=name, shape="cylinder", id=nid, tooltip=name, **ext_attrs)
+        else:
+            dot.node(
+                nid, label=name, shape="oval", peripheries="2",
+                id=nid, tooltip=name, **ext_attrs,
+            )
+
+    for rank, wanted in (("min", {"in"}), ("max", {"out"})):
+        ranked = [ext_ids[n] for n, dirs in ext_dirs.items() if dirs == wanted]
+        if ranked:
+            with dot.subgraph() as s:
+                s.attr(rank=rank)
+                for nid in ranked:
+                    s.node(nid)
+
+    for name, dst in in_edges:
+        dot.edge(ext_ids[name], dst)
+    for src, name in out_edges:
+        dot.edge(src, ext_ids[name])
+
+
+_LEGEND_CLUSTER_ATTRS = dict(
+    style="filled,rounded",
+    fillcolor="#FAFAFA",
+    color="#AAAAAA",
+    fontname="Helvetica",
+    fontsize="11",
+    margin="12",
+)
+
+
+def _owner_legend_html(colors: ColorAssigner) -> str:
+    """Build an HTML-table label listing every owner and its fill color.
+
+    Two-column layout: a colored swatch on the left, the owner name on a
+    neutral background on the right. This keeps text contrast uniform
+    regardless of how dark the swatch is.
+    """
+    rows = []
+    for owner, fill in colors.used_colors.items():
+        rows.append(
+            f'<TR>'
+            f'<TD BGCOLOR="{fill}" WIDTH="20"> </TD>'
+            f'<TD ALIGN="LEFT">{html.escape(owner)}</TD>'
+            f'</TR>'
+        )
+    table = (
+        '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">'
+        + "".join(rows)
+        + '</TABLE>'
+    )
+    # Python graphviz treats labels starting with '<' as HTML-like — the
+    # outer angle brackets are the marker, inner is the table.
+    return f"<{table}>"
+
+
+def _add_owner_cluster(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
+    """Add the owner-color key cluster to dot."""
+    with dot.subgraph(name="cluster_legend_owners") as own:
+        own.attr(label="Owner", **_LEGEND_CLUSTER_ATTRS)
+        own.node("_leg_owners", label=_owner_legend_html(colors), shape="plain")
+
+
+def _add_edge_cluster(dot: graphviz.Digraph) -> None:
+    """Add the edge-style example cluster to dot."""
+    with dot.subgraph(name="cluster_legend") as leg:
+        leg.attr(label="Legend", **_LEGEND_CLUSTER_ATTRS)
+
+        leg.node("_leg_p", label="Producer", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_c", label="Consumer", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_p", "_leg_c", xlabel="Results", minlen="5")
+
+        leg.node("_leg_a", label="Component", fillcolor="white", penwidth="1.0")
+        leg.node("_leg_b", label="Service", fillcolor="white", penwidth="1.0")
+        leg.edge("_leg_a", "_leg_b", xlabel="API call", style="dashed", minlen="5")
+
+        _ext = dict(
+            fillcolor=EXTERNAL_FILL_COLOR, style="filled",
+            fontname="Helvetica", fontsize="13", penwidth="2.5",
+        )
+        leg.node("_leg_src",  label="Database", shape="cylinder", **_ext)
+        leg.node("_leg_sink", label="User/agent", shape="oval",
+                 peripheries="2", **_ext)
+
+        with leg.subgraph() as row1:
+            row1.attr(rank="same")
+            row1.node("_leg_p")
+            row1.node("_leg_c")
+        with leg.subgraph() as row2:
+            row2.attr(rank="same")
+            row2.node("_leg_a")
+            row2.node("_leg_b")
+        with leg.subgraph() as row3:
+            row3.attr(rank="same")
+            row3.node("_leg_src")
+            row3.node("_leg_sink")
+        leg.edge("_leg_p", "_leg_a",   style="invis")
+        leg.edge("_leg_a", "_leg_src", style="invis")
+
+
+def _add_legend(dot: graphviz.Digraph, colors: ColorAssigner) -> None:
+    """Add both legend clusters to dot (for the combined main diagram)."""
+    _add_owner_cluster(dot, colors)
+    _add_edge_cluster(dot)
+
+    # Pin the owner legend to the bottom; the edge-style legend floats freely
+    # (its internal rank="same" rows keep it compact wherever it lands).
+    with dot.subgraph() as s:
+        s.attr(rank="max")
+        s.node("_leg_owners")
+
+
+def _build_owners_graph(colors: ColorAssigner) -> graphviz.Digraph:
+    """Standalone diagram containing only the owner-color legend."""
+    dot = graphviz.Digraph(
+        name="owners_legend",
+        graph_attr={"fontname": "Helvetica", "fontsize": "11", "dpi": "150"},
+    )
+    _add_owner_cluster(dot, colors)
+    return dot
+
+
+def _build_edge_legend_graph() -> graphviz.Digraph:
+    """Standalone diagram containing only the edge-style legend."""
+    dot = graphviz.Digraph(
+        name="edge_legend",
+        graph_attr={
+            "fontname": "Helvetica", "fontsize": "11", "dpi": "150",
+            "rankdir": "TB", "newrank": "true",
+        },
+        node_attr={
+            "fontname": "Helvetica", "fontsize": "11",
+            "style": "filled,rounded", "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+    _add_edge_cluster(dot)
+    return dot
+
+
+
+def build_graph(
+    components: list[Component],
+    active_statuses: set[str] | None,
+    direction: str,
+    colors: ColorAssigner,
+    concentrate: bool = False,
+    include_legend: bool = True,
+) -> graphviz.Digraph:
+    """Assemble the full graph from the parsed component list."""
+    index = index_by_id(components)
+    active_set = _compute_active_set(components, active_statuses)
+    ghost_ids = _compute_ghost_ids(components, index, active_set)
+
+    dot = graphviz.Digraph(
+        name="translator_components",
+        graph_attr={
+            "rankdir": direction,
+            "fontname": "Helvetica",
+            "fontsize": "12",
+            # splines=true gives graphviz freedom to route edges as smooth
+            # curves around nodes; concentrate merges partially-parallel edges
+            # to pack the layout tighter (disable if mixed solid/dashed edges
+            # render incorrectly merged).
+            "splines": "true",
+            "concentrate": "true" if concentrate else "false",
+            "nodesep": "0.3",
+            "ranksep": "0.5",
+            # Required for rank=same to work correctly across cluster
+            # boundaries (e.g. keeping both legend clusters level).
+            "newrank": "true",
+            "dpi": "150",
+        },
+        node_attr={
+            "fontname": "Helvetica",
+            "fontsize": "11",
+            "style": "filled,rounded",
+            "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+
+    groups = _compute_groups(components, active_set, ghost_ids)
+    grouped_ids = {nid for ids in groups.values() for nid in ids}
+
+    _add_group_clusters(dot, groups, components, active_set, ghost_ids, index, colors)
+    _add_active_nodes(dot, components, active_set, colors, skip_ids=grouped_ids)
+    _add_ghost_nodes(dot, ghost_ids, index, skip_ids=grouped_ids)
+    _add_edges(dot, components, index, active_set, ghost_ids, colors)
+    _add_external_nodes_and_edges(dot, components, active_set)
+    if include_legend:
+        _add_legend(dot, colors)
+
+    return dot
+
+
+def _layer_filename(layer: str) -> str:
+    """Convert a layer label to a safe filename stem."""
+    safe = re.sub(r"[^\w\s-]", "", layer.lower())
+    safe = re.sub(r"[\s-]+", "_", safe).strip("_")
+    return safe or "layer"
+
+
+def _layer_filenames(layers: list[str]) -> dict[str, str]:
+    """Layer label -> unique filename stem, warning on labels that collide.
+
+    "Tier 1" and "Tier-1" both reduce to "tier_1", and the second sub-figure
+    silently overwrote the first — three layers announced, two files on disk.
+    """
+    taken: dict[str, str] = {}
+    stems: dict[str, str] = {}
+    for layer in layers:
+        base = _layer_filename(layer)
+        stem, n = base, 1
+        while taken.setdefault(stem, layer) != layer:
+            n += 1
+            stem = f"{base}_{n}"
+        if stem != base:
+            click.echo(
+                f"WARNING: layer names '{taken[base]}' and '{layer}' both give "
+                f"the filename '{base}'; writing the second as '{stem}'",
+                err=True,
+            )
+        stems[layer] = stem
+    return stems
+
+
+def build_layer_subgraph(
+    components: list[Component],
+    layer_value: str,
+    active_set: set[str],
+    index: dict[str, Component],
+    direction: str,
+    colors: ColorAssigner,
+) -> graphviz.Digraph:
+    """Build a legend-free sub-diagram showing one layer and its direct neighbors."""
+    in_layer = {
+        c.id for c in components
+        if c.id in active_set and c.layer == layer_value and not c.ubiquitous and not c.hide
+    }
+
+    # Direct neighbors (both directions) that are outside this layer
+    out_of_layer: set[str] = set()
+    for comp in components:
+        if comp.id not in in_layer:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if (
+                match
+                and match.id not in in_layer
+                and match.id in active_set
+                and not match.ubiquitous
+                and not match.hide
+            ):
+                out_of_layer.add(match.id)
+    for comp in components:
+        if comp.ubiquitous or comp.hide or comp.id in in_layer or comp.id not in active_set:
+            continue
+        for ref in comp.all_refs():
+            match = index.get(ref.lower())
+            if match and match.id in in_layer:
+                out_of_layer.add(comp.id)
+                break
+
+    visible = in_layer | out_of_layer
+
+    dot = graphviz.Digraph(
+        name=f"layer_{_layer_filename(layer_value)}",
+        graph_attr={
+            "rankdir": direction,
+            "fontname": "Helvetica",
+            "fontsize": "12",
+            "splines": "true",
+            "concentrate": "false",
+            "nodesep": "0.3",
+            "ranksep": "0.5",
+            "newrank": "true",
+            "dpi": "150",
+        },
+        node_attr={
+            "fontname": "Helvetica",
+            "fontsize": "11",
+            "style": "filled,rounded",
+            "shape": "box",
+        },
+        edge_attr={"fontname": "Helvetica", "fontsize": "9"},
+    )
+
+    # Clusters for in-layer nodes that have a Part-of group
+    groups: dict[str, list[str]] = {}
+    for comp in components:
+        if not comp.part_of or comp.ubiquitous or comp.id not in in_layer:
+            continue
+        groups.setdefault(comp.part_of, []).append(comp.id)
+    grouped_in_layer = {nid for ids in groups.values() for nid in ids}
+
+    taken: dict[str, str] = {}
+    for group_label, node_ids in sorted(groups.items()):
+        safe = _unique_svg_id(group_label, taken)
+        with dot.subgraph(name=f"cluster_group_{safe}") as sg:
+            tab_label = (
+                f'<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3">'
+                f"<TR><TD>"
+                f'<FONT COLOR="white" POINT-SIZE="12"><B>{html.escape(group_label)}</B></FONT>'
+                f"</TD></TR></TABLE>>"
+            )
+            sg.attr(
+                label=tab_label,
+                labelloc="t",
+                style="filled",
+                fillcolor="#DDDDDD",
+                color="#555555",
+                fontname="Helvetica",
+                penwidth="1.5",
+                bgcolor="transparent",
+            )
+            for node_id in sorted(node_ids):
+                comp = index.get(node_id.lower())
+                if comp:
+                    _emit_component_node(sg, comp, node_id, colors, penwidth=IN_LAYER_PENWIDTH)
+
+    # Ungrouped in-layer nodes
+    for comp in components:
+        if comp.id not in in_layer or comp.ubiquitous or comp.id in grouped_in_layer:
+            continue
+        _emit_component_node(dot, comp, comp.id, colors, penwidth=IN_LAYER_PENWIDTH)
+
+    # Out-of-layer neighbors — full owner colors, default border weight
+    for ool_id in sorted(out_of_layer):
+        comp = index.get(ool_id.lower())
+        if comp:
+            _emit_component_node(dot, comp, ool_id, colors)
+
+    # Edges — only those with at least one in-layer endpoint
+    emitted_clones: set[str] = set()
+    solid_edges: set[tuple[str, str]] = set()
+    dashed_edges: set[tuple[str, str]] = set()
+
+    def _sub_target(caller_id: str, ref: str) -> str | None:
+        match = index.get(ref.lower())
+        if match is None or match.hide:
+            return None
+        if match.ubiquitous:
+            # active_set, not visible: visible excludes ubiquitous components
+            # by construction, but the status filter still has to apply.
+            if match.id not in active_set:
+                return None
+            if caller_id in in_layer:
+                clone_id = _clone_svg_id(caller_id, match.id)
+                if clone_id not in emitted_clones:
+                    _emit_component_node(dot, match, clone_id, colors, svg_id=clone_id)
+                    emitted_clones.add(clone_id)
+                return clone_id
+            return None
+        return match.id if match.id in visible else None
+
+    # Collected in a first pass for the same reason as in _add_edges: the
+    # suppression below is otherwise sensitive to component order.
+    for comp in components:
+        if comp.id not in visible or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer):
+                solid_edges.add((t, comp.id))
+
+    for comp in components:
+        if comp.id not in visible or comp.ubiquitous:
+            continue
+        for ref in comp.depends_on:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer):
+                dot.edge(t, comp.id)
+        for ref in comp.depends_on_planned:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (t in in_layer or comp.id in in_layer) and (t, comp.id) not in solid_edges:
+                dot.edge(t, comp.id, style="solid", color="red")
+        for ref in comp.uses:
+            t = _sub_target(comp.id, ref)
+            if t is not None and (comp.id in in_layer or t in in_layer) and (comp.id, t) not in solid_edges:
+                dot.edge(comp.id, t, style="dashed")
+                # Recorded in dashed_edges, not solid_edges — the two sets
+                # suppress different things and mixing them drops the wrong
+                # edge. See _add_edges, which this must stay in step with.
+                dashed_edges.add((comp.id, t))
+        for ref in comp.uses_planned:
+            t = _sub_target(comp.id, ref)
+            if (
+                t is not None
+                and (comp.id in in_layer or t in in_layer)
+                and (comp.id, t) not in solid_edges
+                and (comp.id, t) not in dashed_edges
+            ):
+                dot.edge(comp.id, t, style="dashed", color="red")
+
+    _add_external_nodes_and_edges(dot, components, in_layer)
+
+    return dot
+
+
+@click.command()
+@click.option(
+    "--input", "input_path",
+    default="data/components.csv",
+    show_default=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="CSV input file (used unless --google-sheet is set).",
+)
+@click.option(
+    "--google-sheet", "google_sheet",
+    is_flag=True,
+    default=False,
+    help="Download CSV from Google Sheet instead of reading a local file. "
+         "Reads GOOGLE_SHEET_ID from .env (cwd, then the script directory).",
+)
+@click.option(
+    "--sheet-gid", "sheet_gid",
+    default=0,
+    show_default=True,
+    help="Google Sheet tab GID (0 = first tab).",
+)
+@click.option(
+    "--output-dir", "output_dir",
+    default="data",
+    show_default=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Directory for output files.",
+)
+@click.option(
+    "--output-name", "output_name",
+    default="diagram",
+    show_default=True,
+    help="Base filename for output files (without extension).",
+)
+@click.option(
+    "--refactor-status", "refactor_status",
+    default=",".join(DEFAULT_STATUSES),
+    show_default=True,
+    help="Comma-separated list of Refactor status values to include.",
+)
+@click.option(
+    "--all", "include_all",
+    is_flag=True,
+    default=False,
+    help="Include all components regardless of Refactor status.",
+)
+@click.option(
+    "--format", "extra_formats",
+    multiple=True,
+    type=click.Choice(["pdf", "svg"]),
+    help="Additional output formats beyond PNG (PNG is always produced). "
+         "Can be repeated.",
+)
+@click.option(
+    "--direction",
+    default="TB",
+    show_default=True,
+    type=click.Choice(["LR", "TB"]),
+    help="Graph layout direction.",
+)
+@click.option(
+    "--concentrate/--no-concentrate",
+    default=False,
+    show_default=True,
+    help="Merge partially-parallel edges (concentrate=true). Disable if solid "
+         "and dashed edges between nearby nodes render incorrectly merged.",
+)
+@click.option(
+    "--split-legends/--no-split-legends", "split_legends",
+    default=True,
+    show_default=True,
+    help="Write owner and edge-style legends as separate PNGs "
+         "({output_name}_owners.png / {output_name}_legend.png) and omit "
+         "them from the main diagram. Use --no-split-legends to embed them.",
+)
+@click.option(
+    "--layer-column", "layer_column",
+    default="",
+    show_default=True,
+    help="CSV column name to use for layer-based sub-figures (e.g. 'Layer'). "
+         "When set, one PNG sub-figure is written per distinct value found in "
+         "that column, showing in-layer nodes with a bold border and their "
+         "direct neighbors from other layers at normal weight. "
+         "Leave empty to skip.",
+)
+def main(
+    input_path: Path,
+    google_sheet: bool,
+    sheet_gid: int,
+    output_dir: Path,
+    output_name: str,
+    refactor_status: str,
+    include_all: bool,
+    extra_formats: tuple[str, ...],
+    direction: str,
+    concentrate: bool,
+    split_legends: bool,
+    layer_column: str,
+) -> None:
+    """Validate components CSV and generate a Graphviz dependency diagram."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if google_sheet:
+        # Look for .env in the working directory (and its parents) first, then
+        # fall back to one next to the script for users who run the tool from
+        # a different directory; override=False keeps the first value winning.
+        # usecwd=True is load-bearing: a bare load_dotenv() resolves via
+        # find_dotenv(), which searches from *this module's* file, so it would
+        # quietly read the repo's own .env — and its GOOGLE_SHEET_ID — for
+        # someone who ran the tool in a directory with a .env of their own.
+        cwd_env = find_dotenv(usecwd=True)
+        if cwd_env:
+            load_dotenv(cwd_env)
+        load_dotenv(Path(__file__).parent / ".env", override=False)
+        sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+        if not sheet_id:
+            raise click.ClickException(
+                "GOOGLE_SHEET_ID is not set. Add it to .env in the current "
+                f"directory or next to {Path(__file__).name}."
+            )
+        url = (
+            f"https://docs.google.com/spreadsheets/d/{sheet_id}"
+            f"/export?format=csv&gid={sheet_gid}"
+        )
+        download_path = output_dir / "components.csv"
+        click.echo(f"Downloading CSV from Google Sheet to {download_path} ...")
+        # Use urlopen + content-type check rather than urlretrieve: a private
+        # or missing sheet redirects to a 200 HTML login page, which would
+        # otherwise be silently saved as components.csv.
+        try:
+            # timeout so a stalled request fails the run rather than hanging a
+            # scheduled CI job forever.
+            with urllib.request.urlopen(url, timeout=30) as response:
+                content_type = response.headers.get("Content-Type", "")
+                body = response.read()
+        # A stall during read() raises a bare TimeoutError, which is not a
+        # URLError; without it here a scheduled job dies with a traceback.
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise click.ClickException(
+                f"Failed to download Google Sheet (gid {sheet_gid}): {exc}"
+            ) from exc
+        if "text/csv" not in content_type.lower():
+            # The sheet ID is a shareable secret and these messages end up in
+            # CI logs, so it stays out of both of them.
+            raise click.ClickException(
+                f"Google Sheet response was not CSV (Content-Type: "
+                f"{content_type or 'unset'}). The sheet may be private, "
+                f"GOOGLE_SHEET_ID may be wrong, or gid {sheet_gid} may not exist."
+            )
+        download_path.write_bytes(body)
+        input_path = download_path
+    elif not input_path.exists():
+        raise click.ClickException(f"Input file not found: {input_path}")
+
+    click.echo(f"Loading {input_path} ...")
+    components = load_components(input_path, layer_column=layer_column)
+    click.echo(f"Loaded {len(components)} components.")
+    if not components:
+        # Every row was id-less. Rendering the empty diagram that follows would
+        # let a scheduled run overwrite good output with a blank picture.
+        raise click.ClickException(
+            f"No components found in {input_path}; every row is missing an id."
+        )
+
+    click.echo("Validating references ...")
+    if not validate(components):
+        raise click.ClickException(
+            "Validation failed; fix the errors above and re-run."
+        )
+
+    # Write JSON (all components, regardless of filter)
+    json_path = output_dir / "components.json"
+    write_json(components, json_path)
+
+    # Determine active statuses
+    active_statuses: set[str] | None
+    if include_all:
+        active_statuses = None
+        click.echo("Including all components (no filter).")
+    else:
+        active_statuses = {
+            s.strip() for s in refactor_status.split(",") if s.strip()
+        }
+        active_count = sum(
+            # Must match _compute_active_set, which also drops hidden rows.
+            1 for c in components
+            if c.refactor_status in active_statuses and not c.hide
+        )
+        click.echo(
+            f"Filtering to {active_count} components with status: "
+            + ", ".join(sorted(active_statuses))
+        )
+
+    colors = ColorAssigner(load_owner_colors(), FALLBACK_COLORS)
+    dot = build_graph(
+        components, active_statuses, direction, colors,
+        concentrate=concentrate, include_legend=not split_legends,
+    )
+
+    # Save .dot source
+    dot_path = output_dir / f"{output_name}.dot"
+    dot_path.write_text(dot.source, encoding="utf-8")
+    click.echo(f"Wrote {dot_path}")
+
+    # Render PNG (always) plus any extra formats. cleanup=True removes the
+    # intermediate extension-less dot source that render() writes alongside
+    # the rendered file — we already keep the canonical copy in {output_name}.dot.
+    formats_to_render = {"png"} | set(extra_formats)
+    for fmt in sorted(formats_to_render):
+        dot.render(
+            filename=str(output_dir / output_name),
+            format=fmt,
+            cleanup=True,
+        )
+        click.echo(f"Wrote {output_dir / f'{output_name}.{fmt}'}")
+
+    # Separate legend files
+    if split_legends:
+        for legend_stem, legend_dot in [
+            (f"{output_name}_owners", _build_owners_graph(colors)),
+            (f"{output_name}_legend", _build_edge_legend_graph()),
+        ]:
+            legend_dot.render(
+                filename=str(output_dir / legend_stem),
+                format="png",
+                cleanup=True,
+            )
+            click.echo(f"Wrote {output_dir / f'{legend_stem}.png'}")
+
+    # Per-layer sub-figures
+    if layer_column:
+        _index = index_by_id(components)
+        _active_set = _compute_active_set(components, active_statuses)
+        layers = sorted({c.layer for c in components if c.layer})
+        if not layers:
+            click.echo(
+                f"Note: no values found in '{layer_column}' column; "
+                "no layer sub-figures written."
+            )
+        else:
+            click.echo(
+                f"Generating {len(layers)} layer sub-figure(s) "
+                f"from '{layer_column}' column ..."
+            )
+            stems = _layer_filenames(layers)
+            for layer_value in layers:
+                in_layer_count = sum(
+                    1 for c in components
+                    if c.id in _active_set
+                    and c.layer == layer_value
+                    and not c.ubiquitous
+                    and not c.hide
+                )
+                if in_layer_count == 0:
+                    click.echo(
+                        f"  Skipping '{layer_value}' "
+                        "(no active non-ubiquitous components)."
+                    )
+                    continue
+                layer_dot = build_layer_subgraph(
+                    components, layer_value, _active_set, _index, direction, colors
+                )
+                stem = f"{output_name}_{stems[layer_value]}"
+                layer_dot_path = output_dir / f"{stem}.dot"
+                layer_dot_path.write_text(layer_dot.source, encoding="utf-8")
+                layer_dot.render(
+                    filename=str(output_dir / stem),
+                    format="png",
+                    cleanup=True,
+                )
+                click.echo(f"  Wrote {output_dir / f'{stem}.png'}")
+
+
+if __name__ == "__main__":
+    main()
