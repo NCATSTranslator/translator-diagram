@@ -219,10 +219,14 @@ gh api "repos/helxplatform/translator-devops/contents/helm?ref=develop" \
   --jq '.[] | select(.type=="dir") | .name'
 ```
 
-**Coverage is the first problem.** Of the 26 components recorded here, only
-five have a chart there: `answer-appraiser`, `jaeger`, `name-lookup`,
-`shepherd`, `test-harness`. The rest are deployed from charts that are
-private, elsewhere, or not Helm at all.
+**Coverage is the first problem.** Only five of those charts belong to the 26
+components recorded here — `answer-appraiser`, `jaeger`, `name-lookup`,
+`shepherd`, `test-harness` — and they cover seven components, because all
+three `shepherd-*` components share one chart. The rest are deployed from
+charts that are private, elsewhere, or not Helm at all. Two components are
+confirmed to have no chart at all rather than an unfound one:
+`translator-component-toolkit` and `translator-sdk` carry
+`helm_chart: null`.
 
 **`Chart.yaml` is empty boilerplate.** Across the charts checked, `home`,
 `sources`, `maintainers` and `keywords` are universally absent, and

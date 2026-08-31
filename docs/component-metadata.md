@@ -6,12 +6,18 @@ generator yet — `loading.py` still reads the Google Sheet.
 ## The problem
 
 The single source of truth today is a world-readable Google Sheet. It works,
-and it is about to stop working. The live export already has 19 columns, five
-of which nothing reads, and every new kind of link we want to record — the
+and it is about to stop working. The live export has 21 columns, seven of
+which nothing reads, and every new kind of link we want to record — the
 OpenAPI document, the Helm chart, the wiki page, the four deployment
 environments — makes it wider. Recording all of that in the sheet would turn
 this repo into a second copy of information that already exists somewhere
 else, and second copies go stale.
+
+That is not a prediction. While this proposal was being written the sheet
+gained two more columns, `GitHub Repo` and `Helm chart`, and one of them
+immediately needed two values in a single cell —
+`ui-fe|github.com/NCATSTranslator/ui-be`. The pressure is real and it is
+already being answered one column at a time.
 
 [Issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7)
 names the trap: *"We don't want this repo to become another documentation
