@@ -6,22 +6,21 @@ from translator_diagram.colors import FALLBACK_COLORS, ColorAssigner
 from translator_diagram.model import Component
 from translator_diagram.render import build_graph
 
+# The fields Component requires but most tests do not care about. Everything
+# else is forwarded straight to Component, so a field this file has never
+# heard of — hide, part_of, layer — reaches it, and a misspelled one raises
+# TypeError instead of being silently dropped and passing the test vacuously.
+_COMP_DEFAULTS = {
+    "owner": "None",
+    "itrb": "",
+    "refactor_status": "Continues into Refactor",
+    "notes": "",
+}
+
 
 def _comp(id_: str, **kwargs) -> Component:
-    """Build a Component with sensible defaults for the optional fields."""
-    return Component(
-        id=id_,
-        name=kwargs.get("name", id_),
-        owner=kwargs.get("owner", "None"),
-        itrb=kwargs.get("itrb", ""),
-        refactor_status=kwargs.get("refactor_status", "Continues into Refactor"),
-        notes=kwargs.get("notes", ""),
-        ubiquitous=kwargs.get("ubiquitous", False),
-        depends_on=kwargs.get("depends_on", []),
-        depends_on_planned=kwargs.get("depends_on_planned", []),
-        uses=kwargs.get("uses", []),
-        uses_planned=kwargs.get("uses_planned", []),
-    )
+    """Build a Component, defaulting the required fields tests rarely set."""
+    return Component(id=id_, **{"name": id_, **_COMP_DEFAULTS, **kwargs})
 
 
 def _source_for(components, **kwargs) -> str:
