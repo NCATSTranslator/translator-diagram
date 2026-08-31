@@ -31,7 +31,8 @@ DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
     is_flag=True,
     default=False,
     help="Download CSV from Google Sheet instead of reading a local file. "
-         "Reads GOOGLE_SHEET_ID from .env (cwd, then the script directory).",
+         "Reads GOOGLE_SHEET_ID from a .env file in the current directory or "
+         "one above it, or from the environment.",
 )
 @click.option(
     "--sheet-gid", "sheet_gid",

@@ -172,22 +172,20 @@ def download_sheet_csv(sheet_gid: int, output_dir: Path) -> Path:
 
     Returns the path it was written to, inside output_dir.
     """
-    # Look for .env in the working directory (and its parents) first, then
-    # fall back to one next to the script for users who run the tool from
-    # a different directory; override=False keeps the first value winning.
     # usecwd=True is load-bearing: a bare load_dotenv() resolves via
-    # find_dotenv(), which searches from *this module's* file, so it would
-    # quietly read the repo's own .env — and its GOOGLE_SHEET_ID — for
-    # someone who ran the tool in a directory with a .env of their own.
+    # find_dotenv(), which searches from *this module's* file rather than the
+    # working directory — so it would quietly read whatever .env happens to sit
+    # beside the installed package. This searches the working directory and its
+    # parents, which reaches the .env at the root of a checkout.
     cwd_env = find_dotenv(usecwd=True)
     if cwd_env:
         load_dotenv(cwd_env)
-    load_dotenv(Path(__file__).parent / ".env", override=False)
     sheet_id = os.environ.get("GOOGLE_SHEET_ID", "").strip()
     if not sheet_id:
         raise click.ClickException(
-            "GOOGLE_SHEET_ID is not set. Add it to .env in the current "
-            f"directory or next to {Path(__file__).name}."
+            "GOOGLE_SHEET_ID is not set. Put it in a .env file in the current "
+            "directory or one above it, or set it in the environment; "
+            "env.default at the repo root is the template."
         )
     url = (
         f"https://docs.google.com/spreadsheets/d/{sheet_id}"
