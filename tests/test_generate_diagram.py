@@ -1,4 +1,10 @@
-"""Tests for the pure functions in generate_diagram."""
+"""Tests for generate_diagram.
+
+Grouped by subject, in rough pipeline order: parsing a cell, loading a
+CSV, validating it, building the graph, writing the output files, and the
+CLI on top. Put a new test with the others on its subject rather than at
+the end — git log is where the chronology lives.
+"""
 
 import json
 import os
@@ -33,7 +39,44 @@ from generate_diagram import (
 )
 
 
-# --- parse_id_list ---------------------------------------------------------
+# --- Shared helpers ---------------------------------------------------------
+
+
+def _comp(id_: str, **kwargs) -> Component:
+    """Build a Component with sensible defaults for the optional fields."""
+    return Component(
+        id=id_,
+        name=kwargs.get("name", id_),
+        owner=kwargs.get("owner", "None"),
+        itrb=kwargs.get("itrb", ""),
+        refactor_status=kwargs.get("refactor_status", "Continues into Refactor"),
+        notes=kwargs.get("notes", ""),
+        ubiquitous=kwargs.get("ubiquitous", False),
+        depends_on=kwargs.get("depends_on", []),
+        depends_on_planned=kwargs.get("depends_on_planned", []),
+        uses=kwargs.get("uses", []),
+        uses_planned=kwargs.get("uses_planned", []),
+    )
+
+
+def _source_for(components, **kwargs) -> str:
+    colors = ColorAssigner({"None": "#E8E8E8"}, FALLBACK_COLORS)
+    return build_graph(
+        components, {"New in Refactor"}, "TB", colors, **kwargs
+    ).source
+
+
+CSV_FIXTURE = textwrap.dedent("""\
+    id,Name,Owner,Component in ITRB,Refactor status,Gets results from,Calls,Notes
+    bbb,Beta,DOGSLED,cat,Continues into Refactor,aaa,~ccc,
+    aaa,Alpha,NCATS,cat,New in Refactor,,,first note
+""")
+
+
+URL_CSV_HEADER = "id,Name,Refactor status,URL\n"
+
+
+# --- Cell parsing -----------------------------------------------------------
 
 
 class TestParseIdList:
@@ -59,7 +102,50 @@ class TestParseIdList:
         assert parse_id_list("~ foo") == ([], ["foo"])
 
 
-# --- ColorAssigner ---------------------------------------------------------
+class TestParseBool:
+    @pytest.mark.parametrize("value", ["TRUE", "true", "True", "yes", "Y", "1"])
+    def test_truthy_values(self, value):
+        assert _parse_bool(value) is True
+
+    @pytest.mark.parametrize("value", ["FALSE", "false", "no", "", "0", "  "])
+    def test_falsy_values(self, value):
+        assert _parse_bool(value) is False
+
+    def test_strips_whitespace(self):
+        assert _parse_bool("  TRUE  ") is True
+
+
+class TestParseExternals:
+    def test_empty(self):
+        assert parse_externals("") == []
+        assert parse_externals("   ") == []
+
+    def test_source_and_sink(self):
+        assert parse_externals("<Upstream, >User") == [
+            ("in", "Upstream"),
+            ("out", "User"),
+        ]
+
+    def test_quoted_name_containing_a_comma(self):
+        # The column is parsed as CSV so a name may contain a comma if quoted.
+        assert parse_externals('"<Upstream, service", >Researcher') == [
+            ("in", "Upstream, service"),
+            ("out", "Researcher"),
+        ]
+
+    def test_strips_whitespace_around_prefix_and_name(self):
+        assert parse_externals("  <  DB  ") == [("in", "DB")]
+
+    def test_undirected_token_is_dropped_with_a_warning(self, capsys):
+        # A missing '<' or '>' is a typo in the sheet; dropping it silently
+        # would just make the node vanish.
+        assert parse_externals("User, >Sink", "comp-a") == [("out", "Sink")]
+        err = capsys.readouterr().err
+        assert "external 'User'" in err
+        assert "comp-a" in err
+
+
+# --- Owner colours ----------------------------------------------------------
 
 
 class TestColorAssigner:
@@ -97,9 +183,6 @@ class TestColorAssigner:
         assert ca2.get("teamC") == FALLBACK_COLORS[0]
 
 
-# --- text_color_for --------------------------------------------------------
-
-
 class TestTextColorFor:
     def test_pure_white_picks_black(self):
         assert text_color_for("#FFFFFF") == "black"
@@ -117,159 +200,6 @@ class TestTextColorFor:
 
     def test_accepts_hex_without_hash(self):
         assert text_color_for("FFFFFF") == "black"
-
-
-# --- index_by_id -----------------------------------------------------------
-
-
-def _comp(id_: str, **kwargs) -> Component:
-    """Build a Component with sensible defaults for the optional fields."""
-    return Component(
-        id=id_,
-        name=kwargs.get("name", id_),
-        owner=kwargs.get("owner", "None"),
-        itrb=kwargs.get("itrb", ""),
-        refactor_status=kwargs.get("refactor_status", "Continues into Refactor"),
-        notes=kwargs.get("notes", ""),
-        ubiquitous=kwargs.get("ubiquitous", False),
-        depends_on=kwargs.get("depends_on", []),
-        depends_on_planned=kwargs.get("depends_on_planned", []),
-        uses=kwargs.get("uses", []),
-        uses_planned=kwargs.get("uses_planned", []),
-    )
-
-
-class TestIndexById:
-    def test_lookup_is_case_insensitive(self):
-        index = index_by_id([_comp("Foo"), _comp("bar")])
-        assert index["foo"].id == "Foo"
-        assert index["bar"].id == "bar"
-
-    def test_missing_returns_none(self):
-        index = index_by_id([_comp("foo")])
-        assert index.get("nope") is None
-
-
-# --- validate --------------------------------------------------------------
-
-
-class TestValidate:
-    def test_clean_input_returns_true(self):
-        components = [
-            _comp("a", depends_on=["b"]),
-            _comp("b"),
-        ]
-        assert validate(components) is True
-
-    def test_unknown_ref_is_hard_error(self, capsys):
-        components = [_comp("a", depends_on=["ghost"])]
-        assert validate(components) is False
-        assert "unknown id 'ghost'" in capsys.readouterr().err
-
-    def test_unknown_planned_ref_is_hard_error(self):
-        components = [_comp("a", depends_on_planned=["ghost"])]
-        assert validate(components) is False
-
-    def test_duplicate_id_is_hard_error(self, capsys):
-        components = [_comp("foo"), _comp("foo")]
-        assert validate(components) is False
-        assert "duplicate id" in capsys.readouterr().err
-
-    def test_case_insensitive_duplicate_is_hard_error(self):
-        components = [_comp("Foo"), _comp("foo")]
-        assert validate(components) is False
-
-    def test_case_mismatch_is_warning_not_error(self, capsys):
-        # case-mismatch is informational only — build_graph resolves
-        # case-insensitively. The return must stay True.
-        components = [
-            _comp("foo"),
-            _comp("a", depends_on=["FOO"]),
-        ]
-        assert validate(components) is True
-        assert "case mismatch" in capsys.readouterr().err
-
-
-# --- Component -------------------------------------------------------------
-
-
-class TestComponent:
-    def test_display_name_falls_back_to_id_when_name_empty(self):
-        c = _comp("foo", name="")
-        assert c.display_name == "foo"
-
-    def test_display_name_uses_name_when_present(self):
-        c = _comp("foo", name="Foo Service")
-        assert c.display_name == "Foo Service"
-
-    def test_all_refs_concatenates_all_four_lists(self):
-        c = _comp(
-            "x",
-            depends_on=["a"],
-            depends_on_planned=["b"],
-            uses=["c"],
-            uses_planned=["d"],
-        )
-        assert c.all_refs() == ["a", "b", "c", "d"]
-
-
-# --- load_components -------------------------------------------------------
-
-
-CSV_FIXTURE = textwrap.dedent("""\
-    id,Name,Owner,Component in ITRB,Refactor status,Gets results from,Calls,Notes
-    bbb,Beta,DOGSLED,cat,Continues into Refactor,aaa,~ccc,
-    aaa,Alpha,NCATS,cat,New in Refactor,,,first note
-""")
-
-
-class TestLoadComponents:
-    def test_parses_csv_and_sorts_by_id(self, tmp_path):
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text(CSV_FIXTURE, encoding="utf-8")
-        components = load_components(csv_path)
-        assert [c.id for c in components] == ["aaa", "bbb"]
-        assert components[0].name == "Alpha"
-        assert components[0].refactor_status == "New in Refactor"
-        assert components[1].depends_on == ["aaa"]
-        assert components[1].uses_planned == ["ccc"]
-
-    def test_tolerates_utf8_bom(self, tmp_path):
-        # An Excel resave can prepend a UTF-8 BOM. With plain utf-8 the
-        # first header would become "﻿id" and KeyError on c.id.
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_bytes("﻿".encode("utf-8") + CSV_FIXTURE.encode("utf-8"))
-        components = load_components(csv_path)
-        assert components[0].id == "aaa"
-
-    def test_empty_owner_becomes_none(self, tmp_path):
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text(
-            "id,Name,Owner,Component in ITRB,Refactor status,"
-            "Gets results from,Calls,Notes\n"
-            "x,Ex,,,New in Refactor,,,\n",
-            encoding="utf-8",
-        )
-        components = load_components(csv_path)
-        assert components[0].owner == "None"
-
-    def test_reads_url_column(self, tmp_path):
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text(
-            "id,Name,URL,Refactor status\n"
-            "x,Ex, https://example.org/x ,New in Refactor\n",
-            encoding="utf-8",
-        )
-        assert load_components(csv_path)[0].url == "https://example.org/x"
-
-    def test_missing_url_column_defaults_to_empty(self, tmp_path):
-        # CSV_FIXTURE has no URL column — older exports of the sheet won't.
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text(CSV_FIXTURE, encoding="utf-8")
-        assert all(c.url == "" for c in load_components(csv_path))
-
-
-# --- load_owner_colors -----------------------------------------------------
 
 
 class TestLoadOwnerColors:
@@ -327,23 +257,87 @@ class TestLoadOwnerColors:
         assert result["NCATS"].startswith("#")
 
 
-# --- _parse_bool -----------------------------------------------------------
+# --- Component and lookup ---------------------------------------------------
 
 
-class TestParseBool:
-    @pytest.mark.parametrize("value", ["TRUE", "true", "True", "yes", "Y", "1"])
-    def test_truthy_values(self, value):
-        assert _parse_bool(value) is True
+class TestComponent:
+    def test_display_name_falls_back_to_id_when_name_empty(self):
+        c = _comp("foo", name="")
+        assert c.display_name == "foo"
 
-    @pytest.mark.parametrize("value", ["FALSE", "false", "no", "", "0", "  "])
-    def test_falsy_values(self, value):
-        assert _parse_bool(value) is False
+    def test_display_name_uses_name_when_present(self):
+        c = _comp("foo", name="Foo Service")
+        assert c.display_name == "Foo Service"
 
-    def test_strips_whitespace(self):
-        assert _parse_bool("  TRUE  ") is True
+    def test_all_refs_concatenates_all_four_lists(self):
+        c = _comp(
+            "x",
+            depends_on=["a"],
+            depends_on_planned=["b"],
+            uses=["c"],
+            uses_planned=["d"],
+        )
+        assert c.all_refs() == ["a", "b", "c", "d"]
 
 
-# --- Ubiquitous column in load_components ----------------------------------
+class TestIndexById:
+    def test_lookup_is_case_insensitive(self):
+        index = index_by_id([_comp("Foo"), _comp("bar")])
+        assert index["foo"].id == "Foo"
+        assert index["bar"].id == "bar"
+
+    def test_missing_returns_none(self):
+        index = index_by_id([_comp("foo")])
+        assert index.get("nope") is None
+
+
+# --- Loading the CSV --------------------------------------------------------
+
+
+class TestLoadComponents:
+    def test_parses_csv_and_sorts_by_id(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(CSV_FIXTURE, encoding="utf-8")
+        components = load_components(csv_path)
+        assert [c.id for c in components] == ["aaa", "bbb"]
+        assert components[0].name == "Alpha"
+        assert components[0].refactor_status == "New in Refactor"
+        assert components[1].depends_on == ["aaa"]
+        assert components[1].uses_planned == ["ccc"]
+
+    def test_tolerates_utf8_bom(self, tmp_path):
+        # An Excel resave can prepend a UTF-8 BOM. With plain utf-8 the
+        # first header would become "﻿id" and KeyError on c.id.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_bytes("﻿".encode("utf-8") + CSV_FIXTURE.encode("utf-8"))
+        components = load_components(csv_path)
+        assert components[0].id == "aaa"
+
+    def test_empty_owner_becomes_none(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Owner,Component in ITRB,Refactor status,"
+            "Gets results from,Calls,Notes\n"
+            "x,Ex,,,New in Refactor,,,\n",
+            encoding="utf-8",
+        )
+        components = load_components(csv_path)
+        assert components[0].owner == "None"
+
+    def test_reads_url_column(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,URL,Refactor status\n"
+            "x,Ex, https://example.org/x ,New in Refactor\n",
+            encoding="utf-8",
+        )
+        assert load_components(csv_path)[0].url == "https://example.org/x"
+
+    def test_missing_url_column_defaults_to_empty(self, tmp_path):
+        # CSV_FIXTURE has no URL column — older exports of the sheet won't.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(CSV_FIXTURE, encoding="utf-8")
+        assert all(c.url == "" for c in load_components(csv_path))
 
 
 class TestUbiquitousColumn:
@@ -377,45 +371,6 @@ class TestUbiquitousColumn:
         assert _comp("foo").ubiquitous is False
 
 
-# --- parse_externals -------------------------------------------------------
-
-
-class TestParseExternals:
-    def test_empty(self):
-        assert parse_externals("") == []
-        assert parse_externals("   ") == []
-
-    def test_source_and_sink(self):
-        assert parse_externals("<Upstream, >User") == [
-            ("in", "Upstream"),
-            ("out", "User"),
-        ]
-
-    def test_quoted_name_containing_a_comma(self):
-        # The column is parsed as CSV so a name may contain a comma if quoted.
-        assert parse_externals('"<Upstream, service", >Researcher') == [
-            ("in", "Upstream, service"),
-            ("out", "Researcher"),
-        ]
-
-    def test_strips_whitespace_around_prefix_and_name(self):
-        assert parse_externals("  <  DB  ") == [("in", "DB")]
-
-    def test_undirected_token_is_dropped_with_a_warning(self, capsys):
-        # A missing '<' or '>' is a typo in the sheet; dropping it silently
-        # would just make the node vanish.
-        assert parse_externals("User, >Sink", "comp-a") == [("out", "Sink")]
-        err = capsys.readouterr().err
-        assert "external 'User'" in err
-        assert "comp-a" in err
-
-
-# --- URL column ------------------------------------------------------------
-
-
-URL_CSV_HEADER = "id,Name,Refactor status,URL\n"
-
-
 class TestUrlValidation:
     def test_http_and_https_pass_through(self, tmp_path):
         csv_path = tmp_path / "components.csv"
@@ -441,8 +396,11 @@ class TestUrlValidation:
         assert load_components(csv_path)[0].url == ""
         assert "not http(s)" in capsys.readouterr().err
 
+    def test_uppercase_scheme_is_accepted(self):
+        assert _valid_url("HTTPS://example.org", "a") == "HTTPS://example.org"
 
-# --- blank rows ------------------------------------------------------------
+    def test_javascript_url_is_dropped(self):
+        assert _valid_url("javascript:alert(1)", "a") == ""
 
 
 class TestBlankRows:
@@ -482,91 +440,6 @@ class TestBlankRows:
         assert "Forgotten" in capsys.readouterr().err
 
 
-# --- SVG node attributes ---------------------------------------------------
-
-
-def _source_for(components, **kwargs) -> str:
-    colors = ColorAssigner({"None": "#E8E8E8"}, FALLBACK_COLORS)
-    return build_graph(
-        components, {"New in Refactor"}, "TB", colors, **kwargs
-    ).source
-
-
-class TestSvgNodeAttributes:
-    def test_node_gets_a_stable_id_matching_its_component_id(self):
-        # The Pages view addresses nodes by id, not graphviz's node1/node2.
-        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
-        assert "id=ars" in source
-
-    def test_url_becomes_a_graphviz_url_attribute(self):
-        comp = _comp("ars", refactor_status="New in Refactor")
-        comp.url = "https://example.org/ars"
-        source = _source_for([comp])
-        assert 'URL="https://example.org/ars"' in source
-        assert "target=_blank" in source
-
-    def test_no_url_attribute_when_the_column_is_empty(self):
-        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
-        assert "URL=" not in source
-
-    def test_tooltip_carries_owner_status_and_notes(self):
-        comp = _comp(
-            "ars",
-            owner="NCATS",
-            refactor_status="New in Refactor",
-            notes="Runs the queries",
-        )
-        source = _source_for([comp])
-        assert "Owner: NCATS" in source
-        assert "Status: New in Refactor" in source
-        assert "Runs the queries" in source
-
-
-# --- edge styles -----------------------------------------------------------
-
-
-class TestEdgeStyles:
-    def test_implemented_call_suppresses_a_planned_call_to_the_same_target(self):
-        # "Calls: b, ~b" is contradictory data. Draw the implemented edge only,
-        # mirroring how depends_on outranks depends_on_planned — two dashed
-        # edges between one pair merge under concentrate=true anyway.
-        components = [
-            _comp("a", refactor_status="New in Refactor",
-                  uses=["b"], uses_planned=["b"]),
-            _comp("b", refactor_status="New in Refactor"),
-        ]
-        edges = [ln for ln in _source_for(components).splitlines()
-                 if "a -> b" in ln]
-        assert len(edges) == 1
-        assert "color=red" not in edges[0]
-
-    def test_planned_call_renders_when_there_is_no_implemented_one(self):
-        components = [
-            _comp("a", refactor_status="New in Refactor", uses_planned=["b"]),
-            _comp("b", refactor_status="New in Refactor"),
-        ]
-        edges = [ln for ln in _source_for(components).splitlines()
-                 if "a -> b" in ln]
-        assert len(edges) == 1
-        assert "color=red" in edges[0]
-
-    def test_solid_edge_suppresses_a_dashed_one_in_the_same_direction(self):
-        # a gets results from b  → solid b -> a.
-        # b calls a              → dashed b -> a, same direction, suppressed
-        #                          so --concentrate can't merge away the solid.
-        components = [
-            _comp("a", refactor_status="New in Refactor", depends_on=["b"]),
-            _comp("b", refactor_status="New in Refactor", uses=["a"]),
-        ]
-        edges = [ln for ln in _source_for(components).splitlines()
-                 if "b -> a" in ln]
-        assert len(edges) == 1
-        assert "dashed" not in edges[0]
-
-
-# --- regressions from the PR #1 review -------------------------------------
-
-
 class TestShortCsvRows:
     def test_row_missing_trailing_fields_parses(self, tmp_path):
         # csv.DictReader defaults absent trailing fields to None, not "".
@@ -584,82 +457,60 @@ class TestShortCsvRows:
             load_owner_colors(path)
 
 
-class TestSvgIds:
-    def test_punctuated_id_becomes_a_valid_xml_id(self):
-        assert _svg_id("ARS 2.0") == "ars_2_0"
+class TestMissingIdColumn:
+    def test_a_csv_without_an_id_column_is_an_error(self, tmp_path):
+        # The wrong --sheet-gid returns a real CSV from the wrong tab, and
+        # every row was then skipped as id-less, leaving a blank diagram.
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("Name,Owner\nARS,NCATS\n", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="no 'id' column"):
+            load_components(csv_path)
 
-    def test_leading_digit_is_prefixed(self):
-        # XML IDs may not start with a digit, so getElementById would fail.
-        assert _svg_id("2fast").startswith("n_")
-
-    def test_node_id_attribute_is_sanitised(self):
-        source = _source_for([_comp("ARS 2.0", refactor_status="New in Refactor")])
-        assert "id=ars_2_0" in source
-
-    def test_ids_differing_only_in_punctuation_are_an_error(self, capsys):
-        assert validate([_comp("ARS 2.0"), _comp("ARS/2/0")]) is False
-        assert "SVG id" in capsys.readouterr().err
-
-    def test_unique_svg_id_separates_colliding_labels(self):
-        taken: dict[str, str] = {}
-        assert _unique_svg_id("User agent", taken) == "user_agent"
-        assert _unique_svg_id("User/agent", taken) == "user_agent_2"
-        # Re-asking for one already assigned returns the same id.
-        assert _unique_svg_id("User agent", taken) == "user_agent"
+    def test_an_empty_file_is_an_error(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("", encoding="utf-8")
+        with pytest.raises(click.ClickException, match="no columns at all"):
+            load_components(csv_path)
 
 
-class TestExternals:
-    def test_a_name_used_both_ways_emits_one_node(self):
-        a = _comp("a", refactor_status="New in Refactor")
-        a.externals = [("in", "User")]
-        b = _comp("b", refactor_status="New in Refactor")
-        b.externals = [("out", "User")]
-        source = _source_for([a, b])
-        # One node declaration, and no rank constraint at all — rank=min and
-        # rank=max on the same node contradict each other.
-        lines = source.splitlines()
-        assert len([ln for ln in lines
-                    if "ext__user" in ln and "label=User" in ln]) == 1
-        ranked = {lines[i + 1].strip() for i, ln in enumerate(lines)
-                  if ln.strip() in ("rank=min", "rank=max")}
-        assert "ext__user" not in ranked
-
-    def test_names_that_sanitise_alike_stay_separate(self):
-        a = _comp("a", refactor_status="New in Refactor")
-        a.externals = [("in", "User agent"), ("in", "User/agent")]
-        source = _source_for([a])
-        assert "ext__user_agent " in source or "ext__user_agent\t" in source
-        assert "ext__user_agent_2" in source
+# --- Validation -------------------------------------------------------------
 
 
-class TestUbiquitousFiltering:
-    def test_excluded_ubiquitous_target_is_not_rendered(self):
-        u = _comp("u", refactor_status="Removed in Refactor", ubiquitous=True)
-        a = _comp("a", refactor_status="New in Refactor", uses=["u"])
-        source = _source_for([a, u])
-        assert "a__u" not in source
-
-
-class TestEdgeStyleOrdering:
-    def test_solid_suppresses_dashed_when_the_target_sorts_last(self):
-        # Mirror of the existing test with the ids swapped: the solid edge is
-        # registered by z, which the iteration reaches after a.
+class TestValidate:
+    def test_clean_input_returns_true(self):
         components = [
-            _comp("a", refactor_status="New in Refactor", uses=["z"]),
-            _comp("z", refactor_status="New in Refactor", depends_on=["a"]),
+            _comp("a", depends_on=["b"]),
+            _comp("b"),
         ]
-        edges = [ln for ln in _source_for(components).splitlines()
-                 if "a -> z" in ln]
-        assert len(edges) == 1
-        assert "dashed" not in edges[0]
+        assert validate(components) is True
 
+    def test_unknown_ref_is_hard_error(self, capsys):
+        components = [_comp("a", depends_on=["ghost"])]
+        assert validate(components) is False
+        assert "unknown id 'ghost'" in capsys.readouterr().err
 
-class TestValidUrl:
-    def test_uppercase_scheme_is_accepted(self):
-        assert _valid_url("HTTPS://example.org", "a") == "HTTPS://example.org"
+    def test_unknown_planned_ref_is_hard_error(self):
+        components = [_comp("a", depends_on_planned=["ghost"])]
+        assert validate(components) is False
 
-    def test_javascript_url_is_dropped(self):
-        assert _valid_url("javascript:alert(1)", "a") == ""
+    def test_duplicate_id_is_hard_error(self, capsys):
+        components = [_comp("foo"), _comp("foo")]
+        assert validate(components) is False
+        assert "duplicate id" in capsys.readouterr().err
+
+    def test_case_insensitive_duplicate_is_hard_error(self):
+        components = [_comp("Foo"), _comp("foo")]
+        assert validate(components) is False
+
+    def test_case_mismatch_is_warning_not_error(self, capsys):
+        # case-mismatch is informational only — build_graph resolves
+        # case-insensitively. The return must stay True.
+        components = [
+            _comp("foo"),
+            _comp("a", depends_on=["FOO"]),
+        ]
+        assert validate(components) is True
+        assert "case mismatch" in capsys.readouterr().err
 
 
 class TestLabelCollisionWarnings:
@@ -684,7 +535,31 @@ class TestLabelCollisionWarnings:
         assert capsys.readouterr().err == ""
 
 
-# --- regressions from the second PR #1 review ------------------------------
+# --- SVG ids ----------------------------------------------------------------
+
+
+class TestSvgIds:
+    def test_punctuated_id_becomes_a_valid_xml_id(self):
+        assert _svg_id("ARS 2.0") == "ars_2_0"
+
+    def test_leading_digit_is_prefixed(self):
+        # XML IDs may not start with a digit, so getElementById would fail.
+        assert _svg_id("2fast").startswith("n_")
+
+    def test_node_id_attribute_is_sanitised(self):
+        source = _source_for([_comp("ARS 2.0", refactor_status="New in Refactor")])
+        assert "id=ars_2_0" in source
+
+    def test_ids_differing_only_in_punctuation_are_an_error(self, capsys):
+        assert validate([_comp("ARS 2.0"), _comp("ARS/2/0")]) is False
+        assert "SVG id" in capsys.readouterr().err
+
+    def test_unique_svg_id_separates_colliding_labels(self):
+        taken: dict[str, str] = {}
+        assert _unique_svg_id("User agent", taken) == "user_agent"
+        assert _unique_svg_id("User/agent", taken) == "user_agent_2"
+        # Re-asking for one already assigned returns the same id.
+        assert _unique_svg_id("User agent", taken) == "user_agent"
 
 
 def _ubiquitous_pair():
@@ -744,6 +619,125 @@ class TestSvgIdNamespace:
         assert external_svg_ids([a, b])["User"] == "ext__user"
 
 
+# --- Graph output -----------------------------------------------------------
+
+
+class TestSvgNodeAttributes:
+    def test_node_gets_a_stable_id_matching_its_component_id(self):
+        # The Pages view addresses nodes by id, not graphviz's node1/node2.
+        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
+        assert "id=ars" in source
+
+    def test_url_becomes_a_graphviz_url_attribute(self):
+        comp = _comp("ars", refactor_status="New in Refactor")
+        comp.url = "https://example.org/ars"
+        source = _source_for([comp])
+        assert 'URL="https://example.org/ars"' in source
+        assert "target=_blank" in source
+
+    def test_no_url_attribute_when_the_column_is_empty(self):
+        source = _source_for([_comp("ars", refactor_status="New in Refactor")])
+        assert "URL=" not in source
+
+    def test_tooltip_carries_owner_status_and_notes(self):
+        comp = _comp(
+            "ars",
+            owner="NCATS",
+            refactor_status="New in Refactor",
+            notes="Runs the queries",
+        )
+        source = _source_for([comp])
+        assert "Owner: NCATS" in source
+        assert "Status: New in Refactor" in source
+        assert "Runs the queries" in source
+
+
+class TestExternalNodes:
+    def test_a_name_used_both_ways_emits_one_node(self):
+        a = _comp("a", refactor_status="New in Refactor")
+        a.externals = [("in", "User")]
+        b = _comp("b", refactor_status="New in Refactor")
+        b.externals = [("out", "User")]
+        source = _source_for([a, b])
+        # One node declaration, and no rank constraint at all — rank=min and
+        # rank=max on the same node contradict each other.
+        lines = source.splitlines()
+        assert len([ln for ln in lines
+                    if "ext__user" in ln and "label=User" in ln]) == 1
+        ranked = {lines[i + 1].strip() for i, ln in enumerate(lines)
+                  if ln.strip() in ("rank=min", "rank=max")}
+        assert "ext__user" not in ranked
+
+    def test_names_that_sanitise_alike_stay_separate(self):
+        a = _comp("a", refactor_status="New in Refactor")
+        a.externals = [("in", "User agent"), ("in", "User/agent")]
+        source = _source_for([a])
+        assert "ext__user_agent " in source or "ext__user_agent\t" in source
+        assert "ext__user_agent_2" in source
+
+
+class TestUbiquitousFiltering:
+    def test_excluded_ubiquitous_target_is_not_rendered(self):
+        u = _comp("u", refactor_status="Removed in Refactor", ubiquitous=True)
+        a = _comp("a", refactor_status="New in Refactor", uses=["u"])
+        source = _source_for([a, u])
+        assert "a__u" not in source
+
+
+class TestEdgeStyles:
+    def test_implemented_call_suppresses_a_planned_call_to_the_same_target(self):
+        # "Calls: b, ~b" is contradictory data. Draw the implemented edge only,
+        # mirroring how depends_on outranks depends_on_planned — two dashed
+        # edges between one pair merge under concentrate=true anyway.
+        components = [
+            _comp("a", refactor_status="New in Refactor",
+                  uses=["b"], uses_planned=["b"]),
+            _comp("b", refactor_status="New in Refactor"),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> b" in ln]
+        assert len(edges) == 1
+        assert "color=red" not in edges[0]
+
+    def test_planned_call_renders_when_there_is_no_implemented_one(self):
+        components = [
+            _comp("a", refactor_status="New in Refactor", uses_planned=["b"]),
+            _comp("b", refactor_status="New in Refactor"),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> b" in ln]
+        assert len(edges) == 1
+        assert "color=red" in edges[0]
+
+    def test_solid_edge_suppresses_a_dashed_one_in_the_same_direction(self):
+        # a gets results from b  → solid b -> a.
+        # b calls a              → dashed b -> a, same direction, suppressed
+        #                          so --concentrate can't merge away the solid.
+        components = [
+            _comp("a", refactor_status="New in Refactor", depends_on=["b"]),
+            _comp("b", refactor_status="New in Refactor", uses=["a"]),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "b -> a" in ln]
+        assert len(edges) == 1
+        assert "dashed" not in edges[0]
+
+    def test_solid_suppresses_dashed_when_the_target_sorts_last(self):
+        # Mirror of the test above with the ids swapped: the solid edge is
+        # registered by z, which the iteration reaches after a.
+        components = [
+            _comp("a", refactor_status="New in Refactor", uses=["z"]),
+            _comp("z", refactor_status="New in Refactor", depends_on=["a"]),
+        ]
+        edges = [ln for ln in _source_for(components).splitlines()
+                 if "a -> z" in ln]
+        assert len(edges) == 1
+        assert "dashed" not in edges[0]
+
+
+# --- components.json and per-layer filenames --------------------------------
+
+
 class TestComponentsJson:
     def _written(self, tmp_path, components):
         out = tmp_path / "components.json"
@@ -798,20 +792,7 @@ class TestLayerFilenames:
         assert capsys.readouterr().err == ""
 
 
-class TestMissingIdColumn:
-    def test_a_csv_without_an_id_column_is_an_error(self, tmp_path):
-        # The wrong --sheet-gid returns a real CSV from the wrong tab, and
-        # every row was then skipped as id-less, leaving a blank diagram.
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text("Name,Owner\nARS,NCATS\n", encoding="utf-8")
-        with pytest.raises(click.ClickException, match="no 'id' column"):
-            load_components(csv_path)
-
-    def test_an_empty_file_is_an_error(self, tmp_path):
-        csv_path = tmp_path / "components.csv"
-        csv_path.write_text("", encoding="utf-8")
-        with pytest.raises(click.ClickException, match="no columns at all"):
-            load_components(csv_path)
+# --- The CLI ----------------------------------------------------------------
 
 
 class TestGoogleSheetEnv:
