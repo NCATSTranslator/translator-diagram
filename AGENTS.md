@@ -215,5 +215,6 @@ that view; the browser needs the generated DOT, not the generator.
 `data/` is gitignored in its entirety, so no generated diagram, `.dot`, `.json`
 or downloaded CSV is in the repo. That is currently load-bearing: this repo and
 its future GitHub Pages site are public, and what may be published from the
-component sheet has not been decided yet. Don't commit generated artifacts
-without checking first.
+component sheet is still being decided — see
+[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7).
+Don't commit generated artifacts without checking first.

@@ -270,9 +270,11 @@ Actions workflow will regenerate from the sheet on a schedule and deploy.
 **Open question, to settle before that ships:** this repository and its Pages
 site are public, so publishing a rendered diagram publishes the component
 names, owners, statuses and dependency edges it contains. That needs a
-deliberate decision — publish everything, gate it behind an opt-in `Public`
-column in the sheet, or strip the free-text fields. Until then nothing
-generated is committed; `data/` stays gitignored.
+deliberate decision, tracked in
+[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) —
+publish everything, gate it behind an opt-in `Public` column in the sheet, or
+strip the free-text fields. Until then nothing generated is committed; `data/`
+stays gitignored.
 
 Note that the SVG carries more than the picture shows: every node's hover
 tooltip embeds its owner, refactor status and `Notes`, and `components.json`
