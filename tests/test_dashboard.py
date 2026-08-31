@@ -7,6 +7,7 @@ import pytest
 from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.dashboard import (
     SyncedData,
+    _helm_facts,
     _mark_drift,
     build_payload,
     build_rows,
@@ -91,6 +92,42 @@ class TestVersionSourceChain:
         assert (cell["version"], cell["version_source"]) == ("v1.5.2", "status")
         # babel_version is a *data* release, not the software version.
         assert cell["data_release"] == "babel 2025sep1 · biolink master"
+
+    def test_the_helm_chart_is_the_last_resort(self, tmp_path):
+        # Tier four, and the only tier that describes what *should* be
+        # deployed rather than what is. jaeger reaches it: no OpenAPI, no
+        # /status, no registration.
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        chart = tmp_path / "helm" / "my-chart"
+        chart.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("name: my-chart\nversion: 0.5.2\nappVersion: 1.16.0\n")
+        component = _comp(
+            "svc",
+            identifiers={"helm_chart": "my-chart"},
+            endpoints={"openapi": None},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.16.0", "helm")
+
+    def test_a_live_version_beats_the_chart(self, tmp_path):
+        # The chart says what was meant to ship; the endpoint says what did.
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        chart = tmp_path / "helm" / "my-chart"
+        chart.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("appVersion: 1.16.0\n")
+        live = tmp_path / "openapi" / "svc" / "ci.json"
+        live.parent.mkdir(parents=True)
+        live.write_text(json.dumps({"info": {"version": "1.17.0"}}))
+        component = _comp(
+            "svc",
+            identifiers={"helm_chart": "my-chart"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.17.0", "openapi")
 
     def test_no_source_at_all_is_recorded_as_such(self, tmp_path):
         (tmp_path / "manifest.json").write_text('{"fetches": []}')
@@ -241,3 +278,34 @@ class TestDerivedDeployments:
                     "test": {"url": "https://svc.test.transltr.io/"}}}))
         payload = build_payload([_comp("svc")], SyncedData(tmp_path))
         assert payload["derived_count"] == 2
+
+
+class TestHelmFacts:
+    def test_images_come_from_the_per_chart_manifest(self, tmp_path):
+        # Chart.yaml carries no image information at all; ncats-images-meta.yaml
+        # is where it lives, and its keys are per-chart rather than a schema.
+        chart = tmp_path / "helm" / "name-lookup"
+        chart.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("version: 0.5.2\nappVersion: 1.5.2_2025sep1\n")
+        (chart / "ncats-images-meta.yaml").write_text(
+            "nameLookup:\n  image: ghcr.io/ncatstranslator/nameresolution\n"
+            "  version: v1.5.2\nsolr:\n  image: solr\n  version: '9.1'\n"
+        )
+        facts = _helm_facts(SyncedData(tmp_path), "name-lookup")
+        assert facts["version"] == "1.5.2_2025sep1"
+        assert facts["chart_version"] == "0.5.2"
+        assert facts["images"] == ["nameresolution:v1.5.2", "solr:9.1"]
+
+    def test_a_missing_chart_is_empty_not_an_error(self, tmp_path):
+        assert _helm_facts(SyncedData(tmp_path), "no-such-chart") == {
+            "version": None, "chart_version": None, "images": []}
+
+    def test_no_chart_recorded_yields_nothing(self, tmp_path):
+        assert _helm_facts(SyncedData(tmp_path), None) == {}
+
+    def test_malformed_yaml_does_not_raise(self, tmp_path):
+        # A 200 that was not really YAML. The page must still render.
+        chart = tmp_path / "helm" / "broken"
+        chart.mkdir(parents=True)
+        (chart / "Chart.yaml").write_text("this: [is: not: valid\n")
+        assert _helm_facts(SyncedData(tmp_path), "broken")["version"] is None
