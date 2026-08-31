@@ -23,7 +23,9 @@ from typing import Any
 
 from .components import (
     ComponentFile,
+    Deployment,
     deployments_from_smartapi,
+    derive_deployments,
     endpoint_url_in,
     merge_deployments,
 )
@@ -177,6 +179,46 @@ def _plan_endpoint_fetches(
     return jobs
 
 
+def _confirm_derived(
+    component: ComponentFile,
+    candidate: Deployment,
+    fetcher: Fetcher,
+    root: Path,
+    max_age: int,
+) -> FetchResult | None:
+    """Contact a derived host, and keep it only if it is really this component.
+
+    A 200 alone is not enough. Hostnames in one namespace can and do resolve to
+    something adjacent, so where the component records an infores the document
+    has to report the same one. That check is the difference between
+    discovering a deployment and guessing at one, and it is why these URLs can
+    be believed without a human confirming each.
+
+    Where there is no recorded infores there is nothing to check against, and
+    the candidate is dropped: an unverifiable guess is worth less than a gap.
+    """
+    if not component.infores:
+        return None
+    url = endpoint_url_in(component, candidate, "openapi")
+    if not url:
+        return None
+    destination = root / "openapi" / component.id / f"{candidate.env}.json"
+    result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
+    if not result.ok:
+        return None
+    try:
+        document = json.loads(destination.read_text(encoding="utf-8"))
+        reported = (document.get("info", {}).get("x-translator") or {}).get("infores")
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        reported = None
+    if reported != component.infores:
+        # Answered, but it is not this component. Drop the body so a later run
+        # does not read it as though it were.
+        destination.unlink(missing_ok=True)
+        return None
+    return result
+
+
 def sync(
     components: list[ComponentFile],
     root: Path,
@@ -240,6 +282,42 @@ def sync(
     endpoint_jobs = _plan_endpoint_fetches(components, by_smartapi, root)
     echo(f"Fetching {len(endpoint_jobs)} component endpoints ...")
     run(endpoint_jobs)
+
+    # Wave three: the environments nobody registered. ITRB's hostnames follow a
+    # convention, so knowing one tells us where to look for the others —
+    # answer-appraiser registers only production but is deployed to ci and test
+    # as well. Each candidate is confirmed against the infores it reports
+    # before it is believed.
+    derived: dict[str, dict[str, Any]] = {}
+    pending = []
+    for component in components:
+        known = merge_deployments(
+            component, deployments_from_smartapi(
+                by_smartapi.get(component.smartapi_id or "", {})
+            )
+        )
+        for env, candidate in derive_deployments(known).items():
+            pending.append((component, env, candidate))
+    if pending:
+        echo(f"Probing {len(pending)} conventional hostnames ...")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            confirmed = list(pool.map(
+                lambda job: (job[0], job[1], job[2],
+                             _confirm_derived(job[0], job[2], fetcher, root, max_age)),
+                pending,
+            ))
+        for component, env, candidate, result in confirmed:
+            if result is None:
+                continue
+            report.fetches.append(result)
+            derived.setdefault(component.id, {})[env] = {
+                "url": candidate.url, "location": candidate.location,
+            }
+        found = sum(len(envs) for envs in derived.values())
+        echo(f"  {found} confirmed by the infores they report")
+    (root / "derived.json").write_text(
+        json.dumps(derived, indent=2) + "\n", encoding="utf-8"
+    )
 
     report.finished_at = _now()
     (root / "manifest.json").write_text(

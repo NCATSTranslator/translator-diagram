@@ -122,8 +122,11 @@ function envCell(row, env) {
     ? `<a class="sub" href="${esc(href)}" title="${esc(cell.url)}">${esc(host)}</a>`
     : "";
 
-  return `<td class="env${drift}" title="${esc(cell.url)}">${version}${detail}${
-    state.details ? link : ""}</td>`;
+  const title = cell.derived
+    ? `${cell.url} — not registered in SmartAPI; found at the conventional hostname`
+    : cell.url;
+  return `<td class="env${drift}${cell.derived ? " derived" : ""}" title="${
+    esc(title)}">${version}${detail}${state.details ? link : ""}</td>`;
 }
 
 function rowHtml(row) {
@@ -178,7 +181,12 @@ function findingSentence() {
     ? `, and <strong>${tally.none}</strong> from nothing at all`
     : "";
   if (!total) return "No deployments were found — has <code>sync-components</code> run?";
-  return `Of ${total} deployments, ${named.join(", ")}${none}.`;
+  const derived = DATA.derived_count
+    ? ` <strong>${DATA.derived_count}</strong> of those deployments are registered
+       nowhere — they were found by trying the conventional ITRB hostname and
+       confirmed by the infores they report.`
+    : "";
+  return `Of ${total} deployments, ${named.join(", ")}${none}.${derived}`;
 }
 
 function driftSentence() {

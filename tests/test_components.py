@@ -6,6 +6,7 @@ from translator_diagram.components import (
     DEFAULT_ENDPOINT_PATHS,
     ENVIRONMENTS,
     Deployment,
+    derive_deployments,
     endpoint_url_in,
     index_by_id,
     load_components,
@@ -160,6 +161,44 @@ class TestMergeDeployments:
         merged = merge_deployments(
             component, {"staging": Deployment(env="staging", url="https://s/")})
         assert merged == {}
+
+
+class TestDeriveDeployments:
+    def test_the_other_maturities_follow_from_one(self):
+        # answer-appraiser registers only production, and is deployed to ci and
+        # test as well. Knowing one host is knowing where to look for the rest.
+        known = {"prod": Deployment(env="prod", url="https://answerappraiser.transltr.io")}
+        assert {e: d.url for e, d in derive_deployments(known).items()} == {
+            "ci": "https://answerappraiser.ci.transltr.io/",
+            "test": "https://answerappraiser.test.transltr.io/",
+        }
+
+    def test_a_path_on_the_base_survives(self):
+        # arax registers .../api/arax/v1.4; a sibling host without that path
+        # would 404 and be silently dropped.
+        known = {"ci": Deployment(env="ci", url="https://arax.ci.transltr.io/api/arax/v1.4")}
+        assert derive_deployments(known)["prod"].url == (
+            "https://arax.transltr.io/api/arax/v1.4/")
+
+    def test_known_environments_are_left_alone(self):
+        known = {
+            "ci": Deployment(env="ci", url="https://x.ci.transltr.io"),
+            "prod": Deployment(env="prod", url="https://x.transltr.io"),
+        }
+        assert set(derive_deployments(known)) == {"test"}
+
+    def test_dev_is_never_derived(self):
+        # Development deployments live at RENCI, at BioThings, and elsewhere.
+        # There is no convention, so there is nothing to derive.
+        known = {"prod": Deployment(env="prod", url="https://x.transltr.io")}
+        assert "dev" not in derive_deployments(known)
+
+    def test_a_non_itrb_host_yields_nothing(self):
+        known = {"dev": Deployment(env="dev", url="https://x.renci.org/")}
+        assert derive_deployments(known) == {}
+
+    def test_nothing_known_derives_nothing(self):
+        assert derive_deployments({}) == {}
 
 
 class TestLoading:

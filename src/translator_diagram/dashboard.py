@@ -74,6 +74,13 @@ class SyncedData:
         self.smartapi = {
             hit["_id"]: hit for hit in payload.get("hits", []) if hit.get("_id")
         }
+        self.derived = {
+            cid: {
+                env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
+                for env, spec in envs.items()
+            }
+            for cid, envs in (_read_json(root / "derived.json") or {}).items()
+        }
         self.otel = {
             env: (_read_json(root / "otel" / f"{env}.json") or {}).get("data") or []
             for env in ("ci", "test", "prod")
@@ -245,8 +252,9 @@ def build_rows(
     rows = []
     for component in in_flow_order(components):
         record = synced.smartapi.get(component.smartapi_id or "", {})
+        derived = synced.derived.get(component.id, {})
         deployments = merge_deployments(
-            component, deployments_from_smartapi(record)
+            component, deployments_from_smartapi(record), derived
         )
         helm = _helm_facts(synced, component.helm_chart)
 
@@ -256,6 +264,11 @@ def build_rows(
             )
             for env in ENVIRONMENTS
         }
+        for env in derived:
+            if cells.get(env, {}).get("deployed"):
+                # Recorded so the page can say the registry did not know about
+                # it — the gap is a finding about registration, not a detail.
+                cells[env]["derived"] = True
         for key in ("version", "trapi", "biolink"):
             _mark_drift(cells, key)
 
@@ -318,6 +331,12 @@ def build_payload(
         "owner_colors": load_owner_colors(),
         "source_labels": SOURCE_LABELS,
         "source_tally": source_tally(rows),
+        "derived_count": sum(
+            1
+            for row in rows
+            for cell in row["environments"].values()
+            if cell.get("derived")
+        ),
         "otel_service_counts": {
             env: len(names) for env, names in synced.otel.items()
         },

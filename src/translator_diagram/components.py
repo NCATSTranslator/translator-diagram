@@ -11,15 +11,33 @@ Nothing here imports anything else in the package, and nothing here reaches
 the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 
 # Our environment ladder, in the order a change travels along it. Also the
 # column order in the dashboard, so it is defined once, here.
 ENVIRONMENTS = ("dev", "ci", "test", "prod")
+
+# ITRB deploys on a fixed hostname convention: `<stem>.ci.transltr.io`,
+# `<stem>.test.transltr.io`, `<stem>.transltr.io`. Knowing one environment's
+# host therefore tells you where to *look* for the others — which matters
+# because SmartAPI registration is manual and routinely incomplete.
+#
+# `dev` is deliberately absent: development deployments live at RENCI, at
+# BioThings, and elsewhere, with no convention to derive from.
+TRANSLTR_HOST = re.compile(
+    r"^(?P<stem>[^.]+)\.(?:(?P<maturity>ci|test)\.)?transltr\.io$"
+)
+DERIVABLE_HOSTS = {
+    "ci": "{stem}.ci.transltr.io",
+    "test": "{stem}.test.transltr.io",
+    "prod": "{stem}.transltr.io",
+}
 
 # Where an endpoint lives when the component file does not say. Only applied
 # when the key is *absent*: an explicit null means someone checked and this
@@ -198,17 +216,51 @@ def deployments_from_smartapi(record: dict[str, Any]) -> dict[str, Deployment]:
     return out
 
 
-def merge_deployments(
-    component: ComponentFile, discovered: dict[str, Deployment]
-) -> dict[str, Deployment]:
-    """Deployments for a component: what we recorded, plus what we found.
+def derive_deployments(known: dict[str, Deployment]) -> dict[str, Deployment]:
+    """Where a component's missing environments would be, by convention.
 
-    A recorded deployment wins. Those exist precisely because the discovered
-    source was wrong or absent — node-annotator is recorded because SmartAPI
-    registers it at a host that does not serve its OpenAPI — so letting the
-    discovery overwrite them would reintroduce the bug they document.
+    Candidates, not facts. Nothing here has been contacted, so a caller must
+    confirm each one before believing it — `sync` does that by fetching the
+    endpoint and checking the infores it reports. Deriving without confirming
+    would be guessing, which is the one thing these files must never do.
+
+    The stem and any path are taken from an environment we already know, so
+    arax's `/api/arax/v1.4` survives into its siblings.
     """
-    merged = dict(discovered)
+    stems: dict[str, str] = {}
+    for deployment in known.values():
+        parts = urlsplit(deployment.url)
+        match = TRANSLTR_HOST.match(parts.hostname or "")
+        if match:
+            stems.setdefault(match.group("stem"), parts.path.rstrip("/"))
+    candidates: dict[str, Deployment] = {}
+    for env, template in DERIVABLE_HOSTS.items():
+        if env in known:
+            continue
+        for stem, path in sorted(stems.items()):
+            host = template.format(stem=stem)
+            candidates[env] = Deployment(
+                env=env, url=f"https://{host}{path}/", location="ITRB"
+            )
+            break
+    return candidates
+
+
+def merge_deployments(
+    component: ComponentFile,
+    discovered: dict[str, Deployment],
+    derived: dict[str, Deployment] | None = None,
+) -> dict[str, Deployment]:
+    """Deployments for a component, best source first.
+
+    A recorded deployment wins over a registered one, which wins over a
+    derived one. Recorded entries exist precisely because the registry was
+    wrong or absent — node-annotator is recorded because SmartAPI registers it
+    at a host that does not serve its OpenAPI — so letting anything overwrite
+    them would reintroduce the bug they document.
+    """
+    merged = dict(derived or {})
+    merged.update(discovered)
     merged.update(component.environments)
     return {env: merged[env] for env in ENVIRONMENTS if env in merged}
 

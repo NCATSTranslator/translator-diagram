@@ -6,6 +6,7 @@ from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.sync import (
     SMARTAPI_QUERY,
     FetchResult,
+    _confirm_derived,
     deployments_from_smartapi,
     fetch_to,
     sync,
@@ -181,6 +182,66 @@ class TestSync:
                       tmp_path, fetcher=fetcher, max_age=0)
         assert report.succeeded >= 1
         assert any(f.error for f in report.fetches)
+
+
+class TestConfirmDerived:
+    """A derived host is believed only if it says it is the right component."""
+
+    def _openapi(self, infores):
+        return json.dumps({"info": {"version": "1.0", "x-translator": {
+            "infores": infores}}}).encode()
+
+    def test_a_matching_infores_is_accepted(self, tmp_path):
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        fetcher = FakeFetcher({
+            "https://svc.ci.transltr.io/openapi.json":
+                (200, self._openapi("infores:svc"))})
+        result = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
+        assert result is not None and result.ok
+        assert (tmp_path / "openapi" / "svc" / "ci.json").exists()
+
+    def test_a_different_infores_is_rejected_and_the_body_removed(self, tmp_path):
+        # A hostname in a shared namespace can answer for something adjacent.
+        # Keeping the body would let a later run read it as this component's.
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        fetcher = FakeFetcher({
+            "https://svc.ci.transltr.io/openapi.json":
+                (200, self._openapi("infores:something-else"))})
+        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+        assert not (tmp_path / "openapi" / "svc" / "ci.json").exists()
+
+    def test_no_recorded_infores_means_no_confirmation_is_possible(self, tmp_path):
+        # An unverifiable guess is worth less than a gap, so it is dropped
+        # rather than adopted on a bare 200.
+        component = _comp("svc")
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        fetcher = FakeFetcher({
+            "https://svc.ci.transltr.io/openapi.json": (200, self._openapi(None))})
+        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+
+    def test_an_unreachable_candidate_is_dropped(self, tmp_path):
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        assert _confirm_derived(component, candidate, FakeFetcher({}),
+                                tmp_path, 0) is None
+
+    def test_a_body_that_is_not_json_is_rejected(self, tmp_path):
+        # Several Translator hosts answer 200 with an HTML error page.
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        fetcher = FakeFetcher({
+            "https://svc.ci.transltr.io/openapi.json": (200, b"<html>nope</html>")})
+        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+
+
+def test_sync_writes_derived_json_even_when_nothing_is_found(tmp_path):
+    # The dashboard reads this file unconditionally; a missing one would make
+    # "nothing was discovered" indistinguishable from "discovery never ran".
+    fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
+    sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
+    assert json.loads((tmp_path / "derived.json").read_text()) == {}
 
 
 def test_fetch_result_ok_requires_both_a_200_and_no_error():

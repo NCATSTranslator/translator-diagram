@@ -196,3 +196,48 @@ class TestRendering:
         html = render_html(build_payload([component], synced))
         assert "<link" not in html
         assert "script src=" not in html
+
+
+class TestDerivedDeployments:
+    """Environments found by convention rather than registered anywhere."""
+
+    def test_a_derived_environment_is_used_and_marked(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "svc": {"ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}))
+        path = tmp_path / "openapi" / "svc" / "ci.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"info": {"version": "0.8.2"}}))
+
+        cell = build_rows([_comp("svc")], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert cell["deployed"] and cell["version"] == "0.8.2"
+        assert cell["derived"] is True
+
+    def test_a_registered_environment_wins_over_a_derived_one(self, tmp_path):
+        # Precedence is recorded, then registered, then derived. A derived URL
+        # is a discovery; anything stated explicitly outranks it.
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+            "_id": "abc", "info": {},
+            "servers": [{"url": "https://registered.ci/", "x-maturity": "staging"}],
+        }]}))
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "svc": {"ci": {"url": "https://derived.ci/", "location": "ITRB"}}}))
+        component = _comp("svc", identifiers={"smartapi": "abc"})
+        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert cell["url"] == "https://registered.ci/"
+
+    def test_no_derived_file_is_not_an_error(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        assert SyncedData(tmp_path).derived == {}
+
+    def test_the_payload_counts_them(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "svc": {"ci": {"url": "https://svc.ci.transltr.io/"},
+                    "test": {"url": "https://svc.test.transltr.io/"}}}))
+        payload = build_payload([_comp("svc")], SyncedData(tmp_path))
+        assert payload["derived_count"] == 2
