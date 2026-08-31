@@ -298,6 +298,19 @@ class TestDownloadSheetCsv:
         assert path == out / "components.csv"
         assert path.read_text() == "id,Name\nars,ARS\n"
 
+    def test_a_stalled_read_is_reported_not_raised(self, tmp_path, monkeypatch):
+        # A stall during read() raises a bare TimeoutError, which is not a
+        # URLError — without it in the except clause a scheduled job dies with
+        # a traceback instead of a message.
+        monkeypatch.setenv("GOOGLE_SHEET_ID", "sheet123")
+
+        def urlopen(url, timeout=None):
+            raise TimeoutError("the socket stalled")
+
+        monkeypatch.setattr(loading.urllib.request, "urlopen", urlopen)
+        with pytest.raises(click.ClickException, match="Failed to download"):
+            loading.download_sheet_csv(0, tmp_path)
+
     def test_an_html_login_page_is_refused(self, tmp_path, monkeypatch):
         # A private or missing sheet answers 200 with HTML, which would
         # otherwise be saved as components.csv and fail much later.

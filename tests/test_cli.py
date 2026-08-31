@@ -3,6 +3,7 @@
 import os
 import urllib.error
 
+import graphviz
 import pytest
 from click.testing import CliRunner
 
@@ -56,3 +57,38 @@ class TestGoogleSheetEnv:
             main, ["--google-sheet", "--output-dir", str(tmp_path / "out")]
         )
         assert "from_cwd" not in result.output
+
+
+class TestOwnerColorsFlag:
+    def test_the_flag_reaches_the_rendered_graph(self, tmp_path, monkeypatch):
+        # The resolution order is unit-tested in test_colors.py; this covers
+        # the wiring from the option to ColorAssigner, which is the part a
+        # refactor breaks silently. graphviz.Digraph.render is stubbed so the
+        # test needs no dot binary — the .dot is written before rendering.
+        monkeypatch.setattr(graphviz.Digraph, "render", lambda self, **kw: "")
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text(
+            "id,Name,Owner,Refactor status\nars,ARS,NCATS,New in Refactor\n",
+            encoding="utf-8",
+        )
+        colors = tmp_path / "mine.csv"
+        colors.write_text("owner,color\nNCATS,#010203\n", encoding="utf-8")
+        out = tmp_path / "out"
+        result = CliRunner().invoke(main, [
+            "--input", str(csv_path),
+            "--output-dir", str(out),
+            "--owner-colors", str(colors),
+        ])
+        assert result.exit_code == 0, result.output
+        assert "#010203" in (out / "diagram.dot").read_text()
+
+    def test_a_missing_file_is_rejected_by_click(self, tmp_path):
+        csv_path = tmp_path / "components.csv"
+        csv_path.write_text("id,Name\nars,ARS\n", encoding="utf-8")
+        result = CliRunner().invoke(main, [
+            "--input", str(csv_path),
+            "--output-dir", str(tmp_path / "out"),
+            "--owner-colors", str(tmp_path / "nope.csv"),
+        ])
+        assert result.exit_code != 0
+        assert "nope.csv" in result.output
