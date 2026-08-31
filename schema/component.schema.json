@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NCATSTranslator/translator-diagram/schema/component.schema.json",
+  "title": "Translator component",
+  "description": "One Translator platform component, as recorded in components/<id>.yaml. Fields hold pointers to the places that already know about this component; a field that is absent has not been recorded yet, and a field that is explicitly null has been checked and does not exist.",
+  "type": "object",
+  "required": ["id", "name", "owner", "diagram"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "Stable identifier. Must equal the filename stem exactly.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "name": {
+      "description": "Human-readable display name, shown in the diagram.",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "description": "One or two sentences on what this component does.",
+      "type": ["string", "null"]
+    },
+    "owner": {
+      "description": "Team that owns the component. Must appear in config/owner-colors.csv.",
+      "type": "string",
+      "minLength": 1
+    },
+    "component_type": {
+      "description": "The x-translator `component` vocabulary. Null for components that are not registered API services.",
+      "type": ["string", "null"],
+      "enum": ["KP", "ARA", "ARS", "Utility", "DINGO", "DAWG", "SHEPHERD", "COCO", null]
+    },
+    "identifiers": {
+      "description": "This component's name in each of the other naming spaces. Every one of these is assigned independently of the others.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "infores": {
+          "description": "Information Resource CURIE, from biolink/information-resource-registry.",
+          "type": ["string", "null"],
+          "pattern": "^infores:[a-z0-9][a-z0-9.-]*$"
+        },
+        "smartapi": {
+          "description": "SmartAPI registry record id (32 hex characters).",
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "helm_chart": {
+          "description": "Chart directory name, e.g. under helxplatform/translator-devops.",
+          "type": ["string", "null"]
+        },
+        "itrb_app": {
+          "description": "ITRB application name (the sheet's `ITRB App Name`).",
+          "type": ["string", "null"]
+        },
+        "itrb_group": {
+          "description": "ITRB grouping (the sheet's `Component in ITRB`).",
+          "type": ["string", "null"]
+        },
+        "translator_all_wiki": {
+          "description": "Page slug in the NCATSTranslator/Translator-All wiki.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "repositories": {
+      "description": "Source, chart and deployment repositories. A private repository may be linked here, but nothing inside it may be copied into this repo.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+          "role": {"enum": ["source", "helm-chart", "deployment", "data", "related"]},
+          "visibility": {"enum": ["public", "private"], "default": "public"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "documentation": {
+      "description": "Prose documentation about this component, wherever it lives.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["url", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+          "kind": {"enum": ["wiki", "technical-documentation", "api-docs", "readme", "other"]},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "endpoints": {
+      "description": "Paths relative to each environment's base URL, so one line covers all four environments. Null means this component has no endpoint of that kind.",
+      "type": "object",
+      "additionalProperties": {"type": ["string", "null"]},
+      "properties": {
+        "openapi": {"type": ["string", "null"]},
+        "status": {"type": ["string", "null"]},
+        "docs": {"type": ["string", "null"]},
+        "meta_knowledge_graph": {"type": ["string", "null"]}
+      }
+    },
+    "environments": {
+      "description": "Base URLs per environment. Record these only where SmartAPI does not already know them; for a registered component this block should be absent and filled by a fetcher.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dev": {"$ref": "#/$defs/environment"},
+        "ci": {"$ref": "#/$defs/environment"},
+        "test": {"$ref": "#/$defs/environment"},
+        "prod": {"$ref": "#/$defs/environment"}
+      }
+    },
+    "diagram": {
+      "description": "The facts that exist only here, because no upstream source records them: who talks to whom, and how the component should be drawn.",
+      "type": "object",
+      "required": ["refactor_status"],
+      "additionalProperties": false,
+      "properties": {
+        "refactor_status": {
+          "enum": [
+            "New in Refactor",
+            "Continues into Refactor",
+            "In development",
+            "Removed after Refactor",
+            "Removed after DINGO integration",
+            "Already removed"
+          ]
+        },
+        "layer": {"type": ["string", "null"]},
+        "part_of": {"type": ["string", "null"]},
+        "hosted_at": {"type": ["string", "null"]},
+        "ubiquitous": {"type": "boolean", "default": false},
+        "hide": {"type": "boolean", "default": false},
+        "gets_results_from": {"$ref": "#/$defs/component_refs"},
+        "calls": {"$ref": "#/$defs/component_refs"},
+        "externals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["direction", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "direction": {"enum": ["in", "out"]},
+              "name": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "description": "Free text. Surfaces as the SVG hover tooltip, so keep it publishable.",
+      "type": ["string", "null"]
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": ["url"],
+      "additionalProperties": false,
+      "properties": {
+        "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "location": {"type": ["string", "null"]},
+        "endpoints": {
+          "description": "Per-environment override for when this environment does not follow the shared `endpoints` paths.",
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "component_refs": {
+      "description": "Component ids. A '~' prefix marks a relationship that is planned but not yet implemented.",
+      "type": "array",
+      "items": {"type": "string", "pattern": "^~?[A-Za-z0-9][A-Za-z0-9._-]*$"}
+    }
+  }
+}

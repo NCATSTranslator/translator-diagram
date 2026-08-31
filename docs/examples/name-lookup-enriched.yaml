@@ -1,0 +1,143 @@
+# What a fetcher would produce for one component.
+#
+# This file is illustrative and is NOT read by anything. It exists to show the
+# payoff of the format in docs/component-metadata.md: how little we commit, and
+# how much that little is worth.
+#
+# Everything under `recorded:` is copied verbatim from components/name-lookup.yaml
+# — 27 lines, hand-maintained. Everything under `pulled:` was fetched from the
+# live sources on 2026-08-31 using only those pointers, and would live in the
+# gitignored data/ rather than in git.
+
+recorded:
+  id: name-lookup
+  name: Name Lookup (NameRes)
+  owner: DOGSLED
+  component_type: Utility
+  identifiers:
+    infores: infores:sri-name-resolver
+    smartapi: "9995fed757acd034ef099dbb483c4c82"
+    helm_chart: name-lookup
+    itrb_app: name-lookup
+    itrb_group: SRI-Ranking
+    translator_all_wiki: Name-Resolution-Service
+  repositories:
+    - url: https://github.com/NCATSTranslator/NameResolution
+      role: source
+      visibility: public
+    - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/name-lookup
+      role: helm-chart
+      visibility: public
+  documentation:
+    - url: https://github.com/NCATSTranslator/Translator-All/wiki/Name-Resolution-Service
+      kind: wiki
+  endpoints:
+    openapi: openapi.json
+    status: status?full=true
+    docs: docs
+  diagram:
+    refactor_status: Continues into Refactor
+    layer: Shared services
+    hosted_at: ITRB
+    ubiquitous: false
+    hide: false
+    gets_results_from: []
+    calls: [jaeger]
+    externals: []
+
+pulled:
+  # ---------------------------------------------------------------------------
+  # From SmartAPI, via identifiers.smartapi. This is the whole reason we do not
+  # write four URLs per endpoint kind into the committed file.
+  #   GET https://smart-api.info/api/query?q=tags.name:translator&meta=1&fields=servers
+  # ---------------------------------------------------------------------------
+  environments:
+    dev:
+      url: https://name-resolution-sri.renci.org/
+      location: RENCI
+      x_maturity: development
+    ci:
+      url: https://name-lookup.ci.transltr.io/
+      location: ITRB
+      x_maturity: staging
+    test:
+      url: https://name-lookup.test.transltr.io/
+      location: ITRB
+      x_maturity: testing
+    prod:
+      url: https://name-lookup.transltr.io/
+      location: ITRB
+      x_maturity: production
+
+  # ---------------------------------------------------------------------------
+  # From the OpenAPI document, via environments.ci + endpoints.openapi.
+  # Note that `team` here confirms the hand-recorded `owner`, and `infores`
+  # confirms identifiers.infores — so the fetcher can *check* us, not just
+  # feed us.
+  #   GET https://name-lookup.ci.transltr.io/openapi.json
+  # ---------------------------------------------------------------------------
+  openapi:
+    title: Name Resolver
+    version: 1.5.2
+    description: >-
+      Name Resolution/Name Lookup service<p/>This service takes lexical strings
+      and attempts to map them to identifiers (CURIEs) from a vocabulary or
+      ontology. The lookup is not exact, but includes partial matches.
+    terms_of_service: https://toss.apps.renci.org/tos?service_long=Name+Resolver
+    x_translator:
+      component: Utility
+      infores: infores:sri-name-resolver
+      team: [Standards Reference Implementation Team]
+
+  # ---------------------------------------------------------------------------
+  # From the status endpoint, via environments.ci + endpoints.status. This is
+  # the data-provenance axis: which Babel release and which Biolink Model this
+  # deployment is actually serving. Nothing else exposes it at runtime.
+  #   GET https://name-lookup.ci.transltr.io/status?full=true
+  # ---------------------------------------------------------------------------
+  status:
+    status: ok
+    nameres_version: v1.5.2
+    babel_version: 2025sep1
+    babel_version_url: https://github.com/ncatstranslator/Babel/blob/master/releases/2025sep1.md
+    biolink_model:
+      tag: master
+      url: https://github.com/biolink/biolink-model/tree/master
+
+  # ---------------------------------------------------------------------------
+  # From the Helm chart, via identifiers.helm_chart. Only the plaintext files:
+  # every environment-specific values file is git-crypt encrypted and is not
+  # publicly readable, so nothing is pulled from those.
+  #   Chart.yaml, values.yaml, ncats-images-meta.yaml
+  # ---------------------------------------------------------------------------
+  helm:
+    chart_version: 0.5.2
+    app_version: 1.5.2_2025sep1     # image tag + Babel release, concatenated
+    images:
+      - {repository: ghcr.io/ncatstranslator/nameresolution, tag: v1.5.2}
+      - {repository: solr, tag: "9.1"}
+    data_url: https://stars.renci.org/var/babel_outputs/2025sep1/nameres/snapshot.backup.tar.gz
+    resources:
+      solr: {storage: 400Gi, memory: 32Gi, cpu: 4000m}
+    server_name: infores:sri-name-resolver
+
+  # ---------------------------------------------------------------------------
+  # From the infores catalog, via identifiers.infores.
+  # ---------------------------------------------------------------------------
+  infores:
+    name: Name Resolver
+    status: released
+    knowledge_level: knowledge_assertion
+    agent_type: not_provided
+
+  # ---------------------------------------------------------------------------
+  # From the GitHub API, via repositories[role=source].
+  # ---------------------------------------------------------------------------
+  repository:
+    full_name: NCATSTranslator/NameResolution
+    description: A service for finding CURIEs from lexical strings.
+    visibility: public
+
+# Five sources agree on the version (1.5.2) and three independently confirm the
+# infores. That cross-checking is only possible because the identifiers were
+# recorded; it is the argument for this repo existing at all.
