@@ -266,11 +266,15 @@ class TestDownloadSheetCsv:
     is how download_sheet_csv shipped its first version returning None."""
 
     def _fake_urlopen(self, content_type, body):
+        """body is the bytes read(), or an exception for read() to raise."""
+
         class Response:
             def __init__(self):
                 self.headers = {"Content-Type": content_type}
 
             def read(self):
+                if isinstance(body, BaseException):
+                    raise body
                 return body
 
             def __enter__(self):
@@ -301,15 +305,20 @@ class TestDownloadSheetCsv:
     def test_a_stalled_read_is_reported_not_raised(self, tmp_path, monkeypatch):
         # A stall during read() raises a bare TimeoutError, which is not a
         # URLError — without it in the except clause a scheduled job dies with
-        # a traceback instead of a message.
+        # a traceback instead of a message. The stall has to come from read()
+        # and not from urlopen() for this to cover that clause: a stall while
+        # connecting arrives wrapped in a URLError, which the clause would
+        # catch anyway.
         monkeypatch.setenv("GOOGLE_SHEET_ID", "sheet123")
-
-        def urlopen(url, timeout=None):
-            raise TimeoutError("the socket stalled")
-
-        monkeypatch.setattr(loading.urllib.request, "urlopen", urlopen)
+        monkeypatch.setattr(
+            loading.urllib.request, "urlopen",
+            self._fake_urlopen("text/csv", TimeoutError("the socket stalled")),
+        )
+        out = tmp_path / "out"
+        out.mkdir()
         with pytest.raises(click.ClickException, match="Failed to download"):
-            loading.download_sheet_csv(0, tmp_path)
+            loading.download_sheet_csv(0, out)
+        assert not (out / "components.csv").exists()
 
     def test_an_html_login_page_is_refused(self, tmp_path, monkeypatch):
         # A private or missing sheet answers 200 with HTML, which would
