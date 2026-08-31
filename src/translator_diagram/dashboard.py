@@ -79,7 +79,9 @@ class SyncedData:
                 env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
                 for env, spec in envs.items()
             }
-            for cid, envs in (_read_json(root / "derived.json") or {}).items()
+            for cid, envs in (
+                (_read_json(root / "derived.json") or {}).get("confirmed") or {}
+            ).items()
         }
         self.otel = {
             env: (_read_json(root / "otel" / f"{env}.json") or {}).get("data") or []
@@ -264,11 +266,20 @@ def build_rows(
             )
             for env in ENVIRONMENTS
         }
-        for env in derived:
-            if cells.get(env, {}).get("deployed"):
-                # Recorded so the page can say the registry did not know about
-                # it — the gap is a finding about registration, not a detail.
-                cells[env]["derived"] = True
+        # A gap in a registration that exists at all: this component is in
+        # SmartAPI, and this environment is not in its record. Computed from
+        # the registry rather than from how the URL was found, so it stays true
+        # once a discovered URL is written into the component file — which is
+        # exactly what happened to answer-appraiser's ci and test.
+        registered = set(deployments_from_smartapi(record))
+        for env, cell in cells.items():
+            if (
+                cell.get("deployed")
+                and component.smartapi_id
+                and registered
+                and env not in registered
+            ):
+                cell["unregistered"] = True
         for key in ("version", "trapi", "biolink"):
             _mark_drift(cells, key)
 
@@ -331,11 +342,11 @@ def build_payload(
         "owner_colors": load_owner_colors(),
         "source_labels": SOURCE_LABELS,
         "source_tally": source_tally(rows),
-        "derived_count": sum(
+        "unregistered_count": sum(
             1
             for row in rows
             for cell in row["environments"].values()
-            if cell.get("derived")
+            if cell.get("unregistered")
         ),
         "otel_service_counts": {
             env: len(names) for env, names in synced.otel.items()

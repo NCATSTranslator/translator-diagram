@@ -1,12 +1,14 @@
 """The fetchers, driven by an injected fetcher so nothing here reaches the network."""
 
 import json
+from datetime import UTC, datetime
 
 from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.sync import (
     SMARTAPI_QUERY,
     FetchResult,
     _confirm_derived,
+    _still_fresh,
     deployments_from_smartapi,
     fetch_to,
     sync,
@@ -16,6 +18,10 @@ from translator_diagram.sync import (
 def _comp(cid, **kwargs):
     kwargs.setdefault("diagram", {"refactor_status": "New in Refactor"})
     return ComponentFile(id=cid, name=cid, owner="None", **kwargs)
+
+
+def _now_iso():
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class FakeFetcher:
@@ -236,12 +242,104 @@ class TestConfirmDerived:
         assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
 
 
+class TestNegativeCaching:
+    """Most derived hostnames do not resolve. Do not keep asking."""
+
+    def _smartapi(self, servers):
+        return json.dumps({"hits": [{"_id": "abc", "servers": servers}]}).encode()
+
+    def _component(self):
+        return _comp("svc", identifiers={
+            "smartapi": "abc", "infores": "infores:svc"})
+
+    def test_a_fresh_rejection_is_not_reprobed(self, tmp_path):
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {},
+            "rejected": {"svc": {"test": {
+                "url": "https://svc.test.transltr.io/",
+                "checked_at": _now_iso(),
+            }}},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi(
+            [{"url": "https://svc.ci.transltr.io/", "x-maturity": "staging"}]))})
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=9999)
+        assert not [u for u in fetcher.urls if "svc.test.transltr.io" in u]
+        # ...and the rejection is carried forward rather than dropped.
+        after = json.loads((tmp_path / "derived.json").read_text())
+        assert "test" in after["rejected"]["svc"]
+
+    def test_a_stale_rejection_is_reprobed(self, tmp_path):
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {},
+            "rejected": {"svc": {"test": {
+                "url": "https://svc.test.transltr.io/",
+                "checked_at": "2020-01-01T00:00:00+00:00",
+            }}},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi(
+            [{"url": "https://svc.ci.transltr.io/", "x-maturity": "staging"}]))})
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=60)
+        assert [u for u in fetcher.urls if "svc.test.transltr.io" in u]
+
+    def test_a_rejection_for_a_different_url_is_reprobed(self, tmp_path):
+        # The component moved host. The old answer says nothing about the new
+        # one, so it must not suppress the probe.
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {},
+            "rejected": {"svc": {"test": {
+                "url": "https://elsewhere.test.transltr.io/",
+                "checked_at": _now_iso(),
+            }}},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi(
+            [{"url": "https://svc.ci.transltr.io/", "x-maturity": "staging"}]))})
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=9999)
+        assert [u for u in fetcher.urls if "svc.test.transltr.io" in u]
+
+    def test_a_confirmed_url_survives_being_recorded(self, tmp_path):
+        # Once a discovered URL is written into a component file it stops being
+        # derived, so this run derives nothing for it. Dropping the old entry
+        # would look like the deployment had disappeared.
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {"svc": {"ci": {"url": "https://svc.ci.transltr.io/"}}},
+            "rejected": {},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi([]))})
+        sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
+        after = json.loads((tmp_path / "derived.json").read_text())
+        assert after["confirmed"]["svc"]["ci"]["url"] == "https://svc.ci.transltr.io/"
+
+    def test_an_unreadable_derived_file_does_not_stop_the_run(self, tmp_path):
+        (tmp_path / "derived.json").write_text("{not json")
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi([]))})
+        sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
+        assert json.loads((tmp_path / "derived.json").read_text())["confirmed"] == {}
+
+
+class TestStillFresh:
+    def test_a_recent_check_is_fresh(self):
+        assert _still_fresh({"checked_at": _now_iso()}, 3600)
+
+    def test_an_old_check_is_not(self):
+        assert not _still_fresh({"checked_at": "2020-01-01T00:00:00+00:00"}, 60)
+
+    def test_max_age_zero_never_reuses(self):
+        assert not _still_fresh({"checked_at": _now_iso()}, 0)
+
+    def test_a_malformed_timestamp_is_not_fresh(self):
+        # Re-probing costs a DNS lookup; trusting a bad record costs a wrong page.
+        assert not _still_fresh({"checked_at": "yesterday"}, 3600)
+        assert not _still_fresh({}, 3600)
+        assert not _still_fresh(None, 3600)
+
+
 def test_sync_writes_derived_json_even_when_nothing_is_found(tmp_path):
     # The dashboard reads this file unconditionally; a missing one would make
     # "nothing was discovered" indistinguishable from "discovery never ran".
     fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
     sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
-    assert json.loads((tmp_path / "derived.json").read_text()) == {}
+    assert json.loads((tmp_path / "derived.json").read_text()) == {
+        "confirmed": {}, "rejected": {}}
 
 
 def test_fetch_result_ok_requires_both_a_200_and_no_error():

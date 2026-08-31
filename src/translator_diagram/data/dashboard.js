@@ -122,10 +122,10 @@ function envCell(row, env) {
     ? `<a class="sub" href="${esc(href)}" title="${esc(cell.url)}">${esc(host)}</a>`
     : "";
 
-  const title = cell.derived
-    ? `${cell.url} — not registered in SmartAPI; found at the conventional hostname`
+  const title = cell.unregistered
+    ? `${cell.url} — deployed, but missing from this component's SmartAPI record`
     : cell.url;
-  return `<td class="env${drift}${cell.derived ? " derived" : ""}" title="${
+  return `<td class="env${drift}${cell.unregistered ? " unregistered" : ""}" title="${
     esc(title)}">${version}${detail}${state.details ? link : ""}</td>`;
 }
 
@@ -181,12 +181,13 @@ function findingSentence() {
     ? `, and <strong>${tally.none}</strong> from nothing at all`
     : "";
   if (!total) return "No deployments were found — has <code>sync-components</code> run?";
-  const derived = DATA.derived_count
-    ? ` <strong>${DATA.derived_count}</strong> of those deployments are registered
-       nowhere — they were found by trying the conventional ITRB hostname and
-       confirmed by the infores they report.`
+  const gaps = DATA.unregistered_count
+    ? ` <strong>${DATA.unregistered_count}</strong> of them are missing from their
+       component's SmartAPI record, which does list other environments — found by
+       trying the conventional ITRB hostname and confirmed by the infores they
+       report.`
     : "";
-  return `Of ${total} deployments, ${named.join(", ")}${none}.${derived}`;
+  return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
 }
 
 function driftSentence() {

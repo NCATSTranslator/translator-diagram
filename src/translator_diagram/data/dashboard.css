@@ -171,11 +171,11 @@ tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent
 td.env { text-align: center; min-width: 116px; }
 td.env.drift { background: var(--drift-bg); }
 td.env.absent { color: var(--muted); }
-/* A deployment the registry does not know about. Marked, not coloured: it was
-   confirmed live, so it is no less trustworthy than a registered one — the
-   dotted rule says "SmartAPI has not heard of this", which is a fact about
-   the registry rather than about the deployment. */
-td.env.derived { border-bottom: 1px dotted var(--border-strong); }
+/* Deployed, but absent from a SmartAPI record that lists other environments.
+   Marked, not coloured: the deployment was confirmed live, so it is no less
+   trustworthy than a registered one. The dotted rule is a fact about the
+   registration, not about the service. */
+td.env.unregistered { border-bottom: 1px dotted var(--border-strong); }
 
 .version {
   display: inline-block; min-width: 3.5rem;

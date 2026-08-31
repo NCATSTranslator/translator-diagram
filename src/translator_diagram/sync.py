@@ -17,7 +17,7 @@ import urllib.request
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -179,6 +179,29 @@ def _plan_endpoint_fetches(
     return jobs
 
 
+def _read_derived(root: Path) -> dict[str, Any]:
+    """The previous run's derived.json, tolerating absence or an older shape."""
+    path = root / "derived.json"
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _still_fresh(record: dict[str, Any] | None, max_age: int) -> bool:
+    """True if a recorded check is recent enough to reuse."""
+    if not record or max_age <= 0:
+        return False
+    try:
+        checked = datetime.fromisoformat(record["checked_at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return datetime.now(UTC) - checked < timedelta(seconds=max_age)
+
+
 def _confirm_derived(
     component: ComponentFile,
     candidate: Deployment,
@@ -288,8 +311,13 @@ def sync(
     # answer-appraiser registers only production but is deployed to ci and test
     # as well. Each candidate is confirmed against the infores it reports
     # before it is believed.
+    previous = _read_derived(root)
+    confirmed_before = previous.get("confirmed", {})
+    rejected_before = previous.get("rejected", {})
+
     derived: dict[str, dict[str, Any]] = {}
-    pending = []
+    rejected: dict[str, dict[str, Any]] = {}
+    pending, skipped = [], 0
     for component in components:
         known = merge_deployments(
             component, deployments_from_smartapi(
@@ -297,7 +325,18 @@ def sync(
             )
         )
         for env, candidate in derive_deployments(known).items():
+            stale = rejected_before.get(component.id, {}).get(env)
+            if _still_fresh(stale, max_age) and stale.get("url") == candidate.url:
+                # Most candidates are hostnames that do not resolve, and there
+                # are nine of those for every one that does. Re-probing them
+                # every run buys nothing: carry the answer forward until it is
+                # as stale as anything else we cache.
+                rejected.setdefault(component.id, {})[env] = stale
+                skipped += 1
+                continue
             pending.append((component, env, candidate))
+    if skipped:
+        echo(f"  {skipped} hostnames already known not to resolve")
     if pending:
         echo(f"Probing {len(pending)} conventional hostnames ...")
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -308,6 +347,9 @@ def sync(
             ))
         for component, env, candidate, result in confirmed:
             if result is None:
+                rejected.setdefault(component.id, {})[env] = {
+                    "url": candidate.url, "checked_at": _now(),
+                }
                 continue
             report.fetches.append(result)
             derived.setdefault(component.id, {})[env] = {
@@ -315,8 +357,15 @@ def sync(
             }
         found = sum(len(envs) for envs in derived.values())
         echo(f"  {found} confirmed by the infores they report")
+    # Carry forward anything confirmed earlier whose candidate was not re-derived
+    # this run — a URL recorded in a component file stops being derived, and
+    # dropping it here would look like the deployment had disappeared.
+    for cid, envs in confirmed_before.items():
+        for env, spec in envs.items():
+            derived.setdefault(cid, {}).setdefault(env, spec)
     (root / "derived.json").write_text(
-        json.dumps(derived, indent=2) + "\n", encoding="utf-8"
+        json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
+        encoding="utf-8",
     )
 
     report.finished_at = _now()

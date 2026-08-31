@@ -241,15 +241,14 @@ class TestDerivedDeployments:
     def test_a_derived_environment_is_used_and_marked(self, tmp_path):
         (tmp_path / "manifest.json").write_text('{"fetches": []}')
         (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "derived.json").write_text(json.dumps({
-            "svc": {"ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}))
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
+            "svc": {"ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}}))
         path = tmp_path / "openapi" / "svc" / "ci.json"
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps({"info": {"version": "0.8.2"}}))
 
         cell = build_rows([_comp("svc")], SyncedData(tmp_path))[0]["environments"]["ci"]
         assert cell["deployed"] and cell["version"] == "0.8.2"
-        assert cell["derived"] is True
 
     def test_a_registered_environment_wins_over_a_derived_one(self, tmp_path):
         # Precedence is recorded, then registered, then derived. A derived URL
@@ -259,8 +258,8 @@ class TestDerivedDeployments:
             "_id": "abc", "info": {},
             "servers": [{"url": "https://registered.ci/", "x-maturity": "staging"}],
         }]}))
-        (tmp_path / "derived.json").write_text(json.dumps({
-            "svc": {"ci": {"url": "https://derived.ci/", "location": "ITRB"}}}))
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
+            "svc": {"ci": {"url": "https://derived.ci/", "location": "ITRB"}}}}))
         component = _comp("svc", identifiers={"smartapi": "abc"})
         cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
         assert cell["url"] == "https://registered.ci/"
@@ -270,14 +269,13 @@ class TestDerivedDeployments:
         (tmp_path / "smartapi.json").write_text('{"hits": []}')
         assert SyncedData(tmp_path).derived == {}
 
-    def test_the_payload_counts_them(self, tmp_path):
+    def test_the_derived_urls_are_loaded(self, tmp_path):
         (tmp_path / "manifest.json").write_text('{"fetches": []}')
         (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "derived.json").write_text(json.dumps({
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
             "svc": {"ci": {"url": "https://svc.ci.transltr.io/"},
-                    "test": {"url": "https://svc.test.transltr.io/"}}}))
-        payload = build_payload([_comp("svc")], SyncedData(tmp_path))
-        assert payload["derived_count"] == 2
+                    "test": {"url": "https://svc.test.transltr.io/"}}}}))
+        assert set(SyncedData(tmp_path).derived["svc"]) == {"ci", "test"}
 
 
 class TestHelmFacts:
@@ -309,3 +307,55 @@ class TestHelmFacts:
         chart.mkdir(parents=True)
         (chart / "Chart.yaml").write_text("this: [is: not: valid\n")
         assert _helm_facts(SyncedData(tmp_path), "broken")["version"] is None
+
+
+class TestUnregisteredEnvironments:
+    """A gap in a registration that exists — the finding, computed from the
+    registry rather than from how the URL was found."""
+
+    def _synced(self, tmp_path, servers):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+            "_id": "abc", "info": {}, "servers": servers}]}))
+        return SyncedData(tmp_path)
+
+    def test_a_recorded_environment_the_registry_omits_is_flagged(self, tmp_path):
+        # answer-appraiser: registers production only, deployed to ci as well.
+        # Recording the discovered URL must not hide the gap.
+        synced = self._synced(tmp_path, [
+            {"url": "https://svc/", "x-maturity": "production"}])
+        component = _comp("svc", identifiers={"smartapi": "abc"},
+                          environments={"ci": Deployment(env="ci", url="https://svc.ci/")})
+        cells = build_rows([component], synced)[0]["environments"]
+        assert cells["ci"]["unregistered"] is True
+        assert "unregistered" not in cells["prod"]
+
+    def test_a_server_without_maturity_leaves_a_gap(self, tmp_path):
+        # node-annotator's ci and test servers carry no x-maturity, so they are
+        # not registered environments however many servers the record lists.
+        synced = self._synced(tmp_path, [
+            {"url": "https://svc/", "x-maturity": "production"},
+            {"url": "https://svc.ci/"},
+        ])
+        component = _comp("svc", identifiers={"smartapi": "abc"},
+                          environments={"ci": Deployment(env="ci", url="https://svc.ci/")})
+        assert build_rows([component], synced)[0]["environments"]["ci"]["unregistered"]
+
+    def test_an_unregistered_component_is_not_flagged(self, tmp_path):
+        # Nothing to be missing from. Flagging every environment of every
+        # unregistered component would drown the components that are.
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        component = _comp("svc", environments={
+            "ci": Deployment(env="ci", url="https://svc.ci/")})
+        cells = build_rows([component], SyncedData(tmp_path))[0]["environments"]
+        assert "unregistered" not in cells["ci"]
+
+    def test_the_payload_counts_the_gaps(self, tmp_path):
+        synced = self._synced(tmp_path, [
+            {"url": "https://svc/", "x-maturity": "production"}])
+        component = _comp("svc", identifiers={"smartapi": "abc"}, environments={
+            "ci": Deployment(env="ci", url="https://svc.ci/"),
+            "test": Deployment(env="test", url="https://svc.test/"),
+        })
+        assert build_payload([component], synced)["unregistered_count"] == 2
