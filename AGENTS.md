@@ -75,6 +75,12 @@ Nothing imports `cli`. The palette constants live in `colors.py` rather than
 `EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
 other.
 
+`tests/test_package_layout.py` enforces it, so a wrong-direction import fails
+CI rather than sitting there working. Widening its `ALLOWED` map to silence a
+failure will not help: a separate assertion checks the map itself is acyclic.
+Move the shared code down the graph instead, the way the palette constants
+went.
+
 **`build_graph` and `build_layer_subgraph` share `render.py` on purpose.** They
 duplicate the edge-suppression rules, drift between them has already caused a
 real bug (see the two suppression sets, below), and a file boundary would make
