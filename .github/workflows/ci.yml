@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor from pyproject's requires-python, and the current release.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      # --locked fails if uv.lock is out of date with pyproject.toml, rather
+      # than silently resolving something else.
+      - run: uv sync --locked
+
+      # No apt-get install graphviz: nothing here renders a diagram. The tests
+      # assert on the DOT source that build_graph produces, so the layout
+      # binary is only needed when someone actually generates output.
+      - run: uv run pytest
+
+      - run: uv run ruff check
+
+      - run: uv run rumdl check .
