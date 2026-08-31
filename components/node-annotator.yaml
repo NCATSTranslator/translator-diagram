@@ -32,6 +32,9 @@ environments:
   ci:
     url: https://annotator.ci.transltr.io/
     location: ITRB
+  test:
+    url: https://annotator.test.transltr.io/
+    location: ITRB
 
 diagram:
   refactor_status: Continues into Refactor
@@ -48,4 +51,6 @@ notes: >-
   no x-maturity and are declared http:// not https://. SmartAPI registers it
   at biothings.ci.transltr.io/annotator, which does not serve the OpenAPI
   document; annotator.ci.transltr.io does. Both were live on 2026-08-31, so
-  the ci base URL is recorded here rather than pulled.
+  the ci base URL is recorded here rather than pulled. A prod deployment
+  exists at annotator.transltr.io but 404s on the shared webapp/openapi.json
+  path, so it is not recorded until someone confirms where prod serves it.

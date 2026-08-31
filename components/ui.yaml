@@ -28,6 +28,12 @@ environments:
   ci:
     url: https://ui.ci.transltr.io/
     location: ITRB
+  test:
+    url: https://ui.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://ui.transltr.io/
+    location: ITRB
 
 diagram:
   refactor_status: Continues into Refactor

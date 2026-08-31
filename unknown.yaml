@@ -39,18 +39,11 @@ otel_services:
       shepherd-bte, and it probably wants a component file of its own — the
       three shepherd-* files all point at BioPack-team/shepherd and the
       `shepherd` Helm chart, and none of them is this.
-
-  - name: NodeNorm
-    status: unattributed
-    first_seen: "2026-08-31"
-    environments: [ci, test]
-    component: nodenorm-es
-    evidence: >-
-      Called by ARS and by ARAX. Its operations are `POST
-      /get_normalized_nodes?` and `msearch` — the second is an Elasticsearch
-      multi-search, which points at nodenorm-es rather than the retired
-      nodenorm, but both serve the same API path so this is inference, not
-      proof. One line from the owning team settles it.
+    note: >-
+      Confirmed complex and deliberately left here on 2026-08-31 rather than
+      forced into one of the shepherd-* files. Re-investigating needs a
+      decision about whether the shared server is its own component, not more
+      trace data.
 
   - name: biothings-plover
     status: unattributed
@@ -192,6 +185,16 @@ otel_services:
       The Molecular Data Provider KP. The sheet has moleproapi-pipeline and
       moleprodb-pipeline but no row for the service itself, so there is no
       component id to attribute this to yet.
+    note: >-
+      Confirmed complex and deliberately left here on 2026-08-31. Resolving it
+      needs a decision about how MolePro's pipelines and its service relate,
+      not more trace data.
 
 # Nothing has reached `status: not-in-use` yet: every name above was reporting
 # to a live collector on 2026-08-31.
+#
+# Promoted out of this file so far:
+#   NodeNorm -> components/nodenorm-es.yaml (2026-08-31). Its spans carry
+#   http.host=nodenorm-es.{ci,test}.transltr.io and a Tornado handler from
+#   the nodenorm package, backed by elasticsearch.es-core-components — so
+#   it is the ES rewrite, not the nodenorm it replaced.

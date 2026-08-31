@@ -25,6 +25,12 @@ environments:
   ci:
     url: https://biothings.ci.transltr.io/
     location: ITRB
+  test:
+    url: https://biothings.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://biothings.transltr.io/
+    location: ITRB
 
 diagram:
   refactor_status: Continues into Refactor
