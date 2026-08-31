@@ -26,7 +26,7 @@ root. See [README.md](README.md) for user-facing documentation.
 uv sync                                              # first-time setup
 uv run pytest                                        # the only thing you should run
 
-# For reference — these are Gaurav's to run, not yours:
+# For reference — these must be easy for humans to run, but coding agents can run them when useful:
 uv run generate-diagram --google-sheet               # most common
 uv run generate-diagram --input data/components.csv  # from a local CSV
 uv run generate-diagram --google-sheet --all         # no refactor-status filter
