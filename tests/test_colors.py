@@ -1,5 +1,7 @@
 """Tests for translator_diagram.colors."""
 
+from pathlib import Path
+
 import click
 import pytest
 
@@ -118,6 +120,20 @@ class TestLoadOwnerColors:
         result = load_owner_colors()
         assert "NCATS" in result
         assert result["NCATS"].startswith("#")
+
+    def test_the_packaged_copy_matches_the_one_in_config(self):
+        # config/owner-colors.csv is the file people edit; the copy inside the
+        # package is what an installed generate-diagram falls back to when
+        # there is no checkout to read. If they drift, the same command
+        # produces different colours depending on where it was run, with
+        # nothing to say why — so this is a gate, not a convention.
+        root = Path(__file__).resolve().parent.parent
+        config = root / "config" / "owner-colors.csv"
+        packaged = root / "src" / "translator_diagram" / "data" / "owner-colors.csv"
+        assert config.read_bytes() == packaged.read_bytes(), (
+            "config/owner-colors.csv and the packaged copy have diverged; "
+            "copy the edited one over the other"
+        )
 
     def test_the_checkouts_config_copy_wins(self, tmp_path, monkeypatch):
         config = tmp_path / "config"

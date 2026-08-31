@@ -123,8 +123,9 @@ produces. A missing `id` column, and a file whose rows are all id-less, are
 change. Row order is legend order. Keeping this a data file is deliberate:
 project managers change colours without touching Python. Don't move it into a
 constant. `src/translator_diagram/data/owner-colors.csv` is the copy shipped
-with the package for installs that have no checkout to read; keep the two in
-step, and see `load_owner_colors` for the resolution order.
+with the package for installs that have no checkout to read; a test fails if
+the two diverge, so edit `config/` and copy it across. See `load_owner_colors`
+for the resolution order.
 
 **Change ghost or external node colours** → the `GHOST_*` /
 `EXTERNAL_FILL_COLOR` constants in `colors.py`.
