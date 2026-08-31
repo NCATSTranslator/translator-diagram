@@ -259,39 +259,37 @@ translator-diagram/
 ## Status and next steps
 
 This is a work in progress. The tool itself works; what is not yet built is the
-public-facing view.
-
-**Next: an interactive GitHub Pages view.** The plan is a single static HTML
-page that embeds the generated SVG and drives a detail panel from
-`components.json` — no build step, no bundler. The generator already emits
-everything that needs: per-node links, tooltips and stable ids. A GitHub
-Actions workflow will regenerate from the sheet on a schedule and deploy.
-
-**Open question, to settle before that ships:** this repository and its Pages
-site are public, so publishing a rendered diagram publishes the component
-names, owners, statuses and dependency edges it contains. That needs a
-deliberate decision, tracked in
-[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) —
-publish everything, gate it behind an opt-in `Public` column in the sheet, or
-strip the free-text fields. Until then nothing generated is committed; `data/`
+public-facing view — a single static page over the generated SVG and
+`components.json`, deployed from a scheduled GitHub Actions run. That is
+[issue #10](https://github.com/NCATSTranslator/translator-diagram/issues/10),
+and it waits on
+[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7):
+this repository and its Pages site are public, so publishing a rendered diagram
+publishes the component names, owners, statuses and dependency edges it
+contains. Until that is settled nothing generated is committed, and `data/`
 stays gitignored.
 
-Note that the SVG carries more than the picture shows: every node's hover
-tooltip embeds its owner, refactor status and `Notes`, and `components.json`
-carries every parsed column of every non-hidden row. "Strip the free-text
-fields" therefore means stripping tooltips and JSON keys, not just labels.
+Worth knowing while it is being decided: the SVG carries more than the picture
+shows. Every node's hover tooltip embeds its owner, refactor status and
+`Notes`, and `components.json` carries every parsed column of every non-hidden
+row — so "publish the diagram but not the details" means stripping tooltips and
+JSON keys, not just labels.
 
 ## Possible future improvements
 
-- **Grouping / filtering by ITRB category** — the `Component in ITRB` column
-  is loaded but not currently used; it could drive an alternative colour scheme
-  or a `--group-by itrb` flag.
-- **Cycle detection** — the validator checks for unknown IDs but does not yet
-  detect dependency cycles, which would be a useful integrity check.
-- **Multiple sheet tabs** — `--sheet-gid` already supports non-default tabs;
-  a `--all-tabs` mode could merge or overlay multiple views.
-- **Diff mode** — compare two runs of the tool (e.g. before and after a sprint)
-  and highlight added, removed, or changed components and edges.
+The [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues)
+is the live list. Ideas that started here:
+
+- [Report dependency cycles during validation](https://github.com/NCATSTranslator/translator-diagram/issues/11)
+  — the validator catches unknown and duplicate IDs, but not a loop.
+- [Diff two runs and report what changed](https://github.com/NCATSTranslator/translator-diagram/issues/12)
+  — e.g. before and after a sprint.
+- [Use the `Component in ITRB` column](https://github.com/NCATSTranslator/translator-diagram/issues/6)
+  — it is parsed into `Component.itrb` and nothing reads it.
+- **Multiple sheet tabs.** `--sheet-gid` already handles non-default tabs, so an
+  `--all-tabs` mode could merge or overlay several views. Not filed as an issue:
+  whether it is worth anything depends on how the sheet ends up structured,
+  which is part of #7.
 
 ## Licence
 

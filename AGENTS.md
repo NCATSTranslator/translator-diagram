@@ -206,9 +206,10 @@ visible. See `_compute_ghost_ids`.
 **SVG attributes**: `_emit_component_node` sets `id` (stable per-node handle),
 `tooltip`, and `URL`/`target` when the row has a URL. Graphviz turns `URL` into
 an `<a xlink:href>` wrapper in SVG output. These are inert in PNG. They exist
-for the planned GitHub Pages view — a static page over the generated SVG and
-`components.json`, no build step. Don't port this tool to JavaScript to serve
-that view; the browser needs the generated DOT, not the generator.
+for the planned GitHub Pages view ([#10](https://github.com/NCATSTranslator/translator-diagram/issues/10))
+— a static page over the generated SVG and `components.json`, no build step.
+Don't port this tool to JavaScript to serve that view; the browser needs the
+generated DOT, not the generator.
 
 ## What is not committed
 
