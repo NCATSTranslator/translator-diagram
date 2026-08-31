@@ -321,6 +321,11 @@ def build_payload(
         "otel_service_counts": {
             env: len(names) for env, names in synced.otel.items()
         },
+        # Distinct across the three collectors, not their sum: only two names
+        # report to all three, so summing counts most services twice over.
+        "otel_service_total": len(set().union(*synced.otel.values()))
+        if synced.otel
+        else 0,
         "rows": rows,
     }
 

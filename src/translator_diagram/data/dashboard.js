@@ -227,9 +227,10 @@ function shell() {
           counts.attempted ?? 0}</span></div>
         <div class="note">${counts.failed ?? 0} failed</div></div>
       <div class="tile"><div class="label">OTel services</div>
-        <div class="value">${Object.values(DATA.otel_service_counts ?? {})
-          .reduce((a, b) => a + b, 0)}</div>
-        <div class="note">across ci, test, prod</div></div>
+        <div class="value">${DATA.otel_service_total ?? 0}</div>
+        <div class="note">distinct across ${
+          Object.entries(DATA.otel_service_counts ?? {})
+            .map(([env, n]) => `${esc(env)} ${n}`).join(", ")}</div></div>
     </div>
 
     <div class="filters">

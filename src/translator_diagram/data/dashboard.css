@@ -185,9 +185,11 @@ td.env.absent { color: var(--muted); }
   vertical-align: 1px;
   background: var(--quiet-bg); color: var(--quiet-fg);
 }
-/* Only the sources that are not the live endpoint are called out. A version
-   read from the running service is the expected case and needs no badge. */
-.src[data-src="openapi"] { background: var(--ok-bg); color: var(--ok-fg); }
+/* Only the sources that are *not* the running service are called out. A
+   version read live from the deployment is the expected case and gets the
+   quiet default; 27 of 45 cells are that case, and colouring them would make
+   the table a wall of green and teach the reader to ignore the colour. Amber
+   means "this number does not come from the thing that is running". */
 .src[data-src="smartapi"] { background: var(--warn-bg); color: var(--warn-fg); }
 .src[data-src="helm"] { background: var(--warn-bg); color: var(--warn-fg); }
 
@@ -205,8 +207,21 @@ tr.isolated td:first-child { border-left: 3px solid var(--warn-bg); }
 
 footer { color: var(--muted); font-size: 0.8rem; margin-top: 20px; }
 
+/* Narrow windows drop the columns that are context rather than content, then
+   let the table scroll. Dropping alone is not enough: with four environment
+   columns the last two fall off the edge and become unreachable, which is a
+   worse failure than losing a sticky header.
+
+   The header has to stop being sticky at the same breakpoint, because an
+   ancestor with `overflow: auto` silently breaks `position: sticky` — better
+   to turn it off deliberately than to ship one that quietly does nothing. */
 @media (max-width: 1100px) {
   .drop-md { display: none; }
+  .card { overflow-x: auto; }
+  thead th { position: static; }
+  /* The per-cell detail line is what makes the columns wide. */
+  td.env .sub { display: none; }
+  td.env { min-width: 82px; }
 }
 @media (max-width: 800px) {
   .drop-sm { display: none; }
