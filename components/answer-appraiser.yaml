@@ -35,6 +35,14 @@ documentation:
   - url: https://github.com/NCATSTranslator/Translator-All/wiki/SRI-Answer-Appraiser
     kind: wiki
 
+environments:
+  ci:
+    url: https://answerappraiser.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://answerappraiser.test.transltr.io/
+    location: ITRB
+
 diagram:
   refactor_status: Continues into Refactor
   layer: ARS and UI

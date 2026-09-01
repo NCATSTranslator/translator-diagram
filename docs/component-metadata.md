@@ -172,8 +172,11 @@ the override records the exception rather than the rule.
 
 **Environments are recorded only where SmartAPI cannot supply them.** For a
 registered component the block should be *absent*, and a fetcher fills it in.
-Every `environments:` block in this repo is a component SmartAPI does not
-cover.
+The unit is the environment, not the component: registration is manual and
+routinely partial, so a component can be registered for prod and say nothing
+about the ci and test it is also deployed to. `answer-appraiser` is the live
+example — its record lists production only — so its `environments:` block
+carries the two SmartAPI does not cover and leaves prod to the fetcher.
 
 **A `~` prefix marks a planned relationship**, unchanged from the sheet:
 `calls: [~jaeger]` is an edge we intend but have not built, and renders red.
