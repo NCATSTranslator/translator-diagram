@@ -11,12 +11,29 @@
 id: dogpark-tier-0
 name: "Tier 0: Gandalf (full KGX)"
 owner: DOGSLED
+component_type: KP
 
 identifiers:
+  infores: infores:dogpark-tier0
   itrb_app: retriever-ci-pipeline
   itrb_group: Retriever
   otel_services:
     - gandalf
+
+repositories:
+  - url: https://github.com/ranking-agent/gandalf
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: openapi.json
+  docs: docs
+  status: null
+
+environments:
+  dev:
+    url: https://gandalf.renci.org/
+    location: RENCI
 
 diagram:
   refactor_status: New in Refactor
