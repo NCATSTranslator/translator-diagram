@@ -19,9 +19,9 @@
 stages:
   - title: Data ingest
     description: >-
-      Pulls external sources in and turns them into KGX, on the toolchain the
-      ingest teams share and against the identifiers everything else joins on.
-    components: [dingo-ingest, translator-sdk, nodenorm-es]
+      Pulls external sources in and turns them into KGX, against the
+      identifiers everything else joins on.
+    components: [dingo-ingest, nodenorm-es]
 
   - title: KGX storage
     description: Lands ingested KGX where the query tiers can read it.
@@ -58,8 +58,10 @@ stages:
        docmetadata-api]
 
   - title: Super users
-    description: For people driving Translator directly rather than through the interface.
-    components: [translator-component-toolkit]
+    description: >-
+      For people driving Translator directly rather than through the interface:
+      the SDK they build against and the toolkit of components on top of it.
+    components: [translator-sdk, translator-component-toolkit]
 
   - title: Engineering
     description: >-
