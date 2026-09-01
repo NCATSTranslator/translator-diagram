@@ -11,6 +11,7 @@ happened and the run still succeeds, because "was this endpoint reachable at
 """
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -27,6 +28,7 @@ from .components import (
     deployments_from_smartapi,
     derive_deployments,
     endpoint_url_in,
+    github_repo,
     merge_deployments,
 )
 
@@ -46,6 +48,20 @@ OTEL_COLLECTORS = {
     "test": "https://translator-otel.test.transltr.io/api/services",
     "prod": "https://translator-otel.transltr.io/api/services",
 }
+
+GITHUB_RELEASES = "https://api.github.com/repos/{repo}/releases?per_page=100"
+"""Every release of one repository, newest first.
+
+The whole list rather than the newest few, because prod routinely runs an
+older release than dev does — answer-appraiser's prod is two minor versions
+behind its ci — and a release-notes link is worth most for exactly the version
+someone is looking at.
+
+ponytail: one page. A repository with more than 100 releases would lose its
+oldest, which nothing here has; paginating means following the Link header.
+"""
+
+GITHUB_API_PREFIX = "https://api.github.com/"
 
 DEVOPS_RAW = (
     "https://raw.githubusercontent.com/helxplatform/translator-devops"
@@ -103,10 +119,26 @@ Fetcher = Callable[[str], tuple[int, bytes]]
 """Given a URL, return (http status, body). Injected so tests never fetch."""
 
 
+def _headers(url: str) -> dict[str, str]:
+    """Request headers for one URL.
+
+    GitHub allows 60 unauthenticated calls an hour per address, which two
+    back-to-back `--force` syncs can exhaust between them. A `GITHUB_TOKEN` in
+    the environment raises that to 5000 and is sent to api.github.com and
+    nowhere else — every other host here is public and wants no credential.
+    """
+    headers = {"User-Agent": USER_AGENT}
+    if url.startswith(GITHUB_API_PREFIX):
+        headers["Accept"] = "application/vnd.github+json"
+        if token := os.environ.get("GITHUB_TOKEN"):
+            headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 def http_fetch(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[int, bytes]:
     """The real fetcher. urllib rather than requests: `loading.py` already
     reaches the network with the stdlib, and one HTTP client is enough."""
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(url, headers=_headers(url))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status, response.read()
@@ -177,6 +209,26 @@ def _plan_endpoint_fetches(
                 if url:
                     jobs.append((url, root / kind / component.id / f"{env}.json"))
     return jobs
+
+
+def _plan_release_fetches(
+    components: Iterable[ComponentFile], root: Path
+) -> list[tuple[str, Path]]:
+    """Every (url, destination) for a source repository's GitHub releases.
+
+    Keyed by the repository rather than by the component, because three
+    shepherd components share one repository and fetching it three times would
+    spend three of GitHub's sixty hourly calls on the same answer.
+    """
+    jobs: dict[str, tuple[str, Path]] = {}
+    for component in components:
+        repo = github_repo(component.repository("source"))
+        if repo:
+            jobs[repo] = (
+                GITHUB_RELEASES.format(repo=repo),
+                root / "releases" / f"{repo}.json",
+            )
+    return [jobs[repo] for repo in sorted(jobs)]
 
 
 def _read_derived(root: Path) -> dict[str, Any]:
@@ -275,8 +327,13 @@ def sync(
         report.fetches.extend(results)
         return results
 
-    # Wave one: the registries.
-    echo("Fetching the SmartAPI registry and the OpenTelemetry collectors ...")
+    # Wave one: the registries, the charts, and the release lists. None of
+    # these depends on any of the others, so they go out together.
+    release_jobs = _plan_release_fetches(components, root)
+    echo(
+        "Fetching the SmartAPI registry, the OpenTelemetry collectors and "
+        f"{len(release_jobs)} GitHub release lists ..."
+    )
     registry_jobs = [(SMARTAPI_QUERY, root / "smartapi.json")]
     registry_jobs += [
         (url, root / "otel" / f"{env}.json") for env, url in OTEL_COLLECTORS.items()
@@ -290,7 +347,18 @@ def sync(
                         root / "helm" / component.helm_chart / name,
                     )
                 )
-    run(registry_jobs)
+    registry_results = run(registry_jobs + release_jobs)
+    throttled = sum(
+        1
+        for result in registry_results
+        if result.url.startswith(GITHUB_API_PREFIX) and result.status in (403, 429)
+    )
+    if throttled:
+        # Silence here would look like "these repositories have no releases".
+        echo(
+            f"  {throttled} release lists were rate-limited by GitHub — set "
+            f"GITHUB_TOKEN to raise the hourly limit"
+        )
 
     by_smartapi = {}
     smartapi_path = root / "smartapi.json"

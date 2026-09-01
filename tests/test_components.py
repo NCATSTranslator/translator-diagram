@@ -8,6 +8,7 @@ from translator_diagram.components import (
     Deployment,
     derive_deployments,
     endpoint_url_in,
+    github_repo,
     index_by_id,
     load_components,
     merge_deployments,
@@ -199,6 +200,28 @@ class TestDeriveDeployments:
 
     def test_nothing_known_derives_nothing(self):
         assert derive_deployments({}) == {}
+
+
+class TestGithubRepo:
+    def test_a_plain_repository_url(self):
+        assert github_repo("https://github.com/RTXteam/RTX") == "RTXteam/RTX"
+
+    def test_a_trailing_slash_or_dot_git(self):
+        assert github_repo("https://github.com/a/b/") == "a/b"
+        assert github_repo("https://github.com/a/b.git") == "a/b"
+
+    def test_a_path_into_a_repository_is_not_one(self):
+        # Every helm-chart entry looks like this. Its releases belong to the
+        # devops repository, not to the component, so it must not match.
+        assert github_repo(
+            "https://github.com/helxplatform/translator-devops"
+            "/tree/develop/helm/shepherd"
+        ) is None
+
+    def test_a_non_github_url_or_none(self):
+        assert github_repo("https://gitlab.com/a/b") is None
+        assert github_repo(None) is None
+        assert github_repo("") is None
 
 
 class TestLoading:

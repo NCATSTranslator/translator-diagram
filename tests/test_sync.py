@@ -8,6 +8,8 @@ from translator_diagram.sync import (
     SMARTAPI_QUERY,
     FetchResult,
     _confirm_derived,
+    _headers,
+    _plan_release_fetches,
     _still_fresh,
     deployments_from_smartapi,
     fetch_to,
@@ -188,6 +190,62 @@ class TestSync:
                       tmp_path, fetcher=fetcher, max_age=0)
         assert report.succeeded >= 1
         assert any(f.error for f in report.fetches)
+
+
+class TestReleaseFetches:
+    def _repo(self, url, role="source"):
+        return _comp("svc", repositories=[{"url": url, "role": role}])
+
+    def test_a_source_repository_is_fetched(self, tmp_path):
+        jobs = _plan_release_fetches(
+            [self._repo("https://github.com/RTXteam/RTX")], tmp_path
+        )
+        assert jobs == [(
+            "https://api.github.com/repos/RTXteam/RTX/releases?per_page=100",
+            tmp_path / "releases" / "RTXteam" / "RTX.json",
+        )]
+
+    def test_one_repository_shared_by_three_components_is_fetched_once(self, tmp_path):
+        # The three shepherds. GitHub allows sixty calls an hour unauthenticated;
+        # spending three of them on one answer is how that budget disappears.
+        shepherds = [
+            _comp(cid, repositories=[
+                {"url": "https://github.com/BioPack-team/shepherd", "role": "source"}
+            ])
+            for cid in ("shepherd-arax", "shepherd-bte", "shepherd-aragorn")
+        ]
+        assert len(_plan_release_fetches(shepherds, tmp_path)) == 1
+
+    def test_a_helm_chart_path_is_not_a_repository(self, tmp_path):
+        assert _plan_release_fetches([self._repo(
+            "https://github.com/helxplatform/translator-devops"
+            "/tree/develop/helm/jaeger", role="helm-chart")], tmp_path) == []
+
+    def test_only_the_source_role_counts(self, tmp_path):
+        # jaeger links jaegertracing/jaeger as `related`: upstream's releases
+        # are not this deployment's.
+        assert _plan_release_fetches(
+            [self._repo("https://github.com/jaegertracing/jaeger", role="related")],
+            tmp_path,
+        ) == []
+
+    def test_sync_fetches_them(self, tmp_path):
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
+        sync([self._repo("https://github.com/a/b")], tmp_path,
+             fetcher=fetcher, max_age=0)
+        assert "https://api.github.com/repos/a/b/releases?per_page=100" in fetcher.urls
+
+
+class TestHeaders:
+    def test_a_token_reaches_github_and_nowhere_else(self, monkeypatch):
+        monkeypatch.setenv("GITHUB_TOKEN", "s3cret")
+        assert _headers("https://api.github.com/repos/a/b/releases")[
+            "Authorization"] == "Bearer s3cret"
+        assert "Authorization" not in _headers("https://smart-api.info/api/query")
+
+    def test_no_token_is_no_header(self, monkeypatch):
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        assert "Authorization" not in _headers("https://api.github.com/repos/a/b")
 
 
 class TestConfirmDerived:

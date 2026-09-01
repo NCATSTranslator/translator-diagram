@@ -50,6 +50,12 @@ DERIVABLE_HOSTS = {
 # manufacture a hundred 404s and call them data.
 DEFAULT_ENDPOINT_PATHS = {"openapi": "openapi.json"}
 
+# A URL naming a whole GitHub repository, and nothing inside it. The capture
+# groups are the two halves of the `owner/name` slug the API is addressed by.
+GITHUB_REPO = re.compile(
+    r"^https?://github\.com/(?P<owner>[^/]+)/(?P<name>[^/#?]+?)(?:\.git)?/?$"
+)
+
 # SmartAPI's `x-maturity` vocabulary is not ours. `ci` is "staging", which is
 # the mapping people get wrong: it is not "development".
 MATURITY_TO_ENV = {
@@ -195,6 +201,21 @@ def endpoint_url_in(
     # Not urljoin: a base of .../api/arax/v1.4 must keep its path, and urljoin
     # would discard everything after the last slash.
     return deployment.url.rstrip("/") + "/" + path.lstrip("/")
+
+
+def github_repo(url: str | None) -> str | None:
+    """`owner/name` for a URL that names a whole GitHub repository.
+
+    A URL pointing *into* a repository is not one: the `helm-chart` entries are
+    all `.../translator-devops/tree/develop/helm/<chart>`, and that repository's
+    releases are the devops team's, not this component's. Labelling those as a
+    component's releases would be worse than showing none, so they are rejected
+    here rather than filtered downstream.
+    """
+    if not url:
+        return None
+    match = GITHUB_REPO.match(url.strip())
+    return f"{match['owner']}/{match['name']}" if match else None
 
 
 def deployments_from_smartapi(record: dict[str, Any]) -> dict[str, Deployment]:
