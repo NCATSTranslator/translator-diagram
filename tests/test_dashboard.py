@@ -212,6 +212,22 @@ class TestPayload:
         assert payload["generated_at"] == "2026-08-31T00:01:00+00:00"
         assert payload["sync_counts"]["failed"] == 1
 
+    def test_both_badge_vocabularies_reach_the_page(self, component, synced):
+        # The page renders a badge by looking its key up in these; a key the
+        # payload does not carry renders as the raw key, which is how "openapi"
+        # or "registry" would end up in the table in lower case.
+        payload = build_payload([component], synced)
+        assert payload["source_labels"]["openapi"] == "OpenAPI"
+        assert set(payload["updated_labels"]) == {"release", "registry"}
+
+    def test_every_row_carries_what_a_band_needs(self, component, synced):
+        # Adding a key to the payload is safe and renaming one is not: the JS
+        # reads these three by name to draw a band, and a row missing any of
+        # them silently loses its heading.
+        row = build_payload([component], synced)["rows"][0]
+        for key in ("step", "step_label", "step_title", "step_description"):
+            assert key in row
+
 
 class TestRendering:
     def test_every_component_appears(self, component, synced):
@@ -616,6 +632,18 @@ stages:
 
     def test_an_empty_file_is_not_an_error(self, tmp_path):
         assert self._stages(tmp_path, "") == []
+
+    def test_a_file_with_no_stages_still_yields_the_unplaced_band(self, tmp_path):
+        # Every component would land in it, which is a legible failure: the
+        # page says "not yet placed" 26 times rather than showing no bands.
+        stages = self._stages(tmp_path, """
+unplaced:
+  description: Nothing is placed.
+  components: [a]
+""")
+        assert len(stages) == 1 and stages[0]["unplaced"] is True
+        ordered = in_stage_order(self._components("a", "b"), stages)
+        assert {number for _, number, _ in ordered} == {1}
 
     def test_the_rows_carry_the_stage_prose(self, synced, component):
         row = build_rows([component], synced)[0]

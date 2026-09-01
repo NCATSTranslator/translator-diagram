@@ -29,8 +29,26 @@ See [README.md](README.md) for user-facing documentation.
   ```
 
   Shoot it narrow (`--window-size=760,1000`) too; the column-dropping rules
-  only misbehave there. Whether the result *reads* well is still the
+  only misbehave there, and shoot the widths *between* the breakpoints — the
+  filter bar wraps around 1200–1500px, which is where the sticky header and the
+  band descriptions go wrong. Whether the result *reads* well is still the
   operator's call — report what you saw and let them look.
+
+  A headless profile follows the system theme, so on a dark machine every
+  screenshot is dark and half the palette goes unchecked. A second profile with
+  one pref shoots the other theme:
+
+  ```bash
+  mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
+  ```
+
+- **JS with judgement in it can be tested, even with no JS harness here.** Slice
+  the block out of `data/dashboard.js`, stub `document`/`localStorage`/
+  `matchMedia`, and run it under `node` from the scratchpad — that is how the
+  theme cycle was checked against both system preferences, and how the sort
+  comparators were driven over the real `overview.json` to prove undated rows
+  stay last in *both* directions. Throwaway scripts, not fixtures: nothing in
+  CI runs JS beyond `node --check`.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`
