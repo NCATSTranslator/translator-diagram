@@ -24,7 +24,18 @@ repositories:
     role: source
     visibility: public
 
+endpoints:
+  # Checked on 2026-09-01, all four environments: the UI answers *any* path
+  # with the app's own HTML and a 200, so a fetcher aiming at openapi.json
+  # gets a page that looks like a success and parses as nothing. Worse than a
+  # 404, and the reason this is null rather than absent.
+  openapi: null
+
 environments:
+  # Not an ITRB hostname and not derivable from the others: the dev UI lives
+  # in NCATS' own namespace, which is why nothing found it automatically.
+  dev:
+    url: https://transltr-bma-ui-dev.ncats.io/
   ci:
     url: https://ui.ci.transltr.io/
     location: ITRB
