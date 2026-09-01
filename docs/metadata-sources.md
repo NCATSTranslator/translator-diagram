@@ -155,6 +155,26 @@ Rate limit: 60 requests an hour per address unauthenticated, 5000 with a
 token. Nineteen repositories is one sync, so this only bites when re-syncing
 with `--force`; `sync.py` sends `GITHUB_TOKEN` when the environment has one.
 
+### Dates
+
+The registry is one of only two places that dates anything, and the useful
+field is not the obvious one:
+
+| Field | What it means | Usable? |
+|---|---|---|
+| `_meta.last_updated` | when the registered document last changed | **Yes** — 11 of our 26 |
+| `_meta.date_created` | when it was first registered | As history only |
+| `_status.refresh_ts` | when SmartAPI last re-fetched the registration | No |
+| `_status.uptime_ts` | when SmartAPI last probed the API | No |
+
+The two `_status` stamps look like what you want and are not: across all 127
+records they span two minutes of the same morning, because they record
+SmartAPI's own polling rather than any change to a component. `_meta` has to be
+asked for by name in the `fields=` list — `meta=1` is a different parameter,
+and what it does is make `_id` appear.
+
+Nothing in any source dates a *deployment*. See [`../FUTURE.md`](../FUTURE.md).
+
 ## Status endpoints
 
 ```bash

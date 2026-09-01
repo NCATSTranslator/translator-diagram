@@ -262,10 +262,13 @@ matching parameter in the `main` signature, plus the options block in the
 README (it is a hand-maintained paraphrase of `--help`, not generated).
 
 **Add a column to the dashboard** → `build_cell` or `build_rows` in
-`dashboard.py` for the value, `envCell` or `rowHtml` in `data/dashboard.js` for
-the markup, and `data/dashboard.css` if it needs a style. The payload written
-to `overview.json` is a contract a scheduled job would publish, so adding a key
-is safe and renaming one is not.
+`dashboard.py` for the value, then **one entry in the `COLUMNS` table** in
+`data/dashboard.js`, and `data/dashboard.css` if it needs a style. That entry
+owns the header, the body cell, the `drop-*` class that hides both at narrow
+widths, the sort value and the column count the empty row's colspan needs —
+they used to be written out separately, which is how a header ends up hidden
+without its column. The payload written to `overview.json` is a contract a
+scheduled job would publish, so adding a key is safe and renaming one is not.
 
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
 version-source chain in `dashboard.build_cell`. Order that chain by how close
@@ -302,6 +305,30 @@ nearby nodes, losing the distinction the diagram exists to show.
 
 **Dashed edges are suppressed where a solid edge already exists** between the
 same two nodes in the same direction, for the same reason.
+
+**Half the rows have no date.** `Last updated` is null for 13 of 26
+components — they publish no GitHub releases and are in no SmartAPI record, and
+those are the only two date sources we fetch. They sort to the bottom in *both*
+directions, deliberately: reversing a sort must not promote the rows we know
+least about. `FUTURE.md` records what it would cost to fill them in.
+
+**A cached `data/sync/` body can predate a change to the URL that fetched it.**
+`fetch_to` judges freshness by the destination's mtime, so adding a field to
+`SMARTAPI_QUERY` used to leave a perfectly fresh `smartapi.json` that answered
+the older question. `sync` now carries the previous manifest's path-to-URL map
+and re-fetches anything whose URL moved. If you add a fetcher, give it a stable
+destination path and let that map do the work.
+
+**Environment columns sort by the age of the release running there**, not by
+version string: comparing `2.10.2` against `1.0` across two different
+components means nothing. Cells rank in tiers — running a release we can date,
+running something no release names, not deployed — and the tiers hold in both
+directions.
+
+**The sticky header's offset is measured, not declared.** `--filters-height` is
+set from the filter bar's real height on every render and on resize, because
+the bar wraps to two lines at some widths and a hardcoded `top` hides the first
+row underneath it.
 
 **The dashboard opens filtered**, on `Environments disagree`, so it shows 7 of
 26 rows rather than everything. The count beside the filters says so, and

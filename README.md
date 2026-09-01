@@ -204,6 +204,23 @@ if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
 a higher limit. It is sent to `api.github.com` and to nothing else, and a
 throttled fetch costs some release tags, not the run.
 
+**Every column sorts.** Click a header to sort by it, click again to reverse,
+and a third click returns to data-flow order — which is also what the ✕ beside
+the order name in the filter bar does, and the only way back when a narrow
+window has hidden the column you sorted on. The order is always named there,
+and it travels in the URL with the filters. In data-flow order the rows are
+banded by step, so the pipeline is visible rather than implied; sorting by
+owner, type or layer bands them by that instead.
+
+**`Last updated`** is the newer of a component's latest GitHub release and its
+SmartAPI registration, badged with which one it was. Thirteen of the
+twenty-six components have neither and show a dash: they publish no releases
+and are in no registry. Nothing here dates a *deployment* — see
+[`FUTURE.md`](FUTURE.md) for the closest available proxy. The environment
+columns sort by the age of the release running in that environment, which is
+the sharpest version of the same question: prod is on `0.6.1`, released
+2024-10-04.
+
 **The page opens filtered**, on the components whose environments disagree —
 seven of twenty-six today, and the only rows with anything to say. The
 dropdown beside the type filter holds the rest: `Any version known`, `No
