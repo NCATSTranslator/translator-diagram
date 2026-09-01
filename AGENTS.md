@@ -89,7 +89,7 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `DEFAULT_ENDPOINT_PATHS` |
+| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS` |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
@@ -273,6 +273,21 @@ the source is to what is actually running: a live endpoint, then a manual
 registration, then a chart describing what should have been deployed. Whatever
 you add must appear in `SOURCE_LABELS` so the badge names it — a version whose
 provenance is invisible is the thing the dashboard exists to avoid.
+
+**Touch anything that calls the GitHub API** → it is the one host here with a
+budget: 60 calls an hour per address unauthenticated, 5000 with a
+`GITHUB_TOKEN` in the environment, which `_headers` sends to api.github.com and
+nowhere else. Release lists are keyed by repository rather than by component so
+the three shepherds cost one call, and a throttled 403 is reported by name at
+the end of wave one — a silent one reads as "this repository has no releases",
+which is a different and wrong finding. Nothing here fails the run: the
+dashboard shows fewer tags, and the next sync picks them up.
+
+**Only a `source` repository whose URL names a whole repository gets releases.**
+`github_repo` rejects `.../translator-devops/tree/develop/helm/<chart>`, which
+is what every `helm-chart` entry looks like: those releases belong to the
+devops repository and labelling them as a component's would be worse than
+showing none.
 
 **Add anything that lands in the SVG with an id** → route it through
 `naming.py`: give it an id shape that cannot collide (see below), and claim it

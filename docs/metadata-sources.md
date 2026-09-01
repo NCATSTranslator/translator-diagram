@@ -118,6 +118,43 @@ The mapping is not one-to-one in either direction: `ui` is `ui-fe` **and**
 `ui-be`; `shepherd-arax`, `shepherd-aragorn` and `shepherd-bte` are all one
 repo, `BioPack-team/shepherd`.
 
+### Releases
+
+```bash
+curl -s 'https://api.github.com/repos/TranslatorSRI/answer-appraiser/releases?per_page=100'
+```
+
+`tag_name`, `name`, `html_url`, `published_at`, `prerelease`, `draft`. The
+dashboard's Repository column is built from this, matching a tag to a running
+version on the `v` prefix alone — `v1.5.2` is what NameResolution tags and
+`1.5.2` is what it reports.
+
+**Half of what is running is not a release.** The 21 components with a source
+repository point at 19 repositories; 7 of those publish releases at all, and
+10 of the 20 distinct running versions match one. The misses are not all the
+same kind of miss:
+
+- **No releases published**, in 12 of the 19: the four `biothings`
+  repositories, `Relay`, `ui-fe`, `retriever`, `kgx-storage`,
+  `Translator_sdk`, `Translator_component_toolkit`, `smartAPI` and
+  `DogPark-Ranger`. Nothing can be matched for them.
+- **Tags that are not versions.** `RTXteam/RTX` publishes releases, but they
+  mark deployments (`itrb-test-premerge-2026-08-04`, `tier0-20260408`) rather
+  than the `1.6.2` ARAX reports. The tags and the version are different
+  vocabularies, and no normalisation joins them.
+- **Running ahead of the repository.** PloverDB reports `2.10.2` while its
+  newest release *and* newest tag are both `v2.1.0` — that version is not
+  tagged anywhere, so falling back from `/releases` to `/tags` would not find
+  it either.
+
+Note also that `published_at` is not the order `/releases` returns: it sorts
+by when the release was created, and NameResolution's `v1.5.2` was published
+after `v1.6.2`.
+
+Rate limit: 60 requests an hour per address unauthenticated, 5000 with a
+token. Nineteen repositories is one sync, so this only bites when re-syncing
+with `--force`; `sync.py` sends `GITHUB_TOKEN` when the environment has one.
+
 ## Status endpoints
 
 ```bash

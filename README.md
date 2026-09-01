@@ -192,6 +192,17 @@ things it reports are the answer:
 - **Which environments disagree.** A version in the minority for its component
   is tinted, so drift between dev, ci, test and prod is visible without reading
   every cell.
+- **Which release each environment is running.** The Repository column lists a
+  component's newest GitHub releases, plus any older release an environment is
+  still on, each tag linking to its notes. A filled tag is deployed somewhere
+  on that row, so the number in the `prod` column has its changelog one click
+  away.
+
+Release lists come from the GitHub API, which allows 60 calls an hour to an
+unauthenticated address. That covers a sync of this repository twice over, but
+if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
+a higher limit. It is sent to `api.github.com` and to nothing else, and a
+throttled fetch costs some release tags, not the run.
 
 Filters live in the URL, so a filtered view can be pasted to someone else and
 arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
