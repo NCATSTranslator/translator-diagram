@@ -26,11 +26,15 @@ on:
 permissions:
   contents: read
 
-# Never two deploys at once, and never cancel one half-way: the artifact a
-# cancelled run leaves behind is the one the next deploy would publish.
+# Deploys serialise and are never cancelled half-way: the artifact a cancelled
+# run leaves behind is the one the next deploy would publish. Pull requests are
+# the opposite case — they only produce an artifact to download, and a build of
+# a commit you have already pushed past is worth nothing — so they get a group
+# per branch and cancel freely. One shared group would have made every PR build
+# queue behind every other, on a workflow that runs on every push.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
