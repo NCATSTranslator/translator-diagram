@@ -109,12 +109,33 @@ const THEME_ICONS = {
     <circle cx="8" cy="8" r="5.6" fill="none"/>
     <path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>`,
 };
-const NEXT_THEME = { light: "dark", dark: "auto", auto: "light" };
 const THEME_NAMES = { light: "light", dark: "dark", auto: "following the system" };
 
+function systemPrefersDark() {
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
 function currentTheme() {
-  return NEXT_THEME[document.documentElement.dataset.themeChoice]
-    ? document.documentElement.dataset.themeChoice : "auto";
+  const choice = document.documentElement.dataset.themeChoice;
+  return choice in THEME_NAMES ? choice : "auto";
+}
+
+/* The cycle starts by moving *away* from what the system says, because the
+   page opens following the system: ordering it auto → light → dark would spend
+   the first click repainting a light machine light, which reads as a broken
+   button rather than as a default worth keeping. */
+function nextTheme(choice) {
+  const differs = systemPrefersDark() ? "light" : "dark";
+  if (choice === "auto") return differs;
+  return choice === differs ? (systemPrefersDark() ? "dark" : "light") : "auto";
+}
+
+function applyTheme(choice) {
+  const root = document.documentElement;
+  root.dataset.themeChoice = choice;
+  root.dataset.theme =
+    choice === "dark" || (choice === "auto" && systemPrefersDark()) ? "dark" : "light";
+  renderTheme();
 }
 
 function renderTheme() {
@@ -124,7 +145,7 @@ function renderTheme() {
   // The icon says which mode is on; the label has to say that *and* what the
   // click does, because an icon-only button otherwise announces nothing.
   const label = `Theme: ${THEME_NAMES[choice]} — switch to ${
-    THEME_NAMES[NEXT_THEME[choice]]}`;
+    THEME_NAMES[nextTheme(choice)]}`;
   button.title = label;
   button.setAttribute("aria-label", label);
 }
@@ -318,8 +339,8 @@ function shell() {
       </select>
       <button id="drift-toggle" aria-pressed="false">Drift only</button>
       <button id="details-toggle" aria-pressed="true">Details</button>
-      <button id="reset">Reset</button>
-      <button id="copy">Copy link</button>
+      <button id="reset" class="action">Reset</button>
+      <button id="copy" class="action">Copy link</button>
       <span class="spacer"></span>
       <span class="count" id="count"></span>
     </div>
@@ -389,14 +410,15 @@ function wire() {
   });
 
   document.getElementById("theme").addEventListener("click", () => {
-    const root = document.documentElement;
-    const choice = NEXT_THEME[currentTheme()];
-    root.dataset.themeChoice = choice;
+    const choice = nextTheme(currentTheme());
     try { localStorage.setItem("theme", choice); } catch { /* storage unavailable */ }
-    const dark = choice === "dark" ||
-      (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-    root.dataset.theme = dark ? "dark" : "light";
-    renderTheme();
+    applyTheme(choice);
+  });
+
+  // Following the system means following it while the page is open: someone
+  // reading this at dusk has their machine switch under them.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (currentTheme() === "auto") applyTheme("auto");
   });
 }
 

@@ -303,6 +303,13 @@ nearby nodes, losing the distinction the diagram exists to show.
 **Dashed edges are suppressed where a solid edge already exists** between the
 same two nodes in the same direction, for the same reason.
 
+**The theme cycle starts by moving away from the system**, not at light: the
+page defaults to following the operating system, so `auto → light → dark`
+would spend the first click repainting a light machine light and read as a
+dead button. `nextTheme` therefore reads `prefers-color-scheme` to decide
+which way to go first, and the one click that does not change the appearance
+is the trip back to auto, which says so in the button's title.
+
 **`newrank="true"`** in `build_graph` is required for `rank=same` to work
 across cluster boundaries — the legend clusters rely on it.
 

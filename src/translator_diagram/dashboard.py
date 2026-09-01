@@ -494,10 +494,12 @@ def render_html(payload: dict[str, Any]) -> str:
 <script>
 // Applied before the body renders, or the page flashes the wrong theme.
 (() => {{
+  // "auto" — follow the operating system — is the default, and the only way
+  // out of it is someone clicking the theme button on this page.
   let choice = "auto";
   try {{
     const stored = localStorage.getItem("theme");
-    if (stored === "light" || stored === "dark") choice = stored;
+    if (stored === "light" || stored === "dark" || stored === "auto") choice = stored;
   }} catch {{ /* storage unavailable: fall back to the system preference */ }}
   const dark = choice === "dark" ||
     (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
