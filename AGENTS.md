@@ -266,10 +266,12 @@ the page falls back to `in_flow_order` with no bands at all.
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:
 project managers change colours without touching Python. Don't move it into a
-constant. `src/translator_diagram/data/owner-colors.csv` is the copy shipped
-with the package for installs that have no checkout to read; a test fails if
-the two diverge, so edit `config/` and copy it across. See `load_owner_colors`
-for the resolution order.
+constant. There is one copy: the wheel build maps this file to
+`translator_diagram/data/owner-colors.csv`, which is where an install with no
+checkout to read falls back to, so nothing has to be kept in step by hand. In
+a source checkout that packaged path does not exist and nothing needs it,
+because `config/` is right there. See `load_owner_colors` for the resolution
+order and `[tool.hatch.build.targets.wheel.force-include]` for the mapping.
 
 Generating the packaged copy from `config/` at build time is the obvious way to
 drop one of them, and it does not work: hatchling's `force-include` reaches the

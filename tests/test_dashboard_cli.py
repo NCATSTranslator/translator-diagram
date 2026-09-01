@@ -16,7 +16,7 @@ from translator_diagram.dashboard_cli import build_main
 
 @pytest.fixture
 def workspace(tmp_path):
-    """A components directory, a sync cache, and a policy, all under tmp."""
+    """A components directory, a sync cache, a policy and colours, under tmp."""
     components = tmp_path / "components"
     components.mkdir()
     for cid in ("keeper", "secret"):
@@ -36,6 +36,9 @@ def workspace(tmp_path):
     )
     config = tmp_path / "config"
     config.mkdir()
+    # owner-colors.csv lives only in config/ now, so a workspace without one
+    # has no colours to find -- the same as any other checkout.
+    (config / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
     (config / "privacy.yaml").write_text(
         "components:\n"
         "  - id: secret\n"

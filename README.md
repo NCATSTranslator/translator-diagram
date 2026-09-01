@@ -274,9 +274,11 @@ Owner-to-colour mappings live in
 `color`). Edit that file to add a new owner, re-order the legend, or change a
 colour — no Python edit required.
 
-The tool looks for that file in the working directory, and falls back to the
-copy shipped inside the package, so an installed `generate-diagram` has colours
-wherever it runs. `--owner-colors PATH` overrides both.
+The tool looks for that file in the working directory or any directory above
+it, and falls back to the copy the wheel carries, so an installed
+`generate-diagram` has colours wherever it runs. That copy is the same file:
+the build maps it in, rather than the repository holding a second one.
+`--owner-colors PATH` overrides both.
 
 New owners not listed there receive fallback colours automatically.
 
@@ -385,7 +387,7 @@ translator-diagram/
 │   ├── legend.py         # The two legends
 │   ├── export.py         # components.json
 │   ├── cli.py            # The command line
-│   └── data/             # owner-colors.csv, shipped with the package
+│   └── data/             # dashboard.css and dashboard.js
 ├── components/           # One YAML file per component — see
 │                         # docs/component-metadata.md
 ├── unknown.yaml          # Identifiers no component file claims yet
