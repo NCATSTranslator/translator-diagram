@@ -43,9 +43,7 @@ diagram:
   externals: []
 
 notes: >-
-  Chunlei: It hosts a lot of APIs from last phase, some we have now moved to
-  CoCo's own ES server (e.g. for nodenorm, annotator, nameres), some are for
-  bte, which will be removed. But the pending api as our own API host will
-  probably continue being live, till all APIs there are not used. I imagine
-  when we eventually reach tier 2 KGs, pending API host can be used for
-  hosting some of these APIs.
+  Hosts a number of APIs from the previous phase. Some have moved to CoCo's own
+  ES server (nodenorm, annotator, nameres) and the BTE ones are expected to be
+  removed, but this host is likely to stay live while any of its APIs are still
+  in use, and could host tier 2 knowledge graph APIs later.

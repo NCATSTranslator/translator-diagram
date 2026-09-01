@@ -27,5 +27,4 @@ diagram:
   externals: []
 
 notes: >-
-  Mark: a little server that periodically runs some performance tests on a
-  cronjob
+  A small server that periodically runs performance tests on a cron job
