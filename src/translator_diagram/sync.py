@@ -35,12 +35,18 @@ from .components import (
 SMARTAPI_QUERY = (
     "https://smart-api.info/api/query"
     "?q=tags.name:translator&size=200&meta=1"
-    "&fields=info.title,info.version,info.x-translator,info.x-trapi,servers,_status"
+    "&fields=info.title,info.version,info.x-translator,info.x-trapi,servers"
+    ",_status,_meta"
 )
 """Every Translator-tagged SmartAPI record.
 
 `meta=1` is not optional: without it the response carries no `_id` at all, so
 records cannot be matched to the smartapi identifiers in the component files.
+It is a different parameter from the `_meta` field, which has to be asked for
+by name like any other: `_meta.last_updated` is when the registered document
+last changed, and it is the only date SmartAPI offers that moves when something
+about a component does. `_status.refresh_ts` is not that date — it is when
+SmartAPI last polled the API, and it reads as this morning on all 127 records.
 """
 
 OTEL_COLLECTORS = {
@@ -231,6 +237,31 @@ def _plan_release_fetches(
     return [jobs[repo] for repo in sorted(jobs)]
 
 
+def _previous_urls(root: Path) -> dict[str, str]:
+    """What each cached file was last fetched from, per the previous manifest.
+
+    `fetch_to` judges freshness by the destination's mtime, which is blind to
+    the URL having changed underneath it. Adding a field to SMARTAPI_QUERY
+    would otherwise leave a perfectly fresh smartapi.json that was fetched to
+    answer a different question, and the new field would appear to be missing
+    upstream until someone thought to run --force.
+    """
+    path = root / "manifest.json"
+    if not path.exists():
+        return {}
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    if not isinstance(manifest, dict):
+        return {}
+    return {
+        fetch["path"]: fetch["url"]
+        for fetch in manifest.get("fetches", [])
+        if isinstance(fetch, dict) and fetch.get("path") and fetch.get("url")
+    }
+
+
 def _read_derived(root: Path) -> dict[str, Any]:
     """The previous run's derived.json, tolerating absence or an older shape."""
     path = root / "derived.json"
@@ -312,6 +343,14 @@ def sync(
     report = SyncReport(started_at=_now())
     root.mkdir(parents=True, exist_ok=True)
 
+    previous_urls = _previous_urls(root)
+
+    def age_for(url: str, destination: Path) -> int:
+        recorded = previous_urls.get(str(destination.relative_to(root)))
+        # Cached, but fetched from somewhere else: not an answer to this run's
+        # question, however recent it is.
+        return 0 if recorded is not None and recorded != url else max_age
+
     def run(jobs: list[tuple[str, Path]]) -> list[FetchResult]:
         if not jobs:
             return []
@@ -319,7 +358,8 @@ def sync(
             results = list(
                 pool.map(
                     lambda job: fetch_to(
-                        job[0], job[1], fetcher, max_age=max_age, root=root
+                        job[0], job[1], fetcher,
+                        max_age=age_for(job[0], job[1]), root=root,
                     ),
                     jobs,
                 )

@@ -236,6 +236,46 @@ class TestReleaseFetches:
         assert "https://api.github.com/repos/a/b/releases?per_page=100" in fetcher.urls
 
 
+class TestSmartapiQuery:
+    def test_every_field_the_dashboard_reads_is_requested(self):
+        # A botched edit to this string fails silently: the request still
+        # succeeds and the missing field looks like an upstream gap.
+        for field in (
+            "info.title", "info.version", "info.x-translator", "info.x-trapi",
+            "servers", "_status", "_meta",
+        ):
+            assert field in SMARTAPI_QUERY
+
+    def test_meta_is_asked_for_by_name(self):
+        # meta=1 is a different parameter — it is what makes _id appear — and
+        # does not bring _meta with it.
+        assert "meta=1" in SMARTAPI_QUERY and "_meta" in SMARTAPI_QUERY
+
+
+class TestChangedUrlInvalidatesCache:
+    def _manifest(self, tmp_path, path, url):
+        (tmp_path / "manifest.json").write_text(json.dumps(
+            {"fetches": [{"path": path, "url": url, "status": 200}]}
+        ))
+
+    def test_a_body_fetched_from_another_url_is_refetched(self, tmp_path):
+        # The real case: adding a field to SMARTAPI_QUERY leaves a fresh
+        # smartapi.json that answered the older question.
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        self._manifest(tmp_path, "smartapi.json", "https://smart-api.info/old")
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, b'{"hits": []}')})
+        sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=9999)
+        assert SMARTAPI_QUERY in fetcher.urls
+
+    def test_the_same_url_still_comes_from_cache(self, tmp_path):
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        self._manifest(tmp_path, "smartapi.json", SMARTAPI_QUERY)
+        fetcher = FakeFetcher({})
+        report = sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=9999)
+        assert SMARTAPI_QUERY not in fetcher.urls
+        assert any(f.cached for f in report.fetches)
+
+
 class TestHeaders:
     def test_a_token_reaches_github_and_nowhere_else(self, monkeypatch):
         monkeypatch.setenv("GITHUB_TOKEN", "s3cret")
