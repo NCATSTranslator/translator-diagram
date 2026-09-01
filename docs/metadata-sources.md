@@ -274,6 +274,24 @@ surprising parentage (`retriever` appears as a parent of `shepherd-server`),
 and a trace only shows the edges that were exercised, so absence proves
 nothing.
 
+### A deployment you find in the wild identifies itself
+
+Before writing a new component file for a URL someone hands you, fetch its
+OpenAPI document and read `info.x-translator.infores` and `servers[]`. The
+infores names the component, and `x-maturity` / `x-location` name the
+environment and the site — so `https://gandalf.renci.org` resolves to
+`infores:dogpark-tier0`, maturity `development`, location `RENCI`, which is
+the *dev deployment of a component we already had*, not a 27th component. The
+name on the tin (`GANDALF`) matched a component whose file is called
+`dogpark-tier-0`, so the title alone would have sent you the wrong way.
+
+The source repository is findable the same way when nothing records it: the
+document a deployment serves is generated from a file in its repository —
+`gandalf/openapi-config.yaml` in `ranking-agent/gandalf` — so an identical
+contact block and description is a match rather than a guess. Worth the two
+minutes, because a `source` repository is what fills the Repository column and
+the `Last updated` date.
+
 ## The ITRB hostname convention
 
 Deployments follow a fixed pattern, so knowing one environment's host says
