@@ -1,0 +1,88 @@
+# Build the dashboard, and publish it from main.
+#
+# Two jobs, because a repository has exactly one GitHub Pages deployment. A
+# pull request builds the page and uploads it as an artifact you can download
+# and open; only main, the schedule and a manual run deploy. Deploying from a
+# PR would overwrite the live site with that branch's build, would fail
+# outright for a fork (no Pages permission on a `pull_request` run), and would
+# leave the published site reporting whichever PR happened to build last —
+# this page reads live versions, so its content depends on when it ran as much
+# as on what it was built from.
+#
+# Neither job passes --include-private, so both apply config/privacy.yaml. That
+# is the point of redacting by default: this file cannot be edited into
+# publishing a full build by leaving a flag out.
+name: Dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily. The data changes when someone deploys, not when we push.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never two deploys at once, and never cancel one half-way: the artifact a
+# cancelled run leaves behind is the one the next deploy would publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - run: uv sync --locked
+
+      - name: Fetch what the component files point at
+        env:
+          # Sent to api.github.com only, by _headers in sync.py. Raises the
+          # release-list budget from 60 calls an hour to 5000; one sync spends
+          # about 20.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # A service being down is data, not an error — sync exits non-zero only
+        # if it could not fetch anything at all. Read the step's output rather
+        # than its exit code: Translator's ci and test hosts may not be
+        # reachable from a runner, and that shows up as a quieter page.
+        run: uv run sync-components
+
+      - name: Build the page
+        # No --include-private: config/privacy.yaml applies, and build-dashboard
+        # verifies its own output before writing.
+        run: uv run build-dashboard
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: data/dashboard/
+          if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: data/dashboard/
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
