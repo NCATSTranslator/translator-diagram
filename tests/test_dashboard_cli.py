@@ -27,8 +27,7 @@ def workspace(tmp_path):
             "environments:\n"
             "  ci:\n"
             "    url: https://example.invalid/\n"
-            "diagram:\n"
-            "  refactor_status: New in Refactor\n"
+            "refactor_status: New in Refactor\n"
         )
     sync = tmp_path / "sync"
     sync.mkdir()

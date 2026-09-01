@@ -173,7 +173,7 @@ class TestInThePayload:
                 id=cid,
                 name=cid,
                 owner="DOGSLED",
-                diagram={"refactor_status": "New in Refactor"},
+                refactor_status="New in Refactor",
             )
             for cid in ("alpha", "hidden", "omega")
         ]
@@ -284,7 +284,7 @@ def test_build_rows_is_unchanged_by_the_policy_argument(tmp_path):
             id="one",
             name="one",
             owner="DOGSLED",
-            diagram={"refactor_status": "New in Refactor"},
+            refactor_status="New in Refactor",
         )
     ]
     rows = build_rows(components, SyncedData(tmp_path))

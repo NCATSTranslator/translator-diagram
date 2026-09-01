@@ -86,11 +86,19 @@ class ComponentFile:
     owner: str
     component_type: str | None = None
     description: str | None = None
+    refactor_status: str = ""
+    layer: str | None = None
+    part_of: str | None = None
+    hosted_at: str | None = None
     identifiers: dict[str, Any] = field(default_factory=dict)
+    itrb: dict[str, Any] = field(default_factory=dict)
+    connections: dict[str, Any] = field(default_factory=dict)
     repositories: list[dict[str, str]] = field(default_factory=list)
     documentation: list[dict[str, str]] = field(default_factory=list)
     endpoints: dict[str, str | None] = field(default_factory=dict)
     environments: dict[str, Deployment] = field(default_factory=dict)
+    # Rendering flags only, and absent from every file today. What used to
+    # live here -- the status, the layer, the edges -- are fields above.
     diagram: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
 
@@ -112,15 +120,17 @@ class ComponentFile:
     def otel_services(self) -> list[str]:
         return list(self.identifiers.get("otel_services") or [])
 
-    # -- diagram ----------------------------------------------------------
+    # -- itrb -------------------------------------------------------------
 
     @property
-    def refactor_status(self) -> str:
-        return self.diagram.get("refactor_status", "")
+    def itrb_app(self) -> str | None:
+        return self.itrb.get("app")
 
     @property
-    def layer(self) -> str | None:
-        return self.diagram.get("layer")
+    def itrb_group(self) -> str | None:
+        return self.itrb.get("group")
+
+    # -- connections and rendering ----------------------------------------
 
     @property
     def hidden(self) -> bool:
@@ -136,8 +146,8 @@ class ComponentFile:
         differently because *how* they are called differs, which is a
         rendering concern, not a flow one.
         """
-        edges = (self.diagram.get("gets_results_from") or []) + (
-            self.diagram.get("calls") or []
+        edges = (self.connections.get("gets_results_from") or []) + (
+            self.connections.get("calls") or []
         )
         return [ref.lstrip("~") for ref in edges]
 
@@ -145,7 +155,7 @@ class ComponentFile:
     def externals(self) -> list[tuple[str, str]]:
         return [
             (e["direction"], e["name"])
-            for e in (self.diagram.get("externals") or [])
+            for e in (self.connections.get("externals") or [])
         ]
 
     @property
@@ -305,7 +315,13 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
         owner=data.get("owner") or "None",
         component_type=data.get("component_type"),
         description=data.get("description"),
+        refactor_status=data.get("refactor_status") or "",
+        layer=data.get("layer"),
+        part_of=data.get("part_of"),
+        hosted_at=data.get("hosted_at"),
         identifiers=dict(data.get("identifiers") or {}),
+        itrb=dict(data.get("itrb") or {}),
+        connections=dict(data.get("connections") or {}),
         repositories=list(data.get("repositories") or []),
         documentation=list(data.get("documentation") or []),
         endpoints=dict(data.get("endpoints") or {}),

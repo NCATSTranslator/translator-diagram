@@ -247,7 +247,7 @@ Prose about the platform, and the order it is read in, belong where the people
 who know both can edit them — same reasoning as `config/owner-colors.csv`.
 
 **That file is the order.** It began as labels on an order computed from the
-recorded `gets_results_from` / `calls` edges, and that order was wrong in ways
+recorded `connections:` edges, and that order was wrong in ways
 the edges cannot fix: nothing records the UI calling Name Lookup, so Name
 Lookup sorted up beside the data sources, and nothing records the ARS calling
 Answer Appraiser, so Answer Appraiser sorted above everything. Twenty-six
@@ -313,6 +313,12 @@ widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
 without its column. The payload written to `overview.json` is a contract a
 scheduled job would publish, so adding a key is safe and renaming one is not.
+The payload keys are independent of the YAML keys they happen to be spelled
+like: `layer` and `refactor_status` moved out of `diagram:` in the component
+files without the payload changing at all, because `build_rows` writes those
+names as string literals. Rename a YAML key freely; renaming a payload key
+breaks `data/dashboard.js`, and `layer` is the worst case -- a payload key, a
+query-string parameter and a `COLUMNS` entry.
 
 **Change what the published page withholds** → `config/privacy.yaml`. No code
 change: it lists whole components to drop and row or per-environment fields to

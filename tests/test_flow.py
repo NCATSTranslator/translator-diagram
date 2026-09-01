@@ -16,12 +16,12 @@ def _comp(cid, *, gets=(), calls=(), externals=(), layer=None):
         id=cid,
         name=cid,
         owner="None",
-        diagram={
-            "refactor_status": "New in Refactor",
+        refactor_status="New in Refactor",
+        layer=layer,
+        connections={
             "gets_results_from": list(gets),
             "calls": list(calls),
             "externals": [{"direction": d, "name": n} for d, n in externals],
-            "layer": layer,
         },
     )
 
@@ -131,7 +131,8 @@ def test_either_edge_field_alone_is_enough(edge_field):
     upstream = _comp("up")
     downstream = ComponentFile(
         id="down", name="down", owner="None",
-        diagram={"refactor_status": "New in Refactor", edge_field: ["up"]},
+        refactor_status="New in Refactor",
+        connections={edge_field: ["up"]},
     )
     depths = flow_depths([upstream, downstream])
     assert depths["down"] > depths["up"]

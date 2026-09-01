@@ -25,7 +25,7 @@ from translator_diagram.dashboard import (
 
 
 def _comp(cid, **kwargs):
-    kwargs.setdefault("diagram", {"refactor_status": "New in Refactor"})
+    kwargs.setdefault("refactor_status", "New in Refactor")
     return ComponentFile(id=cid, name=kwargs.pop("name", cid), owner="DOGSLED", **kwargs)
 
 

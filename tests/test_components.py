@@ -16,7 +16,7 @@ from translator_diagram.components import (
 )
 
 MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
-           "diagram": {"refactor_status": "New in Refactor"}}
+           "refactor_status": "New in Refactor"}
 
 
 def _parse(**overrides):
@@ -63,22 +63,22 @@ class TestParsing:
 
 class TestEdges:
     def test_both_edge_kinds_are_upstream(self):
-        component = _parse(diagram={"refactor_status": "x",
-                                    "gets_results_from": ["a"], "calls": ["b"]})
+        component = _parse(
+            connections={"gets_results_from": ["a"], "calls": ["b"]})
         assert set(component.upstream) == {"a", "b"}
 
     def test_a_planned_edge_keeps_its_target(self):
-        component = _parse(diagram={"refactor_status": "x", "calls": ["~a"]})
+        component = _parse(connections={"calls": ["~a"]})
         assert component.upstream == ["a"]
 
     def test_externals_are_direction_and_name(self):
-        component = _parse(diagram={"refactor_status": "x", "externals": [
+        component = _parse(connections={"externals": [
             {"direction": "in", "name": "Sources"}]})
         assert component.externals == [("in", "Sources")]
         assert component.fed_by_external
 
     def test_an_outward_external_does_not_feed_in(self):
-        component = _parse(diagram={"refactor_status": "x", "externals": [
+        component = _parse(connections={"externals": [
             {"direction": "out", "name": "User"}]})
         assert not component.fed_by_external
 
@@ -246,3 +246,24 @@ def test_the_real_files_all_parse():
     components = load_components(Path(__file__).resolve().parent.parent / "components")
     assert components
     assert all(c.id and c.name and c.owner for c in components)
+
+
+def test_the_real_files_fill_the_fields_the_dashboard_reads():
+    # Every accessor here reads a key through .get(), so a field that moves in
+    # the YAML does not raise -- it comes back empty, and a page of blank cells
+    # is a passing test suite. This is the check that noticed nothing when
+    # `diagram:` was split, so it now asserts on the data rather than the
+    # shape: each of these is recorded for at least half the components, and a
+    # zero means the parser and the files have stopped agreeing.
+    from pathlib import Path
+
+    components = load_components(Path(__file__).resolve().parent.parent / "components")
+    populated = {
+        "refactor_status": sum(1 for c in components if c.refactor_status),
+        "layer": sum(1 for c in components if c.layer),
+        "hosted_at": sum(1 for c in components if c.hosted_at),
+        "itrb_app": sum(1 for c in components if c.itrb_app),
+        "upstream": sum(1 for c in components if c.upstream),
+    }
+    half = len(components) // 2
+    assert all(n > half for n in populated.values()), populated
