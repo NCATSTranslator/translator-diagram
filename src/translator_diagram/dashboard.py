@@ -31,6 +31,8 @@ from .components import (
     merge_deployments,
 )
 from .flow import flow_depths, in_flow_order, isolated
+from .privacy import Policy, Report
+from .privacy import apply as apply_policy
 
 PACKAGED_ASSETS = ("translator_diagram.data", ("dashboard.css", "dashboard.js"))
 
@@ -585,9 +587,29 @@ def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 
 def build_payload(
-    components: list[ComponentFile], synced: SyncedData
+    components: list[ComponentFile],
+    synced: SyncedData,
+    policy: Policy | None = None,
 ) -> dict[str, Any]:
+    """Everything the page needs, with `policy` withheld from it.
+
+    The policy is applied here, between building the rows and counting them,
+    and the position is the whole design. `source_tally` and
+    `unregistered_count` below are computed *from* `rows`, so a withheld row
+    leaves the table and the tiles together — the page cannot end up reporting
+    more components than it shows, which it has done before.
+
+    Just as deliberate: `build_rows` sees every component, so `flow_depths` and
+    `isolated` run over the full platform. A published build is the local build
+    minus rows — same order, same depths, same left bars. Filtering the
+    components *before* that would let a withheld component change where
+    everyone else sits, and the two builds would disagree about the shape of
+    the platform rather than about how much of it is shown.
+    """
     rows = build_rows(components, synced)
+    report = Report()
+    if policy is not None:
+        rows, report = apply_policy(rows, policy)
     manifest = synced.manifest
     return {
         "generated_at": manifest.get("finished_at") or "",
@@ -612,6 +634,9 @@ def build_payload(
         "otel_service_total": len(set().union(*synced.otel.values()))
         if synced.otel
         else 0,
+        # Absent when nothing was withheld, so the page says nothing rather
+        # than announcing an empty redaction on a full build.
+        **({"redacted": report.for_payload()} if report else {}),
         "rows": rows,
     }
 
@@ -652,6 +677,12 @@ def render_html(payload: dict[str, Any]) -> str:
     return f"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Reachable, but not indexed. Someone given the link gets the page; a search
+     for a hostname on it does not. The privacy policy decides what the page
+     contains, this decides who arrives at it without asking, and the two are
+     worth keeping separate: this line is one edit to undo when the public
+     /private split in issue #7 is settled. -->
+<meta name="robots" content="noindex, nofollow">
 <title>Translator components overview</title>
 <style>
 {_asset("dashboard.css")}

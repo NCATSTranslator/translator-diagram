@@ -174,6 +174,9 @@ environment showing the deployed URL and the version running there.
 uv run sync-components     # follow the pointers, cache into data/sync/
 uv run build-dashboard     # compile           into data/dashboard/
 open data/dashboard/index.html
+
+# Everything, including what a published build withholds. Local use only.
+uv run build-dashboard --include-private
 ```
 
 The two steps are split because fetching is slow and rendering is iterated on:
@@ -197,6 +200,27 @@ things it reports are the answer:
   still on, each tag linking to its notes. A filled tag is deployed somewhere
   on that row, so the number in the `prod` column has its changelog one click
   away.
+
+### What a published build leaves out
+
+`build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
+names — today the tracing console, the internal test rig, and the container
+image tags that would turn the version grid into a CVE-matching inventory. The
+page says so in its footer, and `--include-private` builds the full picture for
+local use.
+
+Redaction is the default so that a forgotten flag costs information rather than
+publishing it, and the file is data rather than code so that the people who
+know which systems are sensitive can edit it without opening a Python module.
+An entry that matches nothing is an error: withholding *nothing* is the failure
+worth guarding against, so renaming a component without updating the policy
+stops the build.
+
+This is about reach rather than secrecy. Everything the page shows is read from
+public services and this repository is public, so the policy hides nothing from
+someone who looks — it keeps a few things off an indexed page. See
+[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
+the public/private split this anticipates.
 
 Release lists come from the GitHub API, which allows 60 calls an hour to an
 unauthenticated address. That covers a sync of this repository twice over, but

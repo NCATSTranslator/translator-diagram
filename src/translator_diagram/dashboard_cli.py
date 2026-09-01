@@ -14,6 +14,8 @@ import click
 from .components import load_components
 from .dashboard import SyncedData, build_payload, write_dashboard
 from .flow import isolated
+from .privacy import load_policy
+from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
 
 DEFAULT_COMPONENTS = Path("components")
@@ -85,15 +87,29 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
 @click.option("--output-dir", type=click.Path(path_type=Path),
               default=DEFAULT_OUTPUT_DIR, show_default=True,
               help="Where to write index.html and overview.json.")
-def build_main(components_dir, sync_dir, output_dir):
-    """Compile the synced responses into a single self-contained page."""
+@click.option("--include-private", is_flag=True,
+              help="Skip config/privacy.yaml and build the full page. For "
+                   "local use: the result is not safe to publish.")
+def build_main(components_dir, sync_dir, output_dir, include_private):
+    """Compile the synced responses into a single self-contained page.
+
+    Withholds what config/privacy.yaml names unless --include-private is
+    passed. That way round on purpose: a forgotten flag costs information
+    rather than publishing it, and the workflow that publishes passes no flag
+    at all, so it cannot regress into a full build by being edited.
+    """
     components = _load(components_dir)
     if not (sync_dir / "manifest.json").exists():
         raise click.ClickException(
             f"No manifest at {sync_dir / 'manifest.json'}. Run sync-components first."
         )
     synced = SyncedData(sync_dir)
-    payload = build_payload(components, synced)
+    policy = None if include_private else load_policy()
+    payload = build_payload(components, synced, policy)
+    if policy is not None:
+        # Read back what is about to be written, rather than trusting that the
+        # step which removed it covered every place it could appear.
+        verify_policy(payload, policy)
 
     deployments = sum(
         1
@@ -111,6 +127,15 @@ def build_main(components_dir, sync_dir, output_dir):
     html_path, json_path = write_dashboard(payload, output_dir)
     tally = payload["source_tally"]
     click.echo(f"{len(payload['rows'])} components, {deployments} deployments.")
+    if policy is None:
+        click.echo("Full build: nothing withheld. Do not publish this.")
+    elif policy:
+        click.echo(
+            f"Withheld {len(policy.component_ids)} components "
+            f"({', '.join(policy.component_ids)}) and "
+            f"{len(policy.field_names)} fields "
+            f"({', '.join(policy.field_names)}), per config/privacy.yaml."
+        )
     click.echo(
         "Version sources: "
         + ", ".join(f"{source} {count}" for source, count in sorted(tally.items()))

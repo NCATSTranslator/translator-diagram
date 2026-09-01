@@ -77,6 +77,7 @@ uv run rumdl check .                                 # Markdown lint, gated in C
 # rendering is iterated on — one sync serves a hundred rebuilds.
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
+uv run build-dashboard --include-private             # without config/privacy.yaml
 
 # These must stay easy for a human to run; run them yourself when it helps.
 # --google-sheet reaches the real sheet, so prefer a local CSV for testing.
@@ -110,6 +111,7 @@ The dashboard is a second, parallel stack over the same components:
 | `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS` |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
+| `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
 | `data/dashboard.css`, `data/dashboard.js` | Inlined into the generated page |
@@ -127,6 +129,7 @@ cli → everything above
 components → {flow, sync, dashboard}
 flow → dashboard
 colors → dashboard
+privacy → dashboard
 dashboard_cli → everything above
 ```
 
@@ -311,6 +314,22 @@ they used to be written out separately, which is how a header ends up hidden
 without its column. The payload written to `overview.json` is a contract a
 scheduled job would publish, so adding a key is safe and renaming one is not.
 
+**Change what the published page withholds** → `config/privacy.yaml`. No code
+change: it lists whole components to drop and row or per-environment fields to
+empty, each with a reason. `build-dashboard` applies it by default and
+`--include-private` skips it, which is the safe way round — a forgotten flag
+costs information rather than publishing it, and
+`.github/workflows/pages.yml` passes no flag at all so it cannot be edited into
+a full build.
+
+An entry that matches nothing is a hard error. Withholding *nothing* is the
+one failure this file must not have, so renaming a component without updating
+the policy stops the build instead of quietly publishing the row. For the same
+reason `build-dashboard` calls `privacy.verify` on the finished payload before
+writing it: `apply` removes, `verify` re-reads the serialised result and looks
+for what should be gone, which catches a field added later that carries a
+withheld id somewhere `apply` never looks.
+
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
 version-source chain in `dashboard.build_cell`. Order that chain by how close
 the source is to what is actually running: a live endpoint, then a manual
@@ -370,6 +389,35 @@ directions.
 set from the filter bar's real height on every render and on resize, because
 the bar wraps to two lines at some widths and a hardcoded `top` hides the first
 row underneath it.
+
+**The privacy filter is about reach, not secrecy.** Everything the dashboard
+shows is read from public services, this repository is public, and
+`config/privacy.yaml` names what it withholds and why — so it hides nothing
+from anyone who looks. What it does is keep a handful of things off an indexed
+page that arrives without being asked for. The corollary matters more than the
+filter: because nothing here comes from the private spreadsheet any more, a
+genuine leak would be a secret already being served by a public API, and the
+fix for that is upstream, at that API. Redacting it here would only make it
+harder to notice. So treat a finding as "review it and revert" rather than as
+an emergency, and do not let the filter become the reason nobody looks at what
+the sources are publishing.
+
+**A published build is the local build minus rows, not a different page.**
+`privacy.apply` runs inside `build_payload` *after* `build_rows`, so
+`flow_depths` and `isolated` still see every component and the rows that
+survive keep their depths, steps and left bars. Filtering the component list
+before building the rows would let a withheld component move everything else,
+and the two builds would disagree about the shape of the platform rather than
+about how much of it is shown. It also runs *before* `source_tally` and
+`unregistered_count`, which are computed from `rows` — that is what stops a
+tile counting things the table does not show.
+
+**A stage whose components are all withheld disappears entirely.** Bands are
+rendered from the rows in them, so the Engineering stage — `jaeger` and
+`test-harness`, the only two in it — is absent from a published build rather
+than showing as an empty header. Step numbers come from the stage's position
+in `config/flow-steps.yaml`, so the others are not renumbered; a published page
+runs 1–8 and skips 9.
 
 **The dashboard opens filtered**, on `Environments disagree`, so it shows 7 of
 26 rows rather than everything. The count beside the filters says so, and

@@ -38,8 +38,12 @@ ALLOWED = {
     "components": set(),
     "flow": {"components"},
     "sync": {"components"},
-    "dashboard": {"colors", "components", "flow"},
-    "dashboard_cli": {"components", "dashboard", "flow", "sync"},
+    # privacy is a leaf: it filters plain dictionaries, so it needs to know
+    # nothing about where they came from, and dashboard can apply it without
+    # anything in the graph moving.
+    "privacy": set(),
+    "dashboard": {"colors", "components", "flow", "privacy"},
+    "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
 }
 
 # Neither entry point may be imported: a module that pulls in a CLI drags
