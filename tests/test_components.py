@@ -18,6 +18,9 @@ COMPONENTS_DIR = ROOT / "components"
 SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
 UNKNOWN_PATH = ROOT / "unknown.yaml"
 UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+
+# The `diagram:` flags and the values the schema already gives them.
+DIAGRAM_FLAG_DEFAULTS = {"ubiquitous": False, "hide": False}
 ENRICHED_EXAMPLE_PATH = ROOT / "docs" / "examples" / "name-lookup-enriched.yaml"
 
 COMPONENT_FILES = sorted(COMPONENTS_DIR.glob("*.yaml"))
@@ -110,12 +113,11 @@ class TestDiagram:
     # claims nothing the schema does not already say, so it should not be
     # written at all. All 26 files carried `ubiquitous: false` and
     # `hide: false` before that distinction was drawn.
-    DEFAULTS = {"ubiquitous": False, "hide": False}
 
     def test_no_file_writes_a_flag_at_its_default(self, components):
         for cid, data in components.items():
             diagram = data.get("diagram") or {}
-            for flag, default in self.DEFAULTS.items():
+            for flag, default in DIAGRAM_FLAG_DEFAULTS.items():
                 if flag not in diagram:
                     continue
                 assert diagram[flag] != default, (
