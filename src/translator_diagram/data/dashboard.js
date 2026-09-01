@@ -204,6 +204,10 @@ function envCell(row, env) {
   if (cell.trapi) sub.push(`TRAPI ${esc(cell.trapi)}`);
   if (cell.biolink) sub.push(`Biolink ${esc(cell.biolink)}`);
   if (cell.data_release) sub.push(esc(cell.data_release));
+  // The value this column sorts by. Without it the sort has invisible
+  // criteria: the header says "age of the release running in ci" and the cell
+  // showed nothing to check that against.
+  if (cell.released) sub.push(`released ${esc(cell.released)}`);
   const detail = state.details && sub.length
     ? `<span class="sub">${sub.join(" · ")}</span>` : "";
 
