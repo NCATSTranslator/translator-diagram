@@ -26,6 +26,7 @@ from .components import (
     Deployment,
     deployments_from_smartapi,
     endpoint_url_in,
+    github_repo,
     merge_deployments,
 )
 from .flow import flow_depths, in_flow_order, isolated
@@ -42,6 +43,12 @@ SOURCE_LABELS = {
     "helm": "Helm",
 }
 
+# How many of a repository's newest releases the Repository column shows before
+# it starts adding the ones an environment is actually running. Three fits the
+# column at the width the table is read at; the deployed extras are what make
+# the list answer "where are the notes for the version in front of me?".
+RELEASES_SHOWN = 3
+
 
 def _read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
@@ -52,6 +59,17 @@ def _read_json(path: Path) -> dict[str, Any] | None:
         # A body saved from a 200 that was not actually JSON. Real: several
         # Translator endpoints answer 200 with an HTML error page.
         return None
+
+
+def _read_json_list(path: Path) -> list[Any]:
+    """A JSON array, or an empty list for anything else.
+
+    GitHub answers a rate-limited request with a 200-shaped *object* carrying a
+    message, and `sync` saves whatever came back, so the shape has to be
+    checked rather than assumed.
+    """
+    loaded = _read_json(path)
+    return loaded if isinstance(loaded, list) else []
 
 
 def _read_yaml(path: Path) -> dict[str, Any] | None:
@@ -96,6 +114,16 @@ class SyncedData:
 
     def status(self, component_id: str, env: str) -> dict[str, Any] | None:
         return _read_json(self.root / "status" / component_id / f"{env}.json")
+
+    def releases(self, repo: str | None) -> list[dict[str, Any]]:
+        """One repository's releases, newest first, as GitHub returned them."""
+        if not repo:
+            return []
+        return [
+            entry
+            for entry in _read_json_list(self.root / "releases" / f"{repo}.json")
+            if isinstance(entry, dict)
+        ]
 
     def helm(self, chart: str, name: str) -> dict[str, Any] | None:
         return _read_yaml(self.root / "helm" / chart / name)
@@ -226,6 +254,60 @@ def build_cell(
     }
 
 
+def _same_version(a: str | None, b: str | None) -> bool:
+    """Whether a release tag and a reported version name the same release.
+
+    Only the `v` prefix is normalised away, because that is the only difference
+    that actually occurs here: NameResolution tags `v1.5.2` and reports
+    `1.5.2`. Anything cleverer — stripping suffixes, comparing as semver —
+    would start claiming matches that are not there, and a wrong release-notes
+    link is worse than none.
+    """
+    if not a or not b:
+        return False
+    return a.strip().lower().removeprefix("v") == b.strip().lower().removeprefix("v")
+
+
+def _release_chips(
+    entries: list[dict[str, Any]], deployed: set[str]
+) -> list[dict[str, Any]]:
+    """The releases worth showing for one component, newest first.
+
+    The newest few, plus any older release that some environment is running:
+    prod lags dev often enough that the newest three would miss the version the
+    reader is looking at, which is the one whose notes they want.
+
+    Drafts are dropped. They are invisible to an unauthenticated fetch, so they
+    appear only once someone sets a GITHUB_TOKEN — and a link that works for
+    the person who ran the sync and 404s for everyone else is a trap.
+    """
+    # GitHub orders /releases by when the release was *created*, which is not
+    # when it was published: NameResolution's v1.5.2 was published after
+    # v1.6.2. The dates are on the chips, so the order has to match them.
+    ordered = sorted(
+        entries, key=lambda entry: entry.get("published_at") or "", reverse=True
+    )
+    chips = []
+    for index, entry in enumerate(ordered):
+        tag = entry.get("tag_name")
+        if not tag or entry.get("draft"):
+            continue
+        running = any(_same_version(tag, version) for version in deployed)
+        if index >= RELEASES_SHOWN and not running:
+            continue
+        chips.append(
+            {
+                "tag": tag,
+                "name": entry.get("name") or tag,
+                "url": entry.get("html_url"),
+                "published": (entry.get("published_at") or "")[:10],
+                "prerelease": bool(entry.get("prerelease")),
+                "deployed": running,
+            }
+        )
+    return chips
+
+
 def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
     """Flag the environments whose value is in the minority.
 
@@ -300,6 +382,14 @@ def build_rows(
                 "helm_chart": component.helm_chart,
                 "otel_services": component.otel_services,
                 "repository": component.repository("source"),
+                "releases": _release_chips(
+                    synced.releases(github_repo(component.repository("source"))),
+                    {
+                        version
+                        for cell in cells.values()
+                        if (version := cell.get("version"))
+                    },
+                ),
                 "documentation": (component.documentation or [{}])[0].get("url"),
                 "uptime": uptime,
                 "helm_version": helm.get("version"),

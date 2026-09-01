@@ -166,6 +166,24 @@ tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent
   font-size: 0.72rem; white-space: nowrap;
 }
 
+/* Release tags under a repository link. Quiet by default: on most rows these
+   are context, and three tags per row across 26 rows would shout if each were
+   coloured. The filled one is the exception worth the ink — that release is
+   running in one of the environment columns to the right. */
+.releases { display: block; margin-top: 3px; }
+.rel {
+  display: inline-block; margin: 2px 4px 0 0; padding: 0 5px;
+  border: 1px solid var(--border-strong); border-radius: 4px;
+  font-size: 0.7rem; font-variant-numeric: tabular-nums;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+}
+.rel:hover { border-color: var(--accent); color: var(--accent); }
+.rel.deployed {
+  background: var(--ok-bg); color: var(--ok-fg);
+  border-color: transparent; font-weight: 600;
+}
+.rel.pre { border-style: dashed; }
+
 /* --- Environment cells --------------------------------------------------- */
 
 td.env { text-align: center; min-width: 116px; }
