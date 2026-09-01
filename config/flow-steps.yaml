@@ -39,9 +39,11 @@ stages:
 
   - title: Shepherd
     description: >-
-      The ARAs, each running under Shepherd: they plan a query, gather results
-      and hand them back.
-    components: [shepherd-aragorn, shepherd-arax, shepherd-bte]
+      The ARAs: they plan a query, gather results and hand them back. Three run
+      as Shepherd workers; RTX/ARAX is the reasoner the ARAX worker drives, and
+      is here because that is where it sits in a query rather than because it
+      runs under Shepherd too.
+    components: [shepherd-aragorn, shepherd-arax, arax, shepherd-bte]
 
   - title: ARS
     description: >-
@@ -75,6 +77,6 @@ stages:
 # tests rather than silently sorting last.
 unplaced:
   description: >-
-    Recorded, but not yet placed in a stage. Both are RTX components that
-    predate the current pipeline.
-  components: [arax, ploverdb]
+    Recorded, but not yet placed in a stage. PloverDB is the RTX-era query
+    engine, and where it belongs depends on what still calls it.
+  components: [ploverdb]
