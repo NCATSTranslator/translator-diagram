@@ -6,6 +6,7 @@ import pytest
 
 from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.dashboard import (
+    ISOLATED_STEP,
     SyncedData,
     _helm_facts,
     _instant,
@@ -13,8 +14,10 @@ from translator_diagram.dashboard import (
     _mark_drift,
     _release_chips,
     _same_version,
+    _step_prose,
     build_payload,
     build_rows,
+    load_flow_steps,
     render_html,
     source_tally,
     write_dashboard,
@@ -546,6 +549,58 @@ class TestFlowStepsOnRows:
         row = build_rows([_comp("lonely")], synced)[0]
         assert row["isolated"] is True
         assert row["step_label"] == "No recorded dependencies"
+
+
+class TestStepProse:
+    FILE = """
+steps:
+  - title: Ingest
+    description: Pulls external sources in.
+    components: [b, a]
+isolated:
+  title: No recorded dependencies
+  description: Holes in the metadata.
+"""
+
+    def _prose(self, tmp_path, text=None):
+        path = tmp_path / "flow-steps.yaml"
+        path.write_text(text if text is not None else self.FILE)
+        return load_flow_steps(path)
+
+    def test_prose_is_matched_by_membership_not_by_order(self, tmp_path):
+        # Keyed by the set, so the file can list components in any order and
+        # a step's position on the page can move without breaking the match.
+        prose = self._prose(tmp_path)
+        members = [{"id": "a", "layer": "X"}, {"id": "b", "layer": "X"}]
+        assert _step_prose(members, prose, False)["title"] == "Ingest"
+
+    def test_a_step_that_moved_falls_back_to_its_layers(self, tmp_path):
+        # One new dependency edge is all it takes. A generic title beats a
+        # confident sentence about a group that no longer exists.
+        prose = self._prose(tmp_path)
+        members = [{"id": "a", "layer": "X"}, {"id": "c", "layer": "Y"}]
+        assert _step_prose(members, prose, False) == {"title": "X and Y", "description": ""}
+
+    def test_the_isolated_group_is_keyed_by_name(self, tmp_path):
+        prose = self._prose(tmp_path)
+        members = [{"id": "z", "layer": None}]
+        assert _step_prose(members, prose, True)["title"] == "No recorded dependencies"
+
+    def test_a_step_with_no_layers_still_gets_a_title(self, tmp_path):
+        got = _step_prose([{"id": "z", "layer": None}], self._prose(tmp_path), False)
+        assert got["title"] == "Unnamed"
+
+    def test_a_missing_file_is_not_an_error(self, tmp_path):
+        assert load_flow_steps(tmp_path / "absent.yaml") == {}
+
+    def test_an_empty_or_malformed_file_is_not_an_error(self, tmp_path):
+        assert self._prose(tmp_path, "") == {}
+        assert self._prose(tmp_path, "steps: []") == {}
+
+    def test_every_row_of_a_step_carries_the_same_prose(self, synced, component):
+        rows = build_rows([component], synced)
+        assert rows[0]["step_title"]
+        assert ISOLATED_STEP == "isolated"
 
 
 class TestUnregisteredEnvironments:

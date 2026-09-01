@@ -415,6 +415,24 @@ function bandKey() {
   return column.band ?? null;
 }
 
+/* A band names its group and, in data-flow order, says what the group is for.
+   The step number alone was true and useless: "Step 6" tells a reader where
+   the rows sit, not what they do. The prose is hand-written in
+   config/flow-steps.yaml and falls back to the layers in the step. */
+function bandHtml(group) {
+  const first = group.rows[0];
+  const flow = !sortColumn();
+  const title = flow && first.step_title
+    ? `${esc(group.label)} · <span class="band-title">${esc(first.step_title)}</span>`
+    : esc(group.label);
+  const description = flow && first.step_description
+    ? `<span class="band-note drop-md">${esc(first.step_description)}</span>`
+    : "";
+  return `<tr class="band"><td colspan="${COLUMNS.length}">${title}${description}<span
+     class="note">${group.rows.length} component${
+       group.rows.length === 1 ? "" : "s"}</span></td></tr>`;
+}
+
 function bodyHtml(rows) {
   if (!rows.length) {
     return `<tr><td class="empty" colspan="${COLUMNS.length}">
@@ -434,10 +452,7 @@ function bodyHtml(rows) {
     groups.at(-1).rows.push(row);
   }
   return groups.map((group) =>
-    `<tr class="band"><td colspan="${COLUMNS.length}">${esc(group.label)}<span
-       class="note">${group.rows.length} component${
-         group.rows.length === 1 ? "" : "s"}</span></td></tr>${
-      group.rows.map(rowHtml).join("")}`).join("");
+    bandHtml(group) + group.rows.map(rowHtml).join("")).join("");
 }
 
 function orderHtml() {

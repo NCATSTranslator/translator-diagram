@@ -1,0 +1,77 @@
+# Titles and descriptions for the steps of the data-flow order, which the
+# dashboard bands its rows by. Edit this file rather than any Python: it is
+# prose about the platform, and the people who know it best should not have to
+# open a module to fix it. Same rule as config/owner-colors.csv.
+#
+# **Entries are matched by their component list, not by their position.** A
+# step is "these components, together"; the number beside it on the page is
+# just where they land today, and adding one dependency edge renumbers
+# everything below it. So an entry applies when its `components` are exactly
+# the components of a step. When the graph moves and no entry matches, the
+# band falls back to naming the layers it contains, and
+# tests/test_flow_steps.py fails so somebody comes back and rewrites the
+# prose rather than leaving a confident sentence about the wrong components.
+#
+# The file is optional. Delete it and every band is named from its layers.
+
+steps:
+  - title: Sources and shared services
+    description: >-
+      Nothing recorded feeds these. Some are genuinely where the data starts;
+      others are here only because no one has recorded what calls them yet.
+    components: [answer-appraiser, docmetadata-api, jaeger, pending-api, smartapi]
+
+  - title: Names and identifiers
+    description: >-
+      Turns the strings people type, and the identifiers data arrives with,
+      into something everything downstream can join on.
+    components: [name-lookup, node-annotator, nodenorm-es]
+
+  - title: Ingest
+    description: >-
+      Pulls external sources in and turns them into KGX, on the toolchain the
+      ingest teams share.
+    components: [dingo-ingest, translator-sdk]
+
+  - title: KGX storage
+    description: Lands the ingested KGX where the query tiers can read it.
+    components: [kgx-storage-pipeline]
+
+  - title: DogPark Ranger
+    description: Marshals stored KGX into the tiers that answer queries.
+    components: [dogpark-ranger]
+
+  - title: DogPark tiers
+    description: >-
+      The stored graph itself — Tier 0 holds the full KGX, Tier 1 splits it out
+      by data source.
+    components: [dogpark-tier-0, dogpark-tier-1]
+
+  - title: Retrieval
+    description: The query API over the DogPark tiers, and what the ARAs call.
+    components: [retriever]
+
+  - title: Reasoning
+    description: >-
+      The ARAs, each running under Shepherd: they plan a query, gather results
+      and hand them back.
+    components: [shepherd-aragorn, shepherd-arax, shepherd-bte]
+
+  - title: Autonomous Relay System
+    description: Fans one query out across the ARAs and merges what returns.
+    components: [ars]
+
+  - title: The user, and what tests it
+    description: >-
+      Where a question is asked and an answer is read, alongside the harnesses
+      that exercise everything above.
+    components: [ars-test-server, test-harness, translator-component-toolkit, ui]
+
+# The components with no recorded edges in either direction. Not a step: they
+# are what the dependency data does not say.
+isolated:
+  title: No recorded dependencies
+  description: >-
+    Nothing records what feeds these or what they feed. That is a hole in the
+    metadata rather than a fact about the platform — ARAX and Ploverdb
+    certainly have neighbours.

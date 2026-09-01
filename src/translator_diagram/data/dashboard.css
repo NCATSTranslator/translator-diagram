@@ -201,9 +201,18 @@ tbody tr.band td {
   text-transform: uppercase; color: var(--muted);
 }
 tbody tr.band:hover td { background: var(--page); }
+tbody tr.band .band-title { color: var(--text); }
+/* The description is the one thing in a band that is a sentence, so it drops
+   the small-caps treatment — and drops out at the same width as Layer and
+   Repository, where it would otherwise wrap and turn a one-line spine into a
+   two-line heading. */
+tbody tr.band .band-note {
+  margin-left: 10px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; font-size: 0.76rem;
+}
 tbody tr.band .note {
-  margin-left: 8px; font-weight: 400; letter-spacing: 0;
-  text-transform: none; opacity: 0.75;
+  margin-left: 10px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; opacity: 0.75; white-space: nowrap;
 }
 
 .updated .age { font-variant-numeric: tabular-nums; }

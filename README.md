@@ -209,8 +209,10 @@ and a third click returns to data-flow order — which is also what the ✕ besi
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
 and it travels in the URL with the filters. In data-flow order the rows are
-banded by step, so the pipeline is visible rather than implied; sorting by
-owner, type or layer bands them by that instead.
+banded by step — each band naming what that step is for, from
+[`config/flow-steps.yaml`](config/flow-steps.yaml) — so the pipeline is
+visible rather than implied; sorting by owner, type or layer bands them by
+that instead.
 
 **`Last updated`** is the newer of a component's latest GitHub release and its
 SmartAPI registration, badged with which one it was. Thirteen of the

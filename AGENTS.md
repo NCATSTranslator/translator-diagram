@@ -219,6 +219,20 @@ dependency set would suggest otherwise.
 
 ## Common change patterns
 
+**Change what a dashboard band says** → edit `config/flow-steps.yaml`. Titles
+and descriptions for the steps of the data-flow order, and prose about the
+platform belongs where the people who know the platform can edit it — same
+reasoning as `config/owner-colors.csv`.
+
+Entries are matched by **the components a step contains**, not by position: a
+step is "these components, together", and one new dependency edge renumbers
+everything below it. So prose can never attach to the wrong rows; what it can
+do is stop matching, in which case the band falls back to naming its layers and
+`tests/test_flow_steps.py` fails until someone rewrites it. That test is the
+whole point of the arrangement — verified by adding an edge and watching it
+fire, not by reading it. The file is optional: delete it and every band is
+named after its layers.
+
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:
 project managers change colours without touching Python. Don't move it into a

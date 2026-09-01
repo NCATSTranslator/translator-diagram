@@ -15,6 +15,7 @@ import json
 from collections import Counter
 from datetime import UTC, datetime
 from importlib import resources
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,57 @@ RELEASES_SHOWN = 3
 # this one says where a date did, and conflating them would put "OpenAPI" and
 # "release" in the same badge row meaning different kinds of thing.
 UPDATED_LABELS = {"release": "release", "registry": "registry"}
+
+
+FLOW_STEPS_FILE = Path("config/flow-steps.yaml")
+
+
+def load_flow_steps(path: Path = FLOW_STEPS_FILE) -> dict[frozenset[str], dict[str, str]]:
+    """Prose for each flow step, keyed by the components it covers.
+
+    Keyed by membership rather than by position because a step is "these
+    components, together": the number beside it on the page is only where they
+    land today, and one new dependency edge renumbers everything below. An
+    entry whose components no longer form a step simply stops matching, and the
+    band falls back to naming its layers — a generic title beats a confident
+    sentence about the wrong components. `tests/test_flow_steps.py` fails in
+    that case, so the prose gets rewritten rather than quietly lost.
+
+    Optional: with no file, every band is named from its layers.
+    """
+    loaded = _read_yaml(path) if path.exists() else None
+    if not loaded:
+        return {}
+    entries = list(loaded.get("steps") or [])
+    if isolated_entry := loaded.get("isolated"):
+        entries.append({**isolated_entry, "components": None})
+    out = {}
+    for entry in entries:
+        components = entry.get("components")
+        key = ISOLATED_STEP if components is None else frozenset(components)
+        out[key] = {
+            "title": entry.get("title") or "",
+            "description": entry.get("description") or "",
+        }
+    return out
+
+
+# The key the isolated group's prose is stored under: it is not a set of
+# components, because which components have no edges changes with the data.
+ISOLATED_STEP = "isolated"
+
+
+def _step_prose(
+    members: list[dict[str, Any]], prose: dict[Any, dict[str, str]], stranded: bool
+) -> dict[str, str]:
+    """The title and description for one band, hand-written or derived."""
+    key = ISOLATED_STEP if stranded else frozenset(row["id"] for row in members)
+    if written := prose.get(key):
+        return written
+    # No prose for this shape of step: name it after what is in it. Layers are
+    # the closest thing to a name the data already carries.
+    layers = sorted({row["layer"] for row in members if row.get("layer")})
+    return {"title": " and ".join(layers) or "Unnamed", "description": ""}
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -495,7 +547,24 @@ def build_rows(
                 "environments": cells,
             }
         )
+    _label_steps(rows, load_flow_steps())
     return rows
+
+
+def _label_steps(
+    rows: list[dict[str, Any]], prose: dict[Any, dict[str, str]]
+) -> None:
+    """Give every row its band's title and description.
+
+    A second pass because a step's membership is only known once every row
+    exists, and the prose is keyed by exactly that membership.
+    """
+    for step, members in groupby(rows, key=lambda row: row["step"]):
+        members = list(members)
+        written = _step_prose(members, prose, members[0]["isolated"])
+        for row in members:
+            row["step_title"] = written["title"]
+            row["step_description"] = written["description"]
 
 
 def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
