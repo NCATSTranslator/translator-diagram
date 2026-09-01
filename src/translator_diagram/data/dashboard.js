@@ -89,6 +89,46 @@ function visibleRows() {
     });
 }
 
+/* --- Theme --------------------------------------------------------------- */
+
+/* Inline SVG rather than ☀/☾: those render as colour emoji on one platform and
+   as a tofu box on another, and a page that must work from file:// cannot
+   fetch an icon font to settle it. `currentColor` keeps them correct in both
+   themes for free. */
+const THEME_ICONS = {
+  light: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
+    stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+    <circle cx="8" cy="8" r="3.1"/>
+    <path d="M8 1v1.7M8 13.3V15M1 8h1.7M13.3 8H15M3.05 3.05l1.2 1.2M11.75 11.75l1.2 1.2
+             M12.95 3.05l-1.2 1.2M4.25 11.75l-1.2 1.2"/></svg>`,
+  dark: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none"
+    stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+    <path d="M13.2 9.6A5.8 5.8 0 0 1 6.4 2.8a5.8 5.8 0 1 0 6.8 6.8z"/></svg>`,
+  auto: `<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"
+    stroke="currentColor" stroke-width="1.4">
+    <circle cx="8" cy="8" r="5.6" fill="none"/>
+    <path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>`,
+};
+const NEXT_THEME = { light: "dark", dark: "auto", auto: "light" };
+const THEME_NAMES = { light: "light", dark: "dark", auto: "following the system" };
+
+function currentTheme() {
+  return NEXT_THEME[document.documentElement.dataset.themeChoice]
+    ? document.documentElement.dataset.themeChoice : "auto";
+}
+
+function renderTheme() {
+  const choice = currentTheme();
+  const button = document.getElementById("theme");
+  button.innerHTML = THEME_ICONS[choice];
+  // The icon says which mode is on; the label has to say that *and* what the
+  // click does, because an icon-only button otherwise announces nothing.
+  const label = `Theme: ${THEME_NAMES[choice]} — switch to ${
+    THEME_NAMES[NEXT_THEME[choice]]}`;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+}
+
 /* --- Rendering ----------------------------------------------------------- */
 
 function envCell(row, env) {
@@ -238,8 +278,7 @@ function shell() {
           the user at the bottom. Synced ${esc(DATA.synced_at || "never")}.
         </p>
       </div>
-      <button id="theme">Theme</button>
-      <button id="copy">Copy link</button>
+      <button id="theme" class="icon"></button>
     </header>
 
     <div class="finding">
@@ -280,6 +319,7 @@ function shell() {
       <button id="drift-toggle" aria-pressed="false">Drift only</button>
       <button id="details-toggle" aria-pressed="true">Details</button>
       <button id="reset">Reset</button>
+      <button id="copy">Copy link</button>
       <span class="spacer"></span>
       <span class="count" id="count"></span>
     </div>
@@ -349,20 +389,21 @@ function wire() {
   });
 
   document.getElementById("theme").addEventListener("click", () => {
-    const next = { light: "dark", dark: "auto", auto: "light" };
     const root = document.documentElement;
-    const choice = next[root.dataset.themeChoice ?? "auto"];
+    const choice = NEXT_THEME[currentTheme()];
     root.dataset.themeChoice = choice;
     try { localStorage.setItem("theme", choice); } catch { /* storage unavailable */ }
     const dark = choice === "dark" ||
       (choice === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
     root.dataset.theme = dark ? "dark" : "light";
+    renderTheme();
   });
 }
 
 readUrl();
 shell();
 wire();
+renderTheme();
 render();
 // Only now: everything above can set state without the URL fighting it back.
 urlReady = true;
