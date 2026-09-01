@@ -204,6 +204,13 @@ if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
 a higher limit. It is sent to `api.github.com` and to nothing else, and a
 throttled fetch costs some release tags, not the run.
 
+**The page opens filtered**, on the components whose environments disagree —
+seven of twenty-six today, and the only rows with anything to say. The
+dropdown beside the type filter holds the rest: `Any version known`, `No
+version known` (which is the list of gaps in the metadata, and worth reading
+as a to-do list), and `All components`. The count beside the filters always
+says how many of the total are showing.
+
 Filters live in the URL, so a filtered view can be pasted to someone else and
 arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
 which inlines its own data and so works straight from disk, and

@@ -303,6 +303,16 @@ nearby nodes, losing the distinction the diagram exists to show.
 **Dashed edges are suppressed where a solid edge already exists** between the
 same two nodes in the same direction, for the same reason.
 
+**The dashboard opens filtered**, on `Environments disagree`, so it shows 7 of
+26 rows rather than everything. The count beside the filters says so, and
+`All components` is one selection away. It replaced a "Drift only" toggle
+rather than joining it: two controls that select the same rows cannot be told
+apart by a reader, and the four views (`differ`, `known`, `none`, `all`) live
+in `VERSION_VIEWS` in `data/dashboard.js` with the default in `DEFAULT_VIEW`.
+`differ` means any of the three tinted axes, not versions alone — a component
+whose TRAPI version drifts while its software version does not is exactly as
+interesting.
+
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a

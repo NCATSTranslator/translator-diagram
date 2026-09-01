@@ -19,7 +19,7 @@ const state = {
   owner: "",
   layer: "",
   type: "",
-  driftOnly: false,
+  versions: "differ",
   details: true,
 };
 let urlReady = false;
@@ -45,7 +45,8 @@ function readUrl() {
   state.owner = (p.get("owner") ?? "").slice(0, 100);
   state.layer = (p.get("layer") ?? "").slice(0, 100);
   state.type = (p.get("type") ?? "").slice(0, 40);
-  state.driftOnly = p.get("drift") === "1";
+  const view = p.get("versions") ?? "";
+  state.versions = Object.hasOwn(VERSION_VIEWS, view) ? view : DEFAULT_VIEW;
   state.details = p.get("details") !== "0";
 }
 
@@ -58,7 +59,7 @@ function writeUrl() {
   if (state.owner) p.set("owner", state.owner);
   if (state.layer) p.set("layer", state.layer);
   if (state.type) p.set("type", state.type);
-  if (state.driftOnly) p.set("drift", "1");
+  if (state.versions !== DEFAULT_VIEW) p.set("versions", state.versions);
   if (!state.details) p.set("details", "0");
   const query = p.toString();
   history.replaceState(null, "", query ? `?${query}` : location.pathname);
@@ -70,13 +71,36 @@ function hasDrift(row) {
   return ENVS.some((env) => (row.environments[env]?.drift ?? []).length > 0);
 }
 
+function knownVersions(row) {
+  return new Set(ENVS.map((env) => row.environments[env]?.version).filter(Boolean));
+}
+
+/* One control rather than a "drift only" toggle beside a version filter: the
+   two would have said the same thing about the same rows, and a reader cannot
+   tell overlapping filters apart. The default hides the rows where every
+   environment agrees, because a table of 26 rows that agree is a table nobody
+   reads — but the count beside the filters always says how many are hidden,
+   and "All components" is one click away.
+
+   "Environments disagree" is any of the three tinted axes, not versions
+   alone: a component whose version matches everywhere while its TRAPI version
+   does not is exactly as interesting, and hiding it would be a lie of
+   omission. */
+const VERSION_VIEWS = {
+  differ: { label: "Environments disagree", test: hasDrift },
+  known: { label: "Any version known", test: (row) => knownVersions(row).size > 0 },
+  none: { label: "No version known", test: (row) => knownVersions(row).size === 0 },
+  all: { label: "All components", test: () => true },
+};
+const DEFAULT_VIEW = "differ";
+
 function visibleRows() {
   const needle = state.q.trim().toLowerCase();
   return DATA.rows
     .filter((row) => !state.owner || row.owner === state.owner)
     .filter((row) => !state.layer || (row.layer ?? "") === state.layer)
     .filter((row) => !state.type || (row.type ?? "") === state.type)
-    .filter((row) => !state.driftOnly || hasDrift(row))
+    .filter(VERSION_VIEWS[state.versions]?.test ?? VERSION_VIEWS[DEFAULT_VIEW].test)
     .filter((row) => {
       if (!needle) return true;
       const haystack = [
@@ -251,7 +275,6 @@ function render() {
     if (el.type === "checkbox") el.checked = state[key];
     else el.value = state[key];
   }
-  document.getElementById("drift-toggle").setAttribute("aria-pressed", state.driftOnly);
   document.getElementById("details-toggle").setAttribute("aria-pressed", state.details);
 }
 
@@ -337,7 +360,12 @@ function shell() {
       <select data-bind="type" aria-label="Type">
         <option value="">All types</option>${types.map((t) => option(t, state.type)).join("")}
       </select>
-      <button id="drift-toggle" aria-pressed="false">Drift only</button>
+      <select data-bind="versions" aria-label="Which components to show">
+        ${Object.entries(VERSION_VIEWS)
+          .map(([key, view]) => `<option value="${esc(key)}"${
+            key === state.versions ? " selected" : ""}>${esc(view.label)}</option>`)
+          .join("")}
+      </select>
       <button id="details-toggle" aria-pressed="true">Details</button>
       <button id="reset" class="action">Reset</button>
       <button id="copy" class="action">Copy link</button>
@@ -389,11 +417,12 @@ function wire() {
       writeUrl();
       render();
     });
-  toggle("drift-toggle", "driftOnly");
   toggle("details-toggle", "details");
 
   document.getElementById("reset").addEventListener("click", () => {
-    Object.assign(state, { q: "", owner: "", layer: "", type: "", driftOnly: false });
+    Object.assign(state, {
+      q: "", owner: "", layer: "", type: "", versions: DEFAULT_VIEW,
+    });
     writeUrl();
     render();
   });
