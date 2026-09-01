@@ -166,8 +166,8 @@ shows what a fetcher builds from one of them.
 
 ## The overview dashboard
 
-A single self-contained HTML page with one row per component, ordered the way
-data flows — sources at the top, the user at the bottom — and a column per
+A single self-contained HTML page with one row per component, in stages — data
+coming in at the top, the people who use it at the bottom — and a column per
 environment showing the deployed URL and the version running there.
 
 ```bash
@@ -205,14 +205,19 @@ a higher limit. It is sent to `api.github.com` and to nothing else, and a
 throttled fetch costs some release tags, not the run.
 
 **Every column sorts.** Click a header to sort by it, click again to reverse,
-and a third click returns to data-flow order — which is also what the ✕ beside
+and a third click returns to stage order — which is also what the ✕ beside
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
-and it travels in the URL with the filters. In data-flow order the rows are
-banded by step — each band naming what that step is for, from
-[`config/flow-steps.yaml`](config/flow-steps.yaml) — so the pipeline is
-visible rather than implied; sorting by owner, type or layer bands them by
-that instead.
+and it travels in the URL with the filters. In stage order the rows are banded by
+stage — each band naming what that stage is for — and sorting by owner, type
+or layer bands them by that instead.
+
+The stages, their order, and the components in each are
+[`config/flow-steps.yaml`](config/flow-steps.yaml), edited by hand. The
+recorded dependency edges are too sparse to order twenty-six components: with
+nothing recording that the UI calls Name Lookup, a computed order put Name
+Lookup up beside the data sources. A written order is more honest than a
+plausible-looking one derived from data that is missing.
 
 **`Last updated`** is the newer of a component's latest GitHub release and its
 SmartAPI registration, badged with which one it was. Thirteen of the

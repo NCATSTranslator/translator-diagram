@@ -15,7 +15,6 @@ import json
 from collections import Counter
 from datetime import UTC, datetime
 from importlib import resources
-from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +30,7 @@ from .components import (
     github_repo,
     merge_deployments,
 )
-from .flow import flow_depths, flow_steps, in_flow_order, isolated
+from .flow import flow_depths, in_flow_order, isolated
 
 PACKAGED_ASSETS = ("translator_diagram.data", ("dashboard.css", "dashboard.js"))
 
@@ -58,55 +57,74 @@ RELEASES_SHOWN = 3
 UPDATED_LABELS = {"release": "release", "registry": "registry"}
 
 
-FLOW_STEPS_FILE = Path("config/flow-steps.yaml")
+STAGES_FILE = Path("config/flow-steps.yaml")
+
+UNPLACED_TITLE = "Not yet placed"
 
 
-def load_flow_steps(path: Path = FLOW_STEPS_FILE) -> dict[frozenset[str], dict[str, str]]:
-    """Prose for each flow step, keyed by the components it covers.
+def load_stages(path: Path = STAGES_FILE) -> list[dict[str, Any]]:
+    """The platform's stages, in the order the page shows them.
 
-    Keyed by membership rather than by position because a step is "these
-    components, together": the number beside it on the page is only where they
-    land today, and one new dependency edge renumbers everything below. An
-    entry whose components no longer form a step simply stops matching, and the
-    band falls back to naming its layers — a generic title beats a confident
-    sentence about the wrong components. `tests/test_flow_steps.py` fails in
-    that case, so the prose gets rewritten rather than quietly lost.
+    This file is the row order, not a set of labels on a computed one. The
+    recorded `gets_results_from` / `calls` edges are too sparse to order 26
+    components — nothing records the UI calling Name Lookup, so Name Lookup
+    sorted near the sources, and nothing records the ARS calling Answer
+    Appraiser, so Answer Appraiser sorted above everything. A hand-written
+    order is more honest than a plausible-looking one derived from data that
+    is missing.
 
-    Optional: with no file, every band is named from its layers.
+    The trailing entry is the components no stage claims, named in the file's
+    `unplaced` block so a new component cannot quietly sort last.
     """
     loaded = _read_yaml(path) if path.exists() else None
     if not loaded:
-        return {}
-    entries = list(loaded.get("steps") or [])
-    if isolated_entry := loaded.get("isolated"):
-        entries.append({**isolated_entry, "components": None})
-    out = {}
-    for entry in entries:
-        components = entry.get("components")
-        key = ISOLATED_STEP if components is None else frozenset(components)
-        out[key] = {
-            "title": entry.get("title") or "",
-            "description": entry.get("description") or "",
+        return []
+    stages = [
+        {
+            "title": stage.get("title") or "",
+            "description": stage.get("description") or "",
+            "components": list(stage.get("components") or []),
         }
-    return out
+        for stage in (loaded.get("stages") or [])
+    ]
+    unplaced = loaded.get("unplaced") or {}
+    stages.append(
+        {
+            "title": UNPLACED_TITLE,
+            "description": unplaced.get("description") or "",
+            "components": list(unplaced.get("components") or []),
+            "unplaced": True,
+        }
+    )
+    return stages
 
 
-# The key the isolated group's prose is stored under: it is not a set of
-# components, because which components have no edges changes with the data.
-ISOLATED_STEP = "isolated"
+def in_stage_order(
+    components: list[ComponentFile], stages: list[dict[str, Any]]
+) -> list[tuple[ComponentFile, int, dict[str, Any]]]:
+    """Each component with the stage it belongs to and that stage's number.
 
-
-def _step_prose(
-    members: list[dict[str, Any]], prose: dict[Any, dict[str, str]], stranded: bool
-) -> dict[str, str]:
-    """The title and description for one band, hand-written or derived."""
-    key = ISOLATED_STEP if stranded else frozenset(row["id"] for row in members)
-    if written := prose.get(key):
-        return written
-    # No prose for this shape of step: name it after what is in it. Layers are
-    # the closest thing to a name the data already carries.
-    layers = sorted({row["layer"] for row in members if row.get("layer")})
-    return {"title": " and ".join(layers) or "Unnamed", "description": ""}
+    Components are shown in the order their stage lists them: within a stage
+    that order is a judgement too, and alphabetising it would throw the
+    judgement away. Anything no stage names falls to the end in data-flow
+    order, which is the best guess available for something nobody has placed.
+    """
+    if not stages:
+        return [(component, 1, {}) for component in in_flow_order(components)]
+    by_id = {component.id.lower(): component for component in components}
+    ordered: list[tuple[ComponentFile, int, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for number, stage in enumerate(stages, 1):
+        for cid in stage["components"]:
+            component = by_id.get(cid.lower())
+            if component and component.id not in seen:
+                seen.add(component.id)
+                ordered.append((component, number, stage))
+    trailing = stages[-1]
+    for component in in_flow_order(components):
+        if component.id not in seen:
+            ordered.append((component, len(stages), trailing))
+    return ordered
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -468,12 +486,11 @@ def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
 def build_rows(
     components: list[ComponentFile], synced: SyncedData
 ) -> list[dict[str, Any]]:
-    """One dictionary per component, in data-flow order."""
+    """One dictionary per component, in the stage order the config file sets."""
     depths = flow_depths(components)
-    steps = flow_steps(components)
     stranded = set(isolated(components))
     rows = []
-    for component in in_flow_order(components):
+    for component, step, stage in in_stage_order(components, load_stages()):
         record = synced.smartapi.get(component.smartapi_id or "", {})
         derived = synced.derived.get(component.id, {})
         deployments = merge_deployments(
@@ -530,12 +547,14 @@ def build_rows(
                 "repository": component.repository("source"),
                 "releases": chips,
                 "last_updated": _last_updated(releases, record),
-                "step": steps[component.id],
+                "step": step,
                 "step_label": (
-                    "No recorded dependencies"
-                    if component.id in stranded
-                    else f"Step {steps[component.id]}"
+                    stage.get("title") or ""
+                    if stage.get("unplaced")
+                    else f"Step {step}"
                 ),
+                "step_title": stage.get("title") or "",
+                "step_description": stage.get("description") or "",
                 "documentation": (component.documentation or [{}])[0].get("url"),
                 "uptime": uptime,
                 "helm_version": helm.get("version"),
@@ -547,24 +566,7 @@ def build_rows(
                 "environments": cells,
             }
         )
-    _label_steps(rows, load_flow_steps())
     return rows
-
-
-def _label_steps(
-    rows: list[dict[str, Any]], prose: dict[Any, dict[str, str]]
-) -> None:
-    """Give every row its band's title and description.
-
-    A second pass because a step's membership is only known once every row
-    exists, and the prose is keyed by exactly that membership.
-    """
-    for step, members in groupby(rows, key=lambda row: row["step"]):
-        members = list(members)
-        written = _step_prose(members, prose, members[0]["isolated"])
-        for row in members:
-            row["step_title"] = written["title"]
-            row["step_description"] = written["description"]
 
 
 def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:

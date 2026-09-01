@@ -1,77 +1,78 @@
-# Titles and descriptions for the steps of the data-flow order, which the
-# dashboard bands its rows by. Edit this file rather than any Python: it is
-# prose about the platform, and the people who know it best should not have to
-# open a module to fix it. Same rule as config/owner-colors.csv.
+# The stages of the platform, in the order the dashboard shows them, and what
+# each one is for. Edit this file rather than any Python: it is prose about the
+# platform and the order it is read in, and the people who know both should not
+# have to open a module. Same rule as config/owner-colors.csv.
 #
-# **Entries are matched by their component list, not by their position.** A
-# step is "these components, together"; the number beside it on the page is
-# just where they land today, and adding one dependency edge renumbers
-# everything below it. So an entry applies when its `components` are exactly
-# the components of a step. When the graph moves and no entry matches, the
-# band falls back to naming the layers it contains, and
-# tests/test_flow_steps.py fails so somebody comes back and rewrites the
-# prose rather than leaving a confident sentence about the wrong components.
+# **This file is the row order.** It used to be a set of labels on an order
+# computed from the recorded `gets_results_from` / `calls` edges, and that
+# order was wrong in ways the edges cannot fix: Name Lookup came out near the
+# top because nothing records the UI calling it, and Answer Appraiser came out
+# above everything because nothing records the ARS calling it. The recorded
+# graph is too sparse to order 26 components, and hand-writing the order is
+# more honest than deriving a plausible-looking one from data that is missing.
 #
-# The file is optional. Delete it and every band is named from its layers.
+# Components within a stage are shown in the order listed here. Anything not
+# listed anywhere lands in a trailing band, and tests/test_flow_steps.py fails
+# until it is either placed in a stage or named under `unplaced` — so a new
+# component file cannot quietly disappear into the bottom of the page.
 
-steps:
-  - title: Sources and shared services
-    description: >-
-      Nothing recorded feeds these. Some are genuinely where the data starts;
-      others are here only because no one has recorded what calls them yet.
-    components: [answer-appraiser, docmetadata-api, jaeger, pending-api, smartapi]
-
-  - title: Names and identifiers
-    description: >-
-      Turns the strings people type, and the identifiers data arrives with,
-      into something everything downstream can join on.
-    components: [name-lookup, node-annotator, nodenorm-es]
-
-  - title: Ingest
+stages:
+  - title: Data ingest
     description: >-
       Pulls external sources in and turns them into KGX, on the toolchain the
-      ingest teams share.
-    components: [dingo-ingest, translator-sdk]
+      ingest teams share and against the identifiers everything else joins on.
+    components: [dingo-ingest, translator-sdk, nodenorm-es]
 
   - title: KGX storage
-    description: Lands the ingested KGX where the query tiers can read it.
+    description: Lands ingested KGX where the query tiers can read it.
     components: [kgx-storage-pipeline]
 
-  - title: DogPark Ranger
-    description: Marshals stored KGX into the tiers that answer queries.
-    components: [dogpark-ranger]
-
-  - title: DogPark tiers
+  - title: DogPark
     description: >-
-      The stored graph itself — Tier 0 holds the full KGX, Tier 1 splits it out
-      by data source.
-    components: [dogpark-tier-0, dogpark-tier-1]
+      The stored graph and what marshals it — Tier 0 holds the full KGX, Tier 1
+      splits it out by data source.
+    components: [dogpark-ranger, dogpark-tier-0, dogpark-tier-1]
 
-  - title: Retrieval
-    description: The query API over the DogPark tiers, and what the ARAs call.
+  - title: Retriever
+    description: The query API over DogPark, and what the reasoners call.
     components: [retriever]
 
-  - title: Reasoning
+  - title: Shepherd
     description: >-
       The ARAs, each running under Shepherd: they plan a query, gather results
       and hand them back.
     components: [shepherd-aragorn, shepherd-arax, shepherd-bte]
 
-  - title: Autonomous Relay System
-    description: Fans one query out across the ARAs and merges what returns.
-    components: [ars]
-
-  - title: The user, and what tests it
+  - title: ARS
     description: >-
-      Where a question is asked and an answer is read, alongside the harnesses
-      that exercise everything above.
-    components: [ars-test-server, test-harness, translator-component-toolkit, ui]
+      Fans one query out across the ARAs, merges what comes back, and scores it
+      before anyone sees it.
+    components: [ars, ars-test-server, answer-appraiser]
 
-# The components with no recorded edges in either direction. Not a step: they
-# are what the dependency data does not say.
-isolated:
-  title: No recorded dependencies
+  - title: User interface
+    description: >-
+      Where a question is asked and an answer is read, with the lookup services
+      the interface leans on to turn what someone typed into identifiers.
+    components:
+      [ui, smartapi, node-annotator, name-lookup, pending-api, nameres-es,
+       docmetadata-api]
+
+  - title: Super users
+    description: For people driving Translator directly rather than through the interface.
+    components: [translator-component-toolkit]
+
+  - title: Engineering
+    description: >-
+      Not on the path of a query: how the platform is watched and checked —
+      tracing from every service, and the harness that exercises them.
+    components: [jaeger, test-harness]
+
+# Components that belong to no stage yet. Listed explicitly, the way
+# unknown.yaml lists unattributed identifiers: an entry leaves this list by
+# being placed in a stage above, and a component that is in neither fails the
+# tests rather than silently sorting last.
+unplaced:
   description: >-
-    Nothing records what feeds these or what they feed. That is a hole in the
-    metadata rather than a fact about the platform — ARAX and Ploverdb
-    certainly have neighbours.
+    Recorded, but not yet placed in a stage. Both are RTX components that
+    predate the current pipeline.
+  components: [arax, ploverdb]

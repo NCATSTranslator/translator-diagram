@@ -219,19 +219,28 @@ dependency set would suggest otherwise.
 
 ## Common change patterns
 
-**Change what a dashboard band says** → edit `config/flow-steps.yaml`. Titles
-and descriptions for the steps of the data-flow order, and prose about the
-platform belongs where the people who know the platform can edit it — same
-reasoning as `config/owner-colors.csv`.
+**Change the dashboard's row order, or what a band says** →
+`config/flow-steps.yaml`. It lists the stages in page order, each with a title,
+a description and the components it holds, shown in the order it lists them.
+Prose about the platform, and the order it is read in, belong where the people
+who know both can edit them — same reasoning as `config/owner-colors.csv`.
 
-Entries are matched by **the components a step contains**, not by position: a
-step is "these components, together", and one new dependency edge renumbers
-everything below it. So prose can never attach to the wrong rows; what it can
-do is stop matching, in which case the band falls back to naming its layers and
-`tests/test_flow_steps.py` fails until someone rewrites it. That test is the
-whole point of the arrangement — verified by adding an edge and watching it
-fire, not by reading it. The file is optional: delete it and every band is
-named after its layers.
+**That file is the order.** It began as labels on an order computed from the
+recorded `gets_results_from` / `calls` edges, and that order was wrong in ways
+the edges cannot fix: nothing records the UI calling Name Lookup, so Name
+Lookup sorted up beside the data sources, and nothing records the ARS calling
+Answer Appraiser, so Answer Appraiser sorted above everything. Twenty-six
+components is too many to order from a graph this sparse. `flow.py` still
+computes depths — `isolated` is what draws the left bar and what
+`build-dashboard` reports — but nothing derives the page order from them any
+more, and `flow_steps` was deleted rather than left as a second answer to a
+question with one.
+
+A component no stage names lands in a trailing band, and
+`tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
+the same contract as `unknown.yaml`, so a new component file cannot quietly
+appear at the bottom looking deliberate. The file is optional: delete it and
+the page falls back to `in_flow_order` with no bands at all.
 
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:

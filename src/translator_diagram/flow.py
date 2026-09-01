@@ -98,23 +98,6 @@ def in_flow_order(components: list[ComponentFile]) -> list[ComponentFile]:
     )
 
 
-def flow_steps(components: list[ComponentFile]) -> dict[str, int]:
-    """Each component's depth as a 1-based step number.
-
-    The step is what a reader can be shown; the depth is not. Depths cannot
-    skip a number in the middle — a component at depth k is one step past
-    something at k-1 — but they start at 1 rather than 0 when every component
-    is fed from outside, and the no-edges group carries the NO_EDGES_DEPTH
-    sentinel. Ranking the distinct depths is what keeps a band from being
-    labelled "Step 0" or "Step 10001".
-
-    The sentinel group ranks last, which is where it already sorts.
-    """
-    depths = flow_depths(components)
-    ranks = {depth: n for n, depth in enumerate(sorted(set(depths.values())), 1)}
-    return {cid: ranks[depth] for cid, depth in depths.items()}
-
-
 def isolated(components: list[ComponentFile]) -> list[str]:
     """Ids with no recorded edges in either direction.
 
