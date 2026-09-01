@@ -2,12 +2,17 @@
 #
 # Two jobs, because a repository has exactly one GitHub Pages deployment. A
 # pull request builds the page and uploads it as an artifact you can download
-# and open; only main, the schedule and a manual run deploy. Deploying from a
-# PR would overwrite the live site with that branch's build, would fail
+# and open; main, the schedule and an explicit manual run deploy. Deploying
+# from a PR would overwrite the live site with that branch's build, would fail
 # outright for a fork (no Pages permission on a `pull_request` run), and would
 # leave the published site reporting whichever PR happened to build last —
 # this page reads live versions, so its content depends on when it ran as much
 # as on what it was built from.
+#
+# A manual run *can* deploy a branch, deliberately: that is how a page gets
+# reviewed at its real URL before its PR merges. It overwrites the live site
+# until the next deploy from main, so it is a thing to do on purpose and say
+# out loud, not a thing to reach for absent-mindedly.
 #
 # Neither job passes --include-private, so both apply config/privacy.yaml. That
 # is the point of redacting by default: this file cannot be edited into
@@ -73,13 +78,19 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/upload-pages-artifact@v3
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
         with:
           path: data/dashboard/
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
+    # Two ways in, and no third. A push to main or the schedule (which also
+    # runs on main) publishes what main says. A manual run publishes whatever
+    # ref it was dispatched with, which is the point of it -- reviewing a
+    # branch's page at a URL before merging it. `event_name != pull_request`
+    # was the old spelling and let any future trigger deploy by default; this
+    # one has to be edited to add a third way.
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write
