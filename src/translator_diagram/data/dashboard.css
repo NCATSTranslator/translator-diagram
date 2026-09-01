@@ -150,7 +150,7 @@ button.action:hover { background: color-mix(in srgb, var(--accent) 20%, var(--ca
 table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 
 thead th {
-  position: sticky; top: 3.1rem; z-index: 2;
+  position: sticky; top: var(--filters-height, 3.1rem); z-index: 2;
   /* A sticky th needs its own background: cells are transparent, so rows
      would scroll through it. */
   background: var(--card);
@@ -160,7 +160,53 @@ thead th {
   white-space: nowrap;
 }
 thead th.env { text-align: center; }
-thead tr.groups th { top: 3.1rem; border-bottom: 1px solid var(--border); }
+thead th { padding: 0; }
+thead th.env .sortcol { justify-content: center; }
+
+/* The header is the sort control. A real button, so it is reachable by tab and
+   Enter works for free; the styling keys off aria-sort so what a screen reader
+   announces and what the eye sees cannot disagree. */
+.sortcol {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  font: inherit; font-weight: 600; color: inherit; text-align: inherit;
+  background: none; border: 0; border-radius: 0; padding: 8px 10px;
+  cursor: pointer;
+}
+.sortcol:hover { color: var(--accent); border-color: transparent; }
+/* Invisible until it means something, but shown faintly on hover: otherwise
+   nothing tells a reader the header is a control at all. */
+.sortcol .caret { opacity: 0; flex: none; }
+.sortcol:hover .caret { opacity: 0.45; }
+/* The glyph points up for ascending, which is the convention every table
+   reader already has. */
+thead th[aria-sort="ascending"] .caret { opacity: 1; }
+thead th[aria-sort="descending"] .caret { opacity: 1; transform: rotate(180deg); }
+thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
+
+/* Order and count wrap as one unit: they are one sentence about what the
+   table is showing, and splitting them across lines reads as two. */
+.status { display: flex; align-items: center; gap: 10px; }
+.order { color: var(--muted); font-size: 0.875rem; }
+.order #unsort {
+  padding: 0 5px; margin-left: 4px; font-size: 0.8rem;
+  color: var(--muted); background: none;
+}
+
+/* A band names the group the rows under it share — the flow step, or whatever
+   column the table is sorted by. Tinted with the page colour rather than a new
+   one, and not hoverable: it is not a row you can act on. */
+tbody tr.band td {
+  background: var(--page); padding: 3px 10px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+tbody tr.band:hover td { background: var(--page); }
+tbody tr.band .note {
+  margin-left: 8px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; opacity: 0.75;
+}
+
+.updated .age { font-variant-numeric: tabular-nums; }
 
 tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }

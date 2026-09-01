@@ -21,6 +21,8 @@ const state = {
   type: "",
   versions: "differ",
   details: true,
+  sort: "",   // empty means the payload's own order, which is data flow
+  dir: "asc",
 };
 let urlReady = false;
 
@@ -47,6 +49,10 @@ function readUrl() {
   state.type = (p.get("type") ?? "").slice(0, 40);
   const view = p.get("versions") ?? "";
   state.versions = Object.hasOwn(VERSION_VIEWS, view) ? view : DEFAULT_VIEW;
+  // A pasted URL can name anything; only a real sortable column counts.
+  const sort = p.get("sort") ?? "";
+  state.sort = COLUMNS.some((column) => column.key === sort) ? sort : "";
+  state.dir = p.get("dir") === "desc" ? "desc" : "asc";
   state.details = p.get("details") !== "0";
 }
 
@@ -60,6 +66,9 @@ function writeUrl() {
   if (state.layer) p.set("layer", state.layer);
   if (state.type) p.set("type", state.type);
   if (state.versions !== DEFAULT_VIEW) p.set("versions", state.versions);
+  // Both, always: the first click's direction differs per column, so "asc" is
+  // not a default a reader of the URL could infer.
+  if (state.sort) { p.set("sort", state.sort); p.set("dir", state.dir); }
   if (!state.details) p.set("details", "0");
   const query = p.toString();
   history.replaceState(null, "", query ? `?${query}` : location.pathname);
@@ -105,7 +114,7 @@ function visibleRows() {
       if (!needle) return true;
       const haystack = [
         row.id, row.name, row.owner, row.layer, row.type, row.infores,
-        row.helm_chart, ...(row.otel_services ?? []),
+        row.helm_chart, row.last_updated?.date, ...(row.otel_services ?? []),
         ...(row.releases ?? []).map((r) => r.tag),
         ...ENVS.map((env) => row.environments[env]?.version),
       ];
@@ -241,41 +250,232 @@ function repoCell(row) {
   return releases ? `${link}<span class="releases">${releases}</span>` : link;
 }
 
-function rowHtml(row) {
+function componentCell(row) {
   const externals = (row.externals ?? [])
     .map((e) => `<span class="chip">${e.direction === "in" ? "◀" : "▶"} ${esc(e.name)}</span>`)
     .join(" ");
-
-  return `<tr class="${row.isolated ? "isolated" : ""}" id="c-${esc(row.id)}">
-    <td>
+  return `<td>
       <span class="component">${esc(row.name)}</span>
       <span class="cid">${esc(row.id)}</span>
       ${externals}
-    </td>
-    <td><span class="owner" data-owner="${esc(row.owner)}">${esc(row.owner)}</span></td>
-    <td class="meta drop-sm">${or(row.type, esc(row.type))}</td>
-    <td class="meta drop-md">${or(row.layer, esc(row.layer))}</td>
-    <td class="meta drop-md">${repoCell(row)}</td>
-    ${ENVS.map((env) => envCell(row, env)).join("")}
+    </td>`;
+}
+
+/* Ages are measured against the reader's clock, not against the sync: a page
+   opened in December is telling the truth when it says a release is four
+   months old. The exact date is one hover away, and the footer says so. */
+const AGE = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });
+
+function relativeAge(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  const days = ms / 86400000;
+  // Clamped, so a clock that is slightly ahead of GitHub's says "today"
+  // rather than "in 3 hours".
+  if (days < 1) return "today";
+  if (days < 14) return AGE.format(-Math.round(days), "day");
+  if (days < 60) return AGE.format(-Math.round(days / 7), "week");
+  if (days < 730) return AGE.format(-Math.round(days / 30.44), "month");
+  return AGE.format(-Math.round(days / 365.25), "year");
+}
+
+function updatedCell(row) {
+  const updated = row.last_updated;
+  // Null for 13 of 26 components — no releases, and in no registry. A dash is
+  // the honest reading, not a failure.
+  if (!updated) return `<td class="meta drop-sm updated">${DASH}</td>`;
+  const label = DATA.updated_labels?.[updated.source] ?? updated.source;
+  // The three shepherds share one repository, so one release date lands on
+  // three rows: without the tag that reads as three coincidental deploys.
+  const title = updated.source === "release"
+    ? `${updated.tag} released ${updated.date}`
+    : `SmartAPI registration last changed ${updated.date}`;
+  return `<td class="meta drop-sm updated" title="${esc(title)}"
+    ><span class="age">${esc(relativeAge(updated.at))}</span
+    ><span class="src" data-src="${esc(updated.source)}">${esc(label)}</span></td>`;
+}
+
+/* --- Columns ------------------------------------------------------------- */
+
+/* One entry per column, because four things have to agree about each one: the
+   header cell, the body cell, the class that hides both at narrow widths, and
+   the count the empty row's colspan needs. Three of those used to be written
+   out twice — the header said `drop-md` and the body said it again — which is
+   how a header ends up hidden without its column, or the reverse. */
+const byText = (a, b) =>
+  String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+// Explicit, not localeCompare: YYYY-MM-DD happens to collate correctly, but
+// only by accident, and an accident is a poor thing to sort dates on.
+const byDate = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/* How stale an environment is, in tiers: running a release we can date, then
+   running something no release names, then not deployed. Tiers hold in both
+   directions, so reversing the sort never lifts the blanks to the top. */
+function envRank(row, env) {
+  const cell = row.environments[env];
+  if (!cell?.deployed) return 2;
+  return cell.released ? 0 : 1;
+}
+
+const COLUMNS = [
+  { key: "name", label: "Component", cell: componentCell, value: (row) => row.name },
+  {
+    key: "owner", label: "Owner", value: (row) => row.owner, band: (row) => row.owner,
+    cell: (row) =>
+      `<td><span class="owner" data-owner="${esc(row.owner)}">${esc(row.owner)}</span></td>`,
+  },
+  {
+    key: "type", label: "Type", drop: "drop-sm",
+    value: (row) => row.type ?? "", band: (row) => row.type || "No type recorded",
+    cell: (row) => `<td class="meta drop-sm">${or(row.type, esc(row.type))}</td>`,
+  },
+  {
+    key: "layer", label: "Layer", drop: "drop-md",
+    value: (row) => row.layer ?? "", band: (row) => row.layer || "No layer recorded",
+    cell: (row) => `<td class="meta drop-md">${or(row.layer, esc(row.layer))}</td>`,
+  },
+  {
+    key: "repo", label: "Repository", drop: "drop-md",
+    value: (row) => (row.repository ?? "").replace("https://github.com/", ""),
+    cell: (row) => `<td class="meta drop-md">${repoCell(row)}</td>`,
+  },
+  {
+    key: "updated", label: "Last updated", drop: "drop-sm", cell: updatedCell,
+    value: (row) => row.last_updated?.date ?? "",
+    compare: byDate, prefer: "asc", words: ["oldest first", "newest first"],
+    hint: "Sort by when this component last changed",
+  },
+  ...ENVS.map((env) => ({
+    key: `env-${env}`, label: env, env, headerCls: "env",
+    cell: (row) => envCell(row, env),
+    value: (row) => row.environments[env]?.released ?? "",
+    rank: (row) => envRank(row, env),
+    compare: byDate, prefer: "asc", words: ["oldest first", "newest first"],
+    hint: `Sort by the age of the release running in ${env}`,
+  })),
+];
+
+function sortColumn() {
+  return COLUMNS.find((column) => column.key === state.sort);
+}
+
+/* Sorts the array visibleRows() just built, never DATA.rows: the count, the
+   drift sentence and the flow bands all read the payload in its own order.
+   Array.prototype.sort is stable, so every tie falls back to data flow — which
+   is why sorting by owner leaves each owner's components in pipeline order. */
+function sortRows(rows) {
+  const column = sortColumn();
+  if (!column) return rows;
+  const flip = state.dir === "desc" ? -1 : 1;
+  return rows.sort((a, b) => {
+    const ra = column.rank ? column.rank(a) : 0;
+    const rb = column.rank ? column.rank(b) : 0;
+    if (ra !== rb) return ra - rb;
+    const av = column.value(a) || "";
+    const bv = column.value(b) || "";
+    // Before the flip, deliberately: reversing the sort must not promote the
+    // thirteen components we have no date for to the top of the table.
+    if (!av || !bv) return av ? -1 : bv ? 1 : 0;
+    return flip * (column.compare ?? byText)(av, bv);
+  });
+}
+
+function rowHtml(row) {
+  return `<tr class="${row.isolated ? "isolated" : ""}" id="c-${esc(row.id)}">
+    ${COLUMNS.map((column) => column.cell(row)).join("")}
   </tr>`;
 }
 
-function render() {
-  const rows = visibleRows();
-  document.getElementById("count").textContent =
-    `${rows.length} of ${DATA.rows.length} components`;
-  const body = document.getElementById("tbody");
-  body.innerHTML = rows.length
-    ? rows.map(rowHtml).join("")
-    : `<tr><td class="empty" colspan="${5 + ENVS.length}">
+// Inline SVG on currentColor, for the reason THEME_ICONS already argues: a
+// glyph arrow renders as colour emoji on one platform and tofu on another.
+const CARET = `<svg class="caret" viewBox="0 0 10 10" width="9" height="9"
+  aria-hidden="true" fill="currentColor"><path d="M5 1.5 9 7H1z"/></svg>`;
+
+function headHtml() {
+  return `<tr>${COLUMNS.map((column) => {
+    const active = state.sort === column.key;
+    const cls = [column.headerCls, column.drop].filter(Boolean).join(" ");
+    // aria-sort drives the styling too, so what is announced and what is shown
+    // cannot drift apart.
+    const sorted = active ? (state.dir === "asc" ? "ascending" : "descending") : "none";
+    const hint = column.hint ?? `Sort by ${column.label}`;
+    return `<th class="${cls}" aria-sort="${sorted}"><button type="button"
+      class="sortcol" data-col="${esc(column.key)}" title="${esc(hint)}">${
+      esc(column.label)}${CARET}</button></th>`;
+  }).join("")}</tr>`;
+}
+
+/* What the rows are grouped under, or null for an order that has no groups.
+   Data flow gets bands because the order is otherwise invisible; the
+   low-cardinality text columns get them because they are what "sorted by
+   owner" means. Dates and environments get none — every row is its own group. */
+function bandKey() {
+  const column = sortColumn();
+  if (!column) return (row) => row.step_label;
+  return column.band ?? null;
+}
+
+function bodyHtml(rows) {
+  if (!rows.length) {
+    return `<tr><td class="empty" colspan="${COLUMNS.length}">
          No components match these filters.
        </td></tr>`;
+  }
+  const label = bandKey();
+  if (!label) return rows.map(rowHtml).join("");
+  // Grouped as they come, so a step filtered down to nothing leaves no empty
+  // band, and a visible gap — Step 1, Step 2, Step 8 — reports honestly what
+  // the filter took out.
+  const groups = [];
+  for (const row of rows) {
+    if (!groups.length || groups.at(-1).label !== label(row)) {
+      groups.push({ label: label(row), rows: [] });
+    }
+    groups.at(-1).rows.push(row);
+  }
+  return groups.map((group) =>
+    `<tr class="band"><td colspan="${COLUMNS.length}">${esc(group.label)}<span
+       class="note">${group.rows.length} component${
+         group.rows.length === 1 ? "" : "s"}</span></td></tr>${
+      group.rows.map(rowHtml).join("")}`).join("");
+}
+
+function orderHtml() {
+  const column = sortColumn();
+  if (!column) return "Ordered by data flow";
+  const words = column.words ?? ["A to Z", "Z to A"];
+  // The button is the only way back when a narrow window has hidden the
+  // column whose header would otherwise complete the cycle.
+  return `Sorted by ${esc(column.label)}, ${words[state.dir === "asc" ? 0 : 1]}
+    <button type="button" id="unsort" title="Back to data-flow order">✕</button>`;
+}
+
+/* The sticky header sits directly under the sticky filter bar, and the bar's
+   height is not a constant: it wraps to two lines at the widths where the
+   order label and the four filters no longer fit on one. Measured rather than
+   guessed, because a wrong offset hides the first row under the bar. */
+function measureFilters() {
+  const bar = document.querySelector(".filters");
+  if (!bar) return;
+  document.documentElement.style.setProperty(
+    "--filters-height", `${Math.round(bar.getBoundingClientRect().height)}px`);
+}
+
+function render() {
+  const rows = sortRows(visibleRows());
+  document.getElementById("count").textContent =
+    `${rows.length} of ${DATA.rows.length} components`;
+  document.getElementById("order").innerHTML = orderHtml();
+  document.getElementById("thead").innerHTML = headHtml();
+  const body = document.getElementById("tbody");
+  body.innerHTML = bodyHtml(rows);
   for (const el of document.querySelectorAll("[data-bind]")) {
     const key = el.dataset.bind;
     if (el.type === "checkbox") el.checked = state[key];
     else el.value = state[key];
   }
   document.getElementById("details-toggle").setAttribute("aria-pressed", state.details);
+  measureFilters();
 }
 
 function findingSentence() {
@@ -370,31 +570,27 @@ function shell() {
       <button id="reset" class="action">Reset</button>
       <button id="copy" class="action">Copy link</button>
       <span class="spacer"></span>
-      <span class="count" id="count"></span>
+      <span class="status">
+        <span class="order" id="order"></span>
+        <span class="count" id="count"></span>
+      </span>
     </div>
 
     <div class="card">
       <table>
-        <thead>
-          <tr>
-            <th>Component</th>
-            <th>Owner</th>
-            <th class="drop-sm">Type</th>
-            <th class="drop-md">Layer</th>
-            <th class="drop-md">Repository</th>
-            ${ENVS.map((e) => `<th class="env">${esc(e)}</th>`).join("")}
-          </tr>
-        </thead>
+        <thead id="thead"></thead>
         <tbody id="tbody"></tbody>
       </table>
     </div>
 
     <footer>
-      A tinted cell is the odd one out for that component across environments.
-      A badge on a version says where it was read from; a left bar marks a component
-      with no recorded dependencies. In Repository, each tag links to that release's
-      notes, and a filled tag is running in one of the environments on its row.
-      Generated by <code>build-dashboard</code>.
+      A tinted cell is the odd one out for that component across environments, and a
+      badge on a value says where it was read from. In Repository, each tag links to
+      that release's notes, and a filled tag is running in one of the environments on
+      its row. Ages are counted from your clock to the exact date in the tooltip, and
+      they date a release or a registration — nothing here knows when an environment
+      was last deployed. Click any header to sort; a third click returns to data-flow
+      order. Generated by <code>build-dashboard</code>.
     </footer>
   </div>`;
 }
@@ -422,7 +618,38 @@ function wire() {
   document.getElementById("reset").addEventListener("click", () => {
     Object.assign(state, {
       q: "", owner: "", layer: "", type: "", versions: DEFAULT_VIEW,
+      sort: "", dir: "asc",
     });
+    writeUrl();
+    render();
+  });
+
+  // Delegated, because render() rewrites the header on every change and a
+  // handler bound to a th would be thrown away with it.
+  document.getElementById("thead").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-col]");
+    if (!button) return;
+    const column = COLUMNS.find((c) => c.key === button.dataset.col);
+    const preferred = column.prefer ?? "asc";
+    if (state.sort !== column.key) {
+      state.sort = column.key;
+      state.dir = preferred;
+    } else if (state.dir === preferred) {
+      state.dir = preferred === "asc" ? "desc" : "asc";
+    } else {
+      // Third click goes home. Without it, data-flow order — the order the
+      // page is built to argue for — would be unreachable once you left it.
+      state.sort = "";
+      state.dir = "asc";
+    }
+    writeUrl();
+    render();
+  });
+
+  document.getElementById("order").addEventListener("click", (event) => {
+    if (!event.target.closest("#unsort")) return;
+    state.sort = "";
+    state.dir = "asc";
     writeUrl();
     render();
   });
@@ -456,5 +683,6 @@ shell();
 wire();
 renderTheme();
 render();
+addEventListener("resize", measureFilters);
 // Only now: everything above can set state without the URL fighting it back.
 urlReady = true;
