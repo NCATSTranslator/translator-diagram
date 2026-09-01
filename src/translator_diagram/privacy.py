@@ -41,6 +41,10 @@ publishing build rather than quietly produce a full-fidelity one.
 """
 
 
+SECTIONS = {"components", "fields", "environment_fields"}
+"""Every top-level key the policy file may have. Anything else is a typo."""
+
+
 FIELD_VERSION_SOURCES = {"helm_version": "helm", "helm_images": "helm"}
 """Row fields that are also the origin of a value shown in the table.
 
@@ -155,6 +159,18 @@ def load_policy(path: Path | None = None) -> Policy:
         loaded = {}
     if not isinstance(loaded, dict):
         raise click.ClickException(f"{found} must contain a mapping.")
+    # A mistyped section is the one way a policy can withhold nothing without
+    # anything downstream noticing: `component:` for `components:` parses, and
+    # every later check passes because there is nothing left to check. The
+    # per-entry checks in `apply` cannot see it — there are no entries.
+    unknown = sorted(set(loaded) - SECTIONS)
+    if unknown:
+        raise click.ClickException(
+            f"{found}: unknown section{'s' if len(unknown) > 1 else ''} "
+            f"{', '.join(repr(name) for name in unknown)}. Expected "
+            f"{', '.join(sorted(SECTIONS))}. A mistyped section withholds "
+            f"nothing at all."
+        )
     return Policy(
         components=_redactions(loaded, "components", found, key="id"),
         fields=_redactions(loaded, "fields", found),

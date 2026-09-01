@@ -140,6 +140,15 @@ class TestLoading:
         with pytest.raises(click.ClickException, match="not found"):
             load_policy(tmp_path / "absent.yaml")
 
+    def test_a_mistyped_section_is_an_error(self, tmp_path):
+        """The one way a policy can withhold nothing with every other check
+        passing: `component:` parses, yields no entries, and there is then
+        nothing left for `apply` or `verify` to object to."""
+        path = tmp_path / "privacy.yaml"
+        path.write_text("component:\n  - id: jaeger\n    reason: singular\n")
+        with pytest.raises(click.ClickException, match="unknown section"):
+            load_policy(path)
+
     def test_an_entry_without_a_name_is_an_error(self, tmp_path):
         path = tmp_path / "privacy.yaml"
         path.write_text("fields:\n  - reason: forgot the name\n")
