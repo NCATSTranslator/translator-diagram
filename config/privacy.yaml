@@ -30,7 +30,9 @@ fields:
     reason: >-
       Container image tags (solr:9.1, renci-python-image:latest, ...). Beside
       the version grid they make a ready-made inventory to match against a CVE
-      feed, with nothing to probe.
+      feed, with nothing to probe. Nothing in dashboard.js renders this field,
+      so withholding it changes overview.json and not the page — do not go
+      looking for what moved.
   - name: helm_version
     reason: >-
       The chart version those tags came from. Note this supplies the version

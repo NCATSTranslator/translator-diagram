@@ -257,6 +257,13 @@ class TestRendering:
         assert "<link" not in html
         assert "script src=" not in html
 
+    def test_the_page_asks_not_to_be_indexed(self, component, synced):
+        """Reachable by link, not by search. A deliberate decision that should
+        be removed on purpose rather than lost in a template edit — see the
+        public/private split in issue #7."""
+        html = render_html(build_payload([component], synced))
+        assert '<meta name="robots" content="noindex, nofollow">' in html
+
 
 class TestDerivedDeployments:
     """Environments found by convention rather than registered anywhere."""
