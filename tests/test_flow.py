@@ -6,6 +6,7 @@ from translator_diagram.components import ComponentFile
 from translator_diagram.flow import (
     NO_EDGES_DEPTH,
     flow_depths,
+    flow_steps,
     in_flow_order,
     isolated,
 )
@@ -135,3 +136,36 @@ def test_either_edge_field_alone_is_enough(edge_field):
     )
     depths = flow_depths([upstream, downstream])
     assert depths["down"] > depths["up"]
+
+
+class TestFlowSteps:
+    def test_steps_number_from_one_even_when_depths_do_not(self):
+        # Every component fed from outside starts at depth 1, and a band
+        # labelled "Step 0" would be the giveaway that depth leaked out.
+        chain = [
+            _comp("a", externals=[("in", "Upstream")]),
+            _comp("b", gets=["a"], externals=[("in", "Upstream")]),
+        ]
+        assert set(flow_depths(chain).values()) == {1, 2}
+        assert flow_steps(chain) == {"a": 1, "b": 2}
+
+    def test_the_no_edges_group_is_the_last_step_not_the_sentinel(self):
+        components = [_comp("a", externals=[("in", "Upstream")]),
+                      _comp("b", gets=["a"]), _comp("lonely")]
+        steps = flow_steps(components)
+        assert flow_depths(components)["lonely"] == NO_EDGES_DEPTH
+        assert steps["lonely"] == max(steps.values()) == 3
+
+    def test_one_unconnected_component_is_still_step_one(self):
+        assert flow_steps([_comp("lonely")]) == {"lonely": 1}
+
+    def test_steps_never_decrease_along_the_flow_order(self):
+        components = [
+            _comp("a", externals=[("in", "Upstream")]),
+            _comp("b", gets=["a"]),
+            _comp("c", calls=["b"]),
+            _comp("lonely"),
+        ]
+        steps = flow_steps(components)
+        ordered = [steps[c.id] for c in in_flow_order(components)]
+        assert ordered == sorted(ordered)
