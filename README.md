@@ -140,12 +140,13 @@ the second gets a `_2` suffix and a warning.
 
 ## Component metadata files (proposal)
 
-`components/<id>.yaml` records one file per component: its identifier in each
-of the naming spaces Translator uses (GitHub repo, Helm chart, infores CURIE,
-ITRB app, wiki page), links to its repositories and documentation, and the
-data-flow edges the diagram is built from. `schema/component.schema.json` is
-the field reference, and `tests/test_components.py` checks every file against
-it.
+`components/<id>.yaml` records one file per component: what it is (owner,
+refactor status, layer, where it runs), its identifier in each of the naming
+spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
+ITRB's own `app` and `group`, links to its repositories and documentation, and
+the `connections:` edges the diagram is built from.
+`schema/component.schema.json` is the field reference, and
+`tests/test_components.py` checks every file against it.
 
 [`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
 platform that no component file claims yet — currently the OpenTelemetry

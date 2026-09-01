@@ -55,7 +55,9 @@ requirements — we *point at* rather than copy.
 - the component id, and its name in each other naming space;
 - who owns the component;
 - the data flow: what it gets results from, and what it calls;
-- how it should be drawn (layer, grouping, refactor status).
+- where it sits: its refactor status, its layer, the subsystem it is part of,
+  and where it runs;
+- how it should be drawn, in the rare case that needs saying at all.
 
 **Pointed at**, because somewhere upstream is already authoritative:
 
@@ -91,17 +93,27 @@ id: name-lookup
 name: Name Lookup (NameRes)
 owner: DOGSLED
 component_type: Utility          # the x-translator `component` vocabulary
+refactor_status: Continues into Refactor
+layer: Shared services           # the band the diagram draws as a row
+hosted_at: ITRB
 
 identifiers:                     # this component's name everywhere else
   infores: infores:sri-name-resolver
   smartapi: "9995fed757acd034ef099dbb483c4c82"
   helm_chart: name-lookup
-  itrb_app: name-lookup
-  itrb_group: SRI-Ranking
   translator_all_wiki: Name-Resolution-Service
   otel_services:                 # a list: components report under several
     - Nameres
     - infores:sri-name-resolver
+
+itrb:                            # two coordinates, so not an identifier
+  app: name-lookup
+  group: SRI-Ranking
+
+connections:                     # the data flow, recorded by hand
+  gets_results_from: []
+  calls: [jaeger]
+  externals: []
 
 repositories:
   - url: https://github.com/NCATSTranslator/NameResolution
@@ -119,17 +131,12 @@ endpoints:                       # paths relative to an environment's base URL
   openapi: openapi.json
   status: status?full=true
   docs: docs
-
-diagram:                         # the part nothing upstream knows
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: [jaeger]
-  externals: []
 ```
+
+There is no `diagram:` block, and there is none in any of the 26 files. It
+holds `ubiquitous` and `hide` — the two fields that really are about the
+picture rather than the component — and both default to `false`, which is what
+every component is. The block appears the first time one of them is `true`.
 
 ### `unknown.yaml`
 
@@ -184,10 +191,19 @@ Note that a bare `~` is YAML `null`; the schema requires at least one
 character after it, so a stray tilde fails validation rather than becoming a
 silent null in the middle of a list.
 
-**The file set is closed under references.** Every id in `gets_results_from`
-or `calls` must have a file, even when the component itself is filtered out of
-the diagram — the generator's ghost-node rendering exists for exactly that
-case. `docmetadata-api` has a file only because `ui` calls it.
+**The file set is closed under references.** Every id in
+`connections.gets_results_from` or `connections.calls` must have a file, even
+when the component itself is filtered out of the diagram — the generator's
+ghost-node rendering exists for exactly that case. `docmetadata-api` has a
+file only because `ui` calls it.
+
+**An empty list is a claim; a default flag is not.** `gets_results_from: []`
+says this component was checked and gets results from nothing, which is the
+absent-versus-`null` rule applied to a list — so `connections:` keeps its
+empty lists. A `diagram:` flag at its default says only what the schema
+already says, so it is not written at all, and the block goes with it once it
+is empty. The distinction is why one block is full of `[]` and the other is
+usually missing.
 
 **Public information only.** Every URL in this repo is already publicly
 reachable; the transltr.io endpoints are all discoverable through SmartAPI. A
@@ -242,9 +258,20 @@ would catch both a stale edge and a dependency nobody declared. It is not
 free: service names are a naming space of their own, async work distorts span
 parentage, and a trace only shows edges that were exercised.
 
-**4. Is `diagram:` the right nesting?** Grouping the drawing-only fields keeps
-it obvious which fields describe the component and which describe the picture.
-It also means a consumer that only wants the data flow reads one key.
+**4. Is `diagram:` the right nesting? — decided: no, and it has been split.**
+The argument for it was that grouping the drawing-only fields keeps it obvious
+which describe the component and which describe the picture. The block did not
+hold to that: of its nine fields only `ubiquitous` and `hide` were about the
+picture. The refactor status, the layer, the subsystem and the host are what
+the component *is*, and the data flow is one of the four jobs this repo
+exists to do — so filing it under drawing was backwards.
+
+They are now top-level fields, `connections:` and a `diagram:` block holding
+the two flags that earned it. That block is absent from all 26 files, because
+both flags default to `false` and every component is. The eight files whose
+`identifiers:` block turned out to hold nothing but `itrb_app` and
+`itrb_group` are why ITRB moved out at the same time: a group is not a name
+for a component, it is a namespace around an application.
 
 **5. How much should be pulled versus pinned?** A fetched value is always
 current and sometimes unavailable; a pinned value is always available and
@@ -263,5 +290,5 @@ Not in this pull request. The order after it:
    one-way `--export-csv` keeps a spreadsheet view available for anyone who
    wants one.
 3. [Issue #6](https://github.com/NCATSTranslator/translator-diagram/issues/6)
-   — reconciling against the list ITRB sends — joins on `identifiers.itrb_app`
-   and `identifiers.itrb_group`.
+   — reconciling against the list ITRB sends — joins on `itrb.app` and
+   `itrb.group`.

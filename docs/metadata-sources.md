@@ -198,7 +198,7 @@ ARAX             -> NodeNorm, retriever
 ```
 
 Every one of those edges is an observation, not a declaration, which makes it
-the natural check on the `gets_results_from` / `calls` we record by hand. It
+the natural check on the `connections:` edges we record by hand. It
 is also how the ambiguous service names above were attributed at all: `gandalf`
 is `dogpark-tier-0` because `retriever` calls it, and `arax` is the Shepherd
 worker because it calls `ARAX`.

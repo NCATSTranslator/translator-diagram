@@ -145,9 +145,11 @@ graph above is unchanged. They exist to be argued about — the rationale is in
 
 Rules the tests enforce, so a change that breaks one fails CI rather than
 sitting there wrong: the filename stem equals `id`; ids are unique
-case-insensitively; every id in `gets_results_from`/`calls` has a file (which
-is why `docmetadata-api` has one — `ui` calls it); every `owner` appears in
-`config/owner-colors.csv`; `endpoints` values are relative paths, never URLs.
+case-insensitively; every id in `connections.gets_results_from`/`calls` has a
+file (which is why `docmetadata-api` has one — `ui` calls it); every `owner`
+appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
+never URLs; and no file writes a `diagram:` flag at its default, which is what
+keeps that block absent rather than 26 copies of `ubiquitous: false`.
 
 `unknown.yaml` collects identifiers observed in the platform that no
 component file claims — today, the OpenTelemetry service names that could not
