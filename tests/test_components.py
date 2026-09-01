@@ -86,17 +86,48 @@ class TestReferences:
         # can be drawn as a ghost node.
         known = set(components)
         for cid, data in components.items():
-            diagram = data["diagram"]
-            refs = diagram.get("gets_results_from", []) + diagram.get("calls", [])
+            connections = data.get("connections") or {}
+            refs = connections.get("gets_results_from", []) + connections.get(
+                "calls", []
+            )
             for ref in refs:
                 target = ref.lstrip("~")
                 assert target in known, f"{cid} references unknown id {target!r}"
 
     def test_no_component_references_itself(self, components):
         for cid, data in components.items():
-            diagram = data["diagram"]
-            refs = diagram.get("gets_results_from", []) + diagram.get("calls", [])
+            connections = data.get("connections") or {}
+            refs = connections.get("gets_results_from", []) + connections.get(
+                "calls", []
+            )
             assert cid not in {r.lstrip("~") for r in refs}
+
+
+class TestDiagram:
+    # `connections:` keeps its empty lists, because `gets_results_from: []`
+    # is a claim -- checked, there are none -- under the same absent-vs-null
+    # convention as the rest of the format. A `diagram:` flag at its default
+    # claims nothing the schema does not already say, so it should not be
+    # written at all. All 26 files carried `ubiquitous: false` and
+    # `hide: false` before that distinction was drawn.
+    DEFAULTS = {"ubiquitous": False, "hide": False}
+
+    def test_no_file_writes_a_flag_at_its_default(self, components):
+        for cid, data in components.items():
+            diagram = data.get("diagram") or {}
+            for flag, default in self.DEFAULTS.items():
+                if flag not in diagram:
+                    continue
+                assert diagram[flag] != default, (
+                    f"{cid} writes diagram.{flag}: {default}, which is the "
+                    f"schema default -- omit it, and omit diagram: entirely "
+                    f"once it is empty"
+                )
+
+    def test_a_present_block_says_something(self, components):
+        for cid, data in components.items():
+            if "diagram" in data:
+                assert data["diagram"], f"{cid} has an empty diagram: block"
 
 
 class TestOwners:

@@ -11,18 +11,16 @@
 id: dogpark-tier-1
 name: "Tier 1: ElasticSearch (KGX split out by data source)"
 owner: DOGSURF
+refactor_status: New in Refactor
+layer: DogPark and Retriever
+part_of: Dog Park
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: retriever-ci-pipeline
-  itrb_group: Retriever
+itrb:
+  app: retriever-ci-pipeline
+  group: Retriever
 
-diagram:
-  refactor_status: New in Refactor
-  layer: DogPark and Retriever
-  part_of: Dog Park
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
+connections:
   gets_results_from: [dogpark-ranger]
   calls: []
   externals: []

@@ -11,20 +11,18 @@
 id: dingo-ingest
 name: DINGO Ingests
 owner: DINGO
+refactor_status: New in Refactor
+layer: DINGO Ingests
+hosted_at: ITRB
 
-repositories:
-  - url: https://github.com/NCATSTranslator/translator-ingests
-    role: source
-    visibility: public
-
-diagram:
-  refactor_status: New in Refactor
-  layer: DINGO Ingests
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
+connections:
   gets_results_from: []
   calls: [nodenorm-es]
   externals:
     - direction: in
       name: External Data Sources
+
+repositories:
+  - url: https://github.com/NCATSTranslator/translator-ingests
+    role: source
+    visibility: public

@@ -12,15 +12,24 @@ id: arax
 name: RTX/ARAX
 owner: CATRAX
 component_type: ARA
+refactor_status: Continues into Refactor
+hosted_at: ITRB
 
 identifiers:
   infores: infores:arax
   smartapi: "03e63fbd5ed251bce08cb5801b6b169b"
-  itrb_app: arax
-  itrb_group: TeamExpander
   translator_all_wiki: Expander-Agent
   otel_services:
     - ARAX
+
+itrb:
+  app: arax
+  group: TeamExpander
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/RTXteam/RTX
@@ -32,15 +41,6 @@ documentation:
     kind: wiki
   - url: https://ncatstranslator.github.io/TranslatorTechnicalDocumentation/architecture/ara/arax/
     kind: technical-documentation
-
-diagram:
-  refactor_status: Continues into Refactor
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals: []
 
 notes: >-
   SmartAPI registers the TRAPI base URL with the API version in the path

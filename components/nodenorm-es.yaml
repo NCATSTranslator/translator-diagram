@@ -11,12 +11,22 @@
 id: nodenorm-es
 name: NodeNorm ES
 owner: Core Components WG
+refactor_status: New in Refactor
+layer: Shared services
+hosted_at: ITRB
 
 identifiers:
-  itrb_app: NodeNormAPI
-  itrb_group: Nodenorm
   otel_services:
     - NodeNorm
+
+itrb:
+  app: NodeNormAPI
+  group: Nodenorm
+
+connections:
+  gets_results_from: []
+  calls: [jaeger]
+  externals: []
 
 repositories:
   - url: https://github.com/biothings/NodeNormalizationAPI
@@ -33,13 +43,3 @@ environments:
   test:
     url: https://nodenorm-es.test.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: New in Refactor
-  layer: Shared services
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: [jaeger]
-  externals: []

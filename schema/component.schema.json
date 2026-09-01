@@ -8,7 +8,7 @@
     "id",
     "name",
     "owner",
-    "diagram"
+    "refactor_status"
   ],
   "additionalProperties": false,
   "properties": {
@@ -52,6 +52,38 @@
         null
       ]
     },
+    "refactor_status": {
+      "description": "Where this component stands in the Refactor. Required: every component has one.",
+      "enum": [
+        "New in Refactor",
+        "Continues into Refactor",
+        "In development",
+        "Removed after Refactor",
+        "Removed after DINGO integration",
+        "Already removed"
+      ]
+    },
+    "layer": {
+      "description": "The band of the architecture this component sits in, which the diagram draws as a row. Null where none has been assigned.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "part_of": {
+      "description": "The larger subsystem this component is one part of, where there is one: `Shepherd`, `Dog Park`. Finer-grained than `layer`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hosted_at": {
+      "description": "Where the component runs: ITRB for most, otherwise the site hosting it (RENCI, Scripps, DogPark AWS, Local). Each environment also records its own `location`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "identifiers": {
       "description": "This component's name in each of the other naming spaces. Every one of these is assigned independently of the others.",
       "type": "object",
@@ -80,20 +112,6 @@
             "null"
           ]
         },
-        "itrb_app": {
-          "description": "ITRB application name (the sheet's `ITRB App Name`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "itrb_group": {
-          "description": "ITRB grouping (the sheet's `Component in ITRB`).",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "translator_all_wiki": {
           "description": "Page slug in the NCATSTranslator/Translator-All wiki.",
           "type": [
@@ -109,6 +127,66 @@
             "minLength": 1
           },
           "uniqueItems": true
+        }
+      }
+    },
+    "itrb": {
+      "description": "ITRB's names for this component. Two coordinates rather than one, which is why they are here and not in `identifiers`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "description": "ITRB application name (the sheet's `ITRB App Name`). Not one-to-one with a component: four components deploy from `retriever-ci-pipeline`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "The group ITRB files this component under (the sheet's `Component in ITRB`). A namespace around the application rather than another name for the component.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "connections": {
+      "description": "The data flow between components, recorded by hand because nothing upstream records it. An empty list is a claim -- checked, there are none; an absent one means not yet recorded.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gets_results_from": {
+          "description": "Components this one gets results from.",
+          "$ref": "#/$defs/component_refs"
+        },
+        "calls": {
+          "description": "Components this one calls.",
+          "$ref": "#/$defs/component_refs"
+        },
+        "externals": {
+          "description": "Edges to things outside the component set: a user, another programme, an upstream data source.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "direction",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "direction": {
+                "enum": [
+                  "in",
+                  "out"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     },
@@ -237,77 +315,19 @@
       }
     },
     "diagram": {
-      "description": "The facts that exist only here, because no upstream source records them: who talks to whom, and how the component should be drawn.",
+      "description": "Flags that change how the picture is drawn and say nothing about the component itself. Omit the block when both are at their defaults, which is every file today.",
       "type": "object",
-      "required": [
-        "refactor_status"
-      ],
       "additionalProperties": false,
       "properties": {
-        "refactor_status": {
-          "enum": [
-            "New in Refactor",
-            "Continues into Refactor",
-            "In development",
-            "Removed after Refactor",
-            "Removed after DINGO integration",
-            "Already removed"
-          ]
-        },
-        "layer": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "part_of": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "hosted_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "ubiquitous": {
+          "description": "Draw as a ubiquitous service rather than wiring an edge to every caller.",
           "type": "boolean",
           "default": false
         },
         "hide": {
+          "description": "Keep out of the rendered diagram.",
           "type": "boolean",
           "default": false
-        },
-        "gets_results_from": {
-          "$ref": "#/$defs/component_refs"
-        },
-        "calls": {
-          "$ref": "#/$defs/component_refs"
-        },
-        "externals": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "direction",
-              "name"
-            ],
-            "additionalProperties": false,
-            "properties": {
-              "direction": {
-                "enum": [
-                  "in",
-                  "out"
-                ]
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1
-              }
-            }
-          }
         }
       }
     },

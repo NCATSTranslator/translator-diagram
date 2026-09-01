@@ -15,16 +15,28 @@ recorded:
   name: Name Lookup (NameRes)
   owner: DOGSLED
   component_type: Utility
+  refactor_status: Continues into Refactor
+  layer: Shared services
+  hosted_at: ITRB
+
   identifiers:
     infores: infores:sri-name-resolver
     smartapi: "9995fed757acd034ef099dbb483c4c82"
     helm_chart: name-lookup
-    itrb_app: name-lookup
-    itrb_group: SRI-Ranking
     translator_all_wiki: Name-Resolution-Service
     otel_services:
       - Nameres
       - infores:sri-name-resolver
+
+  itrb:
+    app: name-lookup
+    group: SRI-Ranking
+
+  connections:
+    gets_results_from: []
+    calls: [jaeger]
+    externals: []
+
   repositories:
     - url: https://github.com/NCATSTranslator/NameResolution
       role: source
@@ -32,22 +44,15 @@ recorded:
     - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/name-lookup
       role: helm-chart
       visibility: public
+
   documentation:
     - url: https://github.com/NCATSTranslator/Translator-All/wiki/Name-Resolution-Service
       kind: wiki
+
   endpoints:
     openapi: openapi.json
     status: status?full=true
     docs: docs
-  diagram:
-    refactor_status: Continues into Refactor
-    layer: Shared services
-    hosted_at: ITRB
-    ubiquitous: false
-    hide: false
-    gets_results_from: []
-    calls: [jaeger]
-    externals: []
 
 pulled:
   # ---------------------------------------------------------------------------

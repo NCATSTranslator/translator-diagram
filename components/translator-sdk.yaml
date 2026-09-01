@@ -11,10 +11,20 @@
 id: translator-sdk
 name: Translator SDK
 owner: Core Components WG
+refactor_status: New in Refactor
+layer: TSDK/TCT
+hosted_at: Local
 
 identifiers:
   helm_chart: null
-  itrb_group: null
+
+itrb:
+  group: null
+
+connections:
+  gets_results_from: []
+  calls: [nodenorm-es, name-lookup, node-annotator, ~smartapi]
+  externals: []
 
 repositories:
   - url: https://github.com/NCATSTranslator/Translator_sdk
@@ -23,13 +33,3 @@ repositories:
 
 endpoints:
   openapi: null
-
-diagram:
-  refactor_status: New in Refactor
-  layer: TSDK/TCT
-  hosted_at: Local
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: [nodenorm-es, name-lookup, node-annotator, ~smartapi]
-  externals: []

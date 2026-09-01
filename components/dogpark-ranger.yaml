@@ -11,23 +11,21 @@
 id: dogpark-ranger
 name: DogPark Ranger
 owner: DOGSURF
+refactor_status: New in Refactor
+layer: DogPark and Retriever
+part_of: Dog Park
+hosted_at: Scripps
 
-identifiers:
-  itrb_app: retriever-ci-pipeline
-  itrb_group: null
+itrb:
+  app: retriever-ci-pipeline
+  group: null
+
+connections:
+  gets_results_from: [kgx-storage-pipeline]
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/NCATSTranslator/DogPark-Ranger
     role: source
     visibility: public
-
-diagram:
-  refactor_status: New in Refactor
-  layer: DogPark and Retriever
-  part_of: Dog Park
-  hosted_at: Scripps
-  ubiquitous: false
-  hide: false
-  gets_results_from: [kgx-storage-pipeline]
-  calls: []
-  externals: []

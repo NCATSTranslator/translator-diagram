@@ -12,19 +12,30 @@ id: shepherd-aragorn
 name: ARAGORN
 owner: DOGSLED
 component_type: ARA
+refactor_status: New in Refactor
+layer: Shepherd
+part_of: Shepherd
+hosted_at: ITRB
 
 identifiers:
   infores: infores:shepherd-aragorn
   smartapi: "d3f4040ac1c42d659b00fca03a22d933"
   helm_chart: shepherd
-  itrb_app: shepherd-ci-pipeline
-  itrb_group: shepherd
   otel_services:
     - aragorn
     - aragorn.lookup
     - aragorn.omnicorp
     - aragorn.pathfinder
     - aragorn.score
+
+itrb:
+  app: shepherd-ci-pipeline
+  group: shepherd
+
+connections:
+  gets_results_from: [retriever]
+  calls: [jaeger]
+  externals: []
 
 repositories:
   - url: https://github.com/BioPack-team/shepherd
@@ -33,14 +44,3 @@ repositories:
   - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/shepherd
     role: helm-chart
     visibility: public
-
-diagram:
-  refactor_status: New in Refactor
-  layer: Shepherd
-  part_of: Shepherd
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: [retriever]
-  calls: [jaeger]
-  externals: []

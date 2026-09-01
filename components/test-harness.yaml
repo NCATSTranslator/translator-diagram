@@ -11,10 +11,22 @@
 id: test-harness
 name: Test Harness
 owner: DOGSLED
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: RENCI
 
 identifiers:
   helm_chart: test-harness
-  itrb_group: null
+
+itrb:
+  group: null
+
+connections:
+  gets_results_from: [ars]
+  calls: [smartapi]
+  externals:
+    - direction: out
+      name: Engineering
 
 repositories:
   - url: https://github.com/TranslatorSRI/TestHarness
@@ -23,18 +35,6 @@ repositories:
   - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/test-harness
     role: helm-chart
     visibility: public
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: RENCI
-  ubiquitous: false
-  hide: false
-  gets_results_from: [ars]
-  calls: [smartapi]
-  externals:
-    - direction: out
-      name: Engineering
 
 notes: >-
   The Test Harness uses Smart API to grab the urls for the various

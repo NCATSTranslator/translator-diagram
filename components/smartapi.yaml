@@ -12,23 +12,23 @@ id: smartapi
 name: SmartAPI
 owner: DOGSURF
 component_type: Utility
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: DogPark AWS
 
 identifiers:
   smartapi: "27a5b60716c3a401f2c021a5b718c5b1"
-  itrb_app: SmartAPI
-  itrb_group: null
+
+itrb:
+  app: SmartAPI
+  group: null
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/NCATSTranslator/smartAPI
     role: source
     visibility: public
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: DogPark AWS
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals: []

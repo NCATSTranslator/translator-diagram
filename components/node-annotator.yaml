@@ -12,13 +12,23 @@ id: node-annotator
 name: Node Annotator
 owner: Core Components WG
 component_type: Utility
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
 
 identifiers:
   smartapi: "5a4c41bf2076b469a0e9cfcf2f2b8f29"
-  itrb_app: Biothings annotator
-  itrb_group: Exploring-Agent
   otel_services:
     - BioThingsAnnotator
+
+itrb:
+  app: Biothings annotator
+  group: Exploring-Agent
+
+connections:
+  gets_results_from: []
+  calls: [~jaeger, pending-api]
+  externals: []
 
 repositories:
   - url: https://github.com/biothings/biothings_annotator
@@ -40,16 +50,6 @@ environments:
     location: ITRB
     endpoints:
       openapi: openapi.json
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: [~jaeger, pending-api]
-  externals: []
 
 notes: >-
   Registered in SmartAPI without an infores, and its ci/test servers carry

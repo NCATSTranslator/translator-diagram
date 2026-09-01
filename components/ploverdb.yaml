@@ -11,14 +11,23 @@
 id: ploverdb
 name: Ploverdb
 owner: CATRAX
+refactor_status: Continues into Refactor
+hosted_at: ITRB
 
 identifiers:
   smartapi: "a6b575139cfd429b0a87f825a625d036"
-  itrb_app: Ploverdb
-  itrb_group: TeamExpander
   translator_all_wiki: RTX-KG2
   otel_services:
     - rtx-kg2-plover
+
+itrb:
+  app: Ploverdb
+  group: TeamExpander
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/RTXteam/PloverDB
@@ -31,15 +40,6 @@ documentation:
 
 endpoints:
   openapi: null
-
-diagram:
-  refactor_status: Continues into Refactor
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals: []
 
 notes: >-
   The SmartAPI record is registered as infores:rtx-kg2 — the knowledge graph

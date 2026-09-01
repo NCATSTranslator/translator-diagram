@@ -11,16 +11,14 @@
 id: docmetadata-api
 name: docmetadata-api
 owner: Core Components WG
+refactor_status: Removed after Refactor
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: docmetadata-api
-  itrb_group: TMKP
+itrb:
+  app: docmetadata-api
+  group: TMKP
 
-diagram:
-  refactor_status: Removed after Refactor
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
+connections:
   gets_results_from: []
   calls: []
   externals: []

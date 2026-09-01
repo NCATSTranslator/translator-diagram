@@ -11,11 +11,23 @@
 id: jaeger
 name: Jaeger (OTel)
 owner: DOGSLED
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
 
 identifiers:
   helm_chart: jaeger
-  itrb_app: jaeger
-  itrb_group: SRI-Ranking
+
+itrb:
+  app: jaeger
+  group: SRI-Ranking
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals:
+    - direction: out
+      name: Engineering
 
 repositories:
   - url: https://github.com/jaegertracing/jaeger
@@ -39,18 +51,6 @@ environments:
   prod:
     url: https://translator-otel.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals:
-    - direction: out
-      name: Engineering
 
 notes: >-
   Third-party software, not a Translator component: we deploy upstream

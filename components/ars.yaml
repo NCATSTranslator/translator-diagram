@@ -12,15 +12,25 @@ id: ars
 name: ARS
 owner: NCATS
 component_type: ARS
+refactor_status: Continues into Refactor
+layer: ARS and UI
+hosted_at: ITRB
 
 identifiers:
   infores: infores:ars
   smartapi: "4c12efd48ced755ac4b72b1922202ec2"
-  itrb_app: ARS
-  itrb_group: NCATS
   translator_all_wiki: Autonomous-Relay-System-(ARS)
   otel_services:
     - ARS
+
+itrb:
+  app: ARS
+  group: NCATS
+
+connections:
+  gets_results_from: [shepherd-arax, shepherd-aragorn, shepherd-bte]
+  calls: [nodenorm-es, jaeger, answer-appraiser, node-annotator, smartapi]
+  externals: []
 
 repositories:
   - url: https://github.com/NCATSTranslator/Relay
@@ -30,16 +40,6 @@ repositories:
 documentation:
   - url: https://github.com/NCATSTranslator/Translator-All/wiki/Autonomous-Relay-System-(ARS)
     kind: wiki
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: ARS and UI
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: [shepherd-arax, shepherd-aragorn, shepherd-bte]
-  calls: [nodenorm-es, jaeger, answer-appraiser, node-annotator, smartapi]
-  externals: []
 
 notes: >-
   Calls SmartAPI on boot to fetch registration data

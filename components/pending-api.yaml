@@ -11,10 +11,18 @@
 id: pending-api
 name: BioThings Pending API
 owner: DOGSURF
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: BioThings PendingAPI (BTEP)
-  itrb_group: Exploring-Agent
+itrb:
+  app: BioThings PendingAPI (BTEP)
+  group: Exploring-Agent
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/biothings/pending.api
@@ -31,16 +39,6 @@ environments:
   prod:
     url: https://biothings.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: Shared services
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals: []
 
 notes: >-
   Hosts a number of APIs from the previous phase. Some have moved to CoCo's own

@@ -11,17 +11,15 @@
 id: ars-test-server
 name: ARS Test Server
 owner: NCATS
+refactor_status: Continues into Refactor
+layer: ARS and UI
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: Utility
-  itrb_group: NCATS
+itrb:
+  app: Utility
+  group: NCATS
 
-diagram:
-  refactor_status: Continues into Refactor
-  layer: ARS and UI
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
+connections:
   gets_results_from: []
   calls: [ars]
   externals: []

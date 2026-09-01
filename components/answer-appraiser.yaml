@@ -12,16 +12,26 @@ id: answer-appraiser
 name: Answer Appraiser
 owner: DOGSLED
 component_type: Utility
+refactor_status: Continues into Refactor
+layer: ARS and UI
+hosted_at: ITRB
 
 identifiers:
   infores: infores:sri-answer-appraiser
   smartapi: "6dcc5454fe4e0095090d8a956781c438"
   helm_chart: answer-appraiser
-  itrb_app: answer-appraiser
-  itrb_group: SRI-Ranking
   translator_all_wiki: SRI-Answer-Appraiser
   otel_services:
     - ANSWER-APPRAISER
+
+itrb:
+  app: answer-appraiser
+  group: SRI-Ranking
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/TranslatorSRI/answer-appraiser
@@ -42,13 +52,3 @@ environments:
   test:
     url: https://answerappraiser.test.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: ARS and UI
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: []
-  calls: []
-  externals: []

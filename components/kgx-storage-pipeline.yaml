@@ -11,10 +11,18 @@
 id: kgx-storage-pipeline
 name: KGX Storage
 owner: DINGO
+refactor_status: New in Refactor
+layer: KGX Storage
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: kgx-storage-pipeline
-  itrb_group: KGX
+itrb:
+  app: kgx-storage-pipeline
+  group: KGX
+
+connections:
+  gets_results_from: [dingo-ingest]
+  calls: []
+  externals: []
 
 repositories:
   - url: https://github.com/RTXteam/kgx-storage
@@ -25,13 +33,3 @@ environments:
   ci:
     url: https://kgx-storage.ci.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: New in Refactor
-  layer: KGX Storage
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: [dingo-ingest]
-  calls: []
-  externals: []

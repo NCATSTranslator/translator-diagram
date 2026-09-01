@@ -11,10 +11,20 @@
 id: ui
 name: Translator UI
 owner: UI
+refactor_status: Continues into Refactor
+layer: ARS and UI
+hosted_at: ITRB
 
-identifiers:
-  itrb_app: translator-ui-ci-pipeline
-  itrb_group: UI
+itrb:
+  app: translator-ui-ci-pipeline
+  group: UI
+
+connections:
+  gets_results_from: [ars]
+  calls: [docmetadata-api, name-lookup]
+  externals:
+    - direction: out
+      name: User
 
 repositories:
   - url: https://github.com/NCATSTranslator/ui-fe
@@ -45,15 +55,3 @@ environments:
   prod:
     url: https://ui.transltr.io/
     location: ITRB
-
-diagram:
-  refactor_status: Continues into Refactor
-  layer: ARS and UI
-  hosted_at: ITRB
-  ubiquitous: false
-  hide: false
-  gets_results_from: [ars]
-  calls: [docmetadata-api, name-lookup]
-  externals:
-    - direction: out
-      name: User
