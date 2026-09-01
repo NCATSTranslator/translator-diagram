@@ -13,6 +13,7 @@ rather than assumed.
 
 import json
 from collections import Counter
+from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ from .components import (
     github_repo,
     merge_deployments,
 )
-from .flow import flow_depths, in_flow_order, isolated
+from .flow import flow_depths, flow_steps, in_flow_order, isolated
 
 PACKAGED_ASSETS = ("translator_diagram.data", ("dashboard.css", "dashboard.js"))
 
@@ -48,6 +49,12 @@ SOURCE_LABELS = {
 # column at the width the table is read at; the deployed extras are what make
 # the list answer "where are the notes for the version in front of me?".
 RELEASES_SHOWN = 3
+
+# Where a "last updated" date came from. A separate vocabulary from
+# SOURCE_LABELS on purpose: that one says where a version number came from,
+# this one says where a date did, and conflating them would put "OpenAPI" and
+# "release" in the same badge row meaning different kinds of thing.
+UPDATED_LABELS = {"release": "release", "registry": "registry"}
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -254,6 +261,85 @@ def build_cell(
     }
 
 
+def _instant(value: Any) -> datetime | None:
+    """One ISO timestamp as a comparable instant, or None.
+
+    Comparing the strings instead would be wrong in a way that shows up only
+    on close dates: GitHub writes `2026-08-01T09:00:00Z` and SmartAPI writes
+    `2026-08-01T09:00:00.5+00:00`, and `"Z" > "+"`, so a string sort hands
+    every tie to GitHub. A naive stamp is read as UTC — comparing naive with
+    aware raises, and it would raise inside the row loop, taking the whole
+    table with it.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        # 3.11's fromisoformat takes the trailing Z that GitHub writes.
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _last_updated(
+    entries: list[dict[str, Any]], record: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The most recent date we can honestly claim for a component.
+
+    The newest of the two signals rather than the best of them: the question
+    is when anything about this component last changed, and a release and a
+    registration are answers to different halves of it. A tie goes to the
+    release, because a tag is a claim about the software and a registry stamp
+    is a claim about a document.
+
+    Reads the raw release entries rather than the chips, which are pruned to
+    the few worth showing and truncated to the day. Returns None where there
+    is no signal at all, which is the honest answer for 13 of 26 components:
+    they publish no releases and are in no registry.
+    """
+    candidates = []
+    for entry in entries:
+        tag = entry.get("tag_name")
+        moment = _instant(entry.get("published_at"))
+        if tag and moment and not entry.get("draft"):
+            candidates.append((moment, "release", tag))
+    registered = _instant((record.get("_meta") or {}).get("last_updated"))
+    if registered:
+        candidates.append((registered, "registry", None))
+    if not candidates:
+        return None
+    moment, source, tag = max(candidates, key=lambda c: c[0])
+    return {
+        "at": moment.isoformat(),
+        "date": moment.date().isoformat(),
+        "source": source,
+        "tag": tag,
+    }
+
+
+def _mark_running_release(
+    cells: dict[str, dict[str, Any]], chips: list[dict[str, Any]]
+) -> None:
+    """Date each environment by the release it is running, where one matches.
+
+    The other half of the Repository column: `_release_chips` keeps an older
+    release precisely because some environment is still on it, so the same
+    fact read from the cell's side says how old what is running here is. Ten
+    of twenty running versions match no release — a cell with no match simply
+    has no `released` key, rather than a null that would sort as a date.
+    """
+    for cell in cells.values():
+        version = cell.get("version")
+        if not cell.get("deployed") or not version:
+            continue
+        for chip in chips:
+            if _same_version(chip["tag"], version):
+                cell["released"] = chip["published"]
+                cell["release_tag"] = chip["tag"]
+                cell["release_url"] = chip["url"]
+                break
+
+
 def _same_version(a: str | None, b: str | None) -> bool:
     """Whether a release tag and a reported version name the same release.
 
@@ -332,6 +418,7 @@ def build_rows(
 ) -> list[dict[str, Any]]:
     """One dictionary per component, in data-flow order."""
     depths = flow_depths(components)
+    steps = flow_steps(components)
     stranded = set(isolated(components))
     rows = []
     for component in in_flow_order(components):
@@ -365,6 +452,13 @@ def build_rows(
         for key in ("version", "trapi", "biolink"):
             _mark_drift(cells, key)
 
+        releases = synced.releases(github_repo(component.repository("source")))
+        chips = _release_chips(
+            releases,
+            {version for cell in cells.values() if (version := cell.get("version"))},
+        )
+        _mark_running_release(cells, chips)
+
         uptime = ((record.get("_status") or {}).get("uptime_status")) or None
         rows.append(
             {
@@ -382,13 +476,13 @@ def build_rows(
                 "helm_chart": component.helm_chart,
                 "otel_services": component.otel_services,
                 "repository": component.repository("source"),
-                "releases": _release_chips(
-                    synced.releases(github_repo(component.repository("source"))),
-                    {
-                        version
-                        for cell in cells.values()
-                        if (version := cell.get("version"))
-                    },
+                "releases": chips,
+                "last_updated": _last_updated(releases, record),
+                "step": steps[component.id],
+                "step_label": (
+                    "No recorded dependencies"
+                    if component.id in stranded
+                    else f"Step {steps[component.id]}"
                 ),
                 "documentation": (component.documentation or [{}])[0].get("url"),
                 "uptime": uptime,
@@ -431,6 +525,7 @@ def build_payload(
         "environments": list(ENVIRONMENTS),
         "owner_colors": load_owner_colors(),
         "source_labels": SOURCE_LABELS,
+        "updated_labels": UPDATED_LABELS,
         "source_tally": source_tally(rows),
         "unregistered_count": sum(
             1

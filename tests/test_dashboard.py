@@ -8,6 +8,8 @@ from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.dashboard import (
     SyncedData,
     _helm_facts,
+    _instant,
+    _last_updated,
     _mark_drift,
     _release_chips,
     _same_version,
@@ -420,6 +422,130 @@ class TestReleasesOnRows:
             {"url": "https://github.com/a/b", "role": "source"}
         ]
         assert build_rows([component], synced)[0]["releases"] == []
+
+
+class TestLastUpdated:
+    def _record(self, last_updated):
+        return {"_meta": {"last_updated": last_updated}}
+
+    def test_a_release_alone(self):
+        got = _last_updated([_release("v1.0.0", published_at="2026-08-01T00:00:00Z")], {})
+        assert got["date"] == "2026-08-01"
+        assert got["source"] == "release"
+        assert got["tag"] == "v1.0.0"
+
+    def test_a_registration_alone(self):
+        got = _last_updated([], self._record("2026-07-28T07:00:57.687292+00:00"))
+        assert (got["date"], got["source"], got["tag"]) == ("2026-07-28", "registry", None)
+
+    def test_neither_is_none_not_an_error(self):
+        # True for 13 of 26 components: no releases, and in no registry.
+        assert _last_updated([], {}) is None
+        assert _last_updated([], {"_meta": {}}) is None
+
+    def test_the_newer_signal_wins_either_way(self):
+        older = "2026-01-01T00:00:00Z"
+        newer = "2026-08-01T00:00:00Z"
+        assert _last_updated(
+            [_release("v1", published_at=newer)], self._record(older)
+        )["source"] == "release"
+        assert _last_updated(
+            [_release("v1", published_at=older)], self._record(newer)
+        )["source"] == "registry"
+
+    def test_the_newest_of_several_releases(self):
+        entries = [
+            _release("v1.0.0", published_at="2026-01-01T00:00:00Z"),
+            _release("v2.0.0", published_at="2026-08-01T00:00:00Z"),
+        ]
+        assert _last_updated(entries, {})["tag"] == "v2.0.0"
+
+    def test_a_draft_dates_nothing(self):
+        entries = [_release("v9", published_at="2026-08-01T00:00:00Z", draft=True)]
+        assert _last_updated(entries, {}) is None
+
+    def test_the_two_formats_compare_as_instants_not_strings(self):
+        # The load-bearing one. GitHub writes Z, SmartAPI writes +00:00, and
+        # "Z" > "+", so comparing the strings hands every near-tie to GitHub.
+        # Delete _instant and this is the test that notices.
+        got = _last_updated(
+            [_release("v1", published_at="2026-08-01T09:00:00Z")],
+            self._record("2026-08-01T09:00:00.500000+00:00"),
+        )
+        assert got["source"] == "registry"
+
+    def test_a_tie_goes_to_the_release(self):
+        moment = "2026-08-01T09:00:00+00:00"
+        assert _last_updated(
+            [_release("v1", published_at=moment)], self._record(moment)
+        )["source"] == "release"
+
+    def test_unparseable_dates_are_skipped_not_raised(self):
+        assert _last_updated([_release("v1", published_at="whenever")], {}) is None
+        assert _last_updated([], self._record(None)) is None
+        assert _last_updated([], self._record(12345)) is None
+
+    def test_a_naive_timestamp_does_not_raise(self):
+        got = _last_updated(
+            [_release("v1", published_at="2026-08-01T09:00:00Z")],
+            self._record("2026-08-02T09:00:00"),
+        )
+        assert got["source"] == "registry"
+
+
+class TestInstant:
+    def test_both_upstream_formats(self):
+        assert _instant("2026-08-01T00:00:00Z") == _instant("2026-08-01T00:00:00+00:00")
+
+    def test_junk_is_none(self):
+        assert _instant("") is None
+        assert _instant(None) is None
+        assert _instant("2026-13-45") is None
+
+
+class TestRunningRelease:
+    def _synced_with(self, synced, entries):
+        path = synced.root / "releases" / "a" / "b.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(entries))
+        return synced
+
+    def test_each_environment_is_dated_by_what_it_runs(self, synced, component):
+        # The fixture runs 2.0.0 in ci and test, 1.0.0 in prod — the real
+        # shape: prod trailing on an older release.
+        self._synced_with(synced, [
+            _release("v2.0.0", published_at="2026-08-01T00:00:00Z"),
+            _release("v1.0.0", published_at="2024-10-04T00:00:00Z"),
+        ])
+        component.repositories = [{"url": "https://github.com/a/b", "role": "source"}]
+        envs = build_rows([component], synced)[0]["environments"]
+        assert envs["ci"]["released"] == "2026-08-01"
+        assert envs["prod"]["released"] == "2024-10-04"
+        assert envs["prod"]["release_tag"] == "v1.0.0"
+        assert envs["prod"]["release_url"].endswith("/v1.0.0")
+
+    def test_a_version_matching_nothing_leaves_the_key_absent(self, synced, component):
+        # Absent, not null: a null would sort as though it were a date.
+        self._synced_with(synced, [_release("v9.9.9")])
+        component.repositories = [{"url": "https://github.com/a/b", "role": "source"}]
+        assert "released" not in build_rows([component], synced)[0]["environments"]["ci"]
+
+    def test_no_repository_dates_no_cell(self, synced, component):
+        cells = build_rows([component], synced)[0]["environments"]
+        assert all("released" not in cell for cell in cells.values())
+
+
+class TestFlowStepsOnRows:
+    def test_every_row_carries_a_step_and_a_label(self, synced):
+        rows = build_rows([_comp("a"), _comp("b", diagram={
+            "refactor_status": "New in Refactor", "gets_results_from": ["a"]})], synced)
+        assert [r["step"] for r in rows] == sorted(r["step"] for r in rows)
+        assert all(r["step_label"] for r in rows)
+
+    def test_the_unconnected_say_so_rather_than_giving_a_number(self, synced):
+        row = build_rows([_comp("lonely")], synced)[0]
+        assert row["isolated"] is True
+        assert row["step_label"] == "No recorded dependencies"
 
 
 class TestUnregisteredEnvironments:
