@@ -173,6 +173,15 @@ SmartAPI's own polling rather than any change to a component. `_meta` has to be
 asked for by name in the `fields=` list — `meta=1` is a different parameter,
 and what it does is make `_id` appear.
 
+`_meta.last_updated` is worth reading carefully too. Its **date** is real — the
+day the registered document changed — but its **time** is the crawler's: of our
+eleven registered components, six land in a 07:00–07:03 window on their various
+days, which is when SmartAPI's refresh runs. And five of them share
+`2026-05-24T15:47`, nineteen seconds apart, which is a bulk re-registration
+rather than five people editing five documents that afternoon. So it dates
+registry events as well as component ones, and a registry event can look newer
+than a real release. Rank accordingly if that ever matters.
+
 Nothing in any source dates a *deployment*. See [`../FUTURE.md`](../FUTURE.md).
 
 ## Status endpoints
