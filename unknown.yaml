@@ -1,0 +1,200 @@
+# Identifiers seen in the Translator platform that no component file claims.
+#
+# A holding pen, not a component. Anything observed in the wild — an
+# OpenTelemetry service name, a hostname, a registry entry — that we cannot
+# attribute to a components/*.yaml goes here rather than being dropped, so the
+# next person does not have to rediscover it.
+#
+# Entries leave this file in one of two ways:
+#   - promoted, when we learn which component it belongs to: move the
+#     identifier into that component's file (or write a new component file for
+#     it) and delete the entry here;
+#   - retired, when someone confirms it is no longer in use: set
+#     `status: not-in-use` and leave it, so it is not investigated twice.
+#
+# `status` values:
+#   unattributed  we do not know what this is
+#   operation     a processing step reported as its own service, not a component
+#   not-recorded  a known component that has no file yet, named by `component`
+#   not-in-use    confirmed retired
+#
+# Validated by schema/unknown.schema.json; see tests/test_components.py.
+# New kinds of unattributed identifier get a new top-level key (`urls:` is
+# already in the schema, and is empty because nothing has needed it yet).
+# yaml-language-server: $schema=schema/unknown.schema.json
+
+otel_services:
+
+  # --- Genuinely unattributed -------------------------------------------------
+
+  - name: shepherd-server
+    status: unattributed
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: null
+    evidence: >-
+      Parent span of every per-ARA Shepherd worker (aragorn, arax, bte) and of
+      every operation below, and a child of ARS. So it is the shared Shepherd
+      server rather than any one of shepherd-arax / shepherd-aragorn /
+      shepherd-bte, and it probably wants a component file of its own — the
+      three shepherd-* files all point at BioPack-team/shepherd and the
+      `shepherd` Helm chart, and none of them is this.
+    note: >-
+      Confirmed complex and deliberately left here on 2026-08-31 rather than
+      forced into one of the shepherd-* files. Re-investigating needs a
+      decision about whether the shared server is its own component, not more
+      trace data.
+
+  - name: biothings-plover
+    status: unattributed
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: null
+    evidence: >-
+      A Plover instance that is not ploverdb: rtx-kg2-plover is the one
+      components/ploverdb.yaml claims, and multiomics-plover is a separate KP.
+      Not seen in any trace collected so far, so there is no call-graph
+      evidence for who talks to it.
+
+  # --- Processing steps, not components ---------------------------------------
+  #
+  # Each of these is a child span of shepherd-server and reports under its own
+  # service name, so the collector lists them alongside real services. They are
+  # Shepherd operations. Listed here so nobody attributes them to a component.
+
+  - name: filter_analyses_top_n
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+  - name: filter_kgraph_orphans
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+  - name: filter_results_top_n
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+  - name: finish_query
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+    note: Reports ARS as a child span, so it is where results go back.
+  - name: merge_message
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+  - name: score_paths
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+  - name: sort_results_score
+    status: operation
+    first_seen: "2026-08-31"
+    environments: [ci, test]
+    component: shepherd-server
+
+  # --- Known components with no file yet --------------------------------------
+  #
+  # These are rows in the sheet whose refactor status keeps them out of the 26
+  # files recorded so far. They are listed so the OTel service list can be
+  # reconciled completely, and they get files when we convert the rest.
+
+  - name: aragorn-aragorn-server-ARAGORN
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [prod]
+    component: aragorn
+    evidence: >-
+      The standalone ARAGORN ARA. Distinct from the `aragorn` service in
+      ci/test, which is a child of shepherd-server and is claimed by
+      components/shepherd-aragorn.yaml.
+  - name: automat-cam-kp
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: automat
+  - name: automat-hgnc
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: automat
+  - name: automat-icees-kg
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: automat
+  - name: automat-monarch-kg
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: automat
+  - name: automat-robokopkg
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: automat
+  - name: biothings-explorer
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test]
+    component: biothings-explorer
+    evidence: >-
+      The standalone BTE. Distinct from the `bte` service in ci/test, which is
+      a child of shepherd-server and is claimed by components/shepherd-bte.yaml.
+  - name: COHD
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [prod]
+    component: cohd-api
+  - name: genetics-data-provider
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test, prod]
+    component: genetics-kp
+  - name: multiomics-plover
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [prod]
+    component: multiomics
+  - name: strider
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [prod]
+    component: strider
+  - name: STRIDER-DEV
+    status: not-recorded
+    first_seen: "2026-08-31"
+    environments: [test]
+    component: strider
+    note: A second service name for the same component, in the test collector.
+
+  # --- No sheet row at all ----------------------------------------------------
+
+  - name: molepro
+    status: unattributed
+    first_seen: "2026-08-31"
+    environments: [prod]
+    component: null
+    evidence: >-
+      The Molecular Data Provider KP. The sheet has moleproapi-pipeline and
+      moleprodb-pipeline but no row for the service itself, so there is no
+      component id to attribute this to yet.
+    note: >-
+      Confirmed complex and deliberately left here on 2026-08-31. Resolving it
+      needs a decision about how MolePro's pipelines and its service relate,
+      not more trace data.
+
+# Nothing has reached `status: not-in-use` yet: every name above was reporting
+# to a live collector on 2026-08-31.
+#
+# Promoted out of this file so far:
+#   NodeNorm -> components/nodenorm-es.yaml (2026-08-31). Its spans carry
+#   http.host=nodenorm-es.{ci,test}.transltr.io and a Tornado handler from
+#   the nodenorm package, backed by elasticsearch.es-core-components — so
+#   it is the ES rewrite, not the nodenorm it replaced.

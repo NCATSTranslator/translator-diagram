@@ -134,6 +134,38 @@ to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
 produces. A missing `id` column, and a file whose rows are all id-less, are
 `ClickException`s.
 
+## components/ — the metadata proposal
+
+`components/<id>.yaml` holds one file per component, validated by
+`schema/component.schema.json` and `tests/test_components.py`. **Nothing in
+`src/` reads them**: `loading.py` still parses the sheet CSV, and the import
+graph above is unchanged. They exist to be argued about — the rationale is in
+`docs/component-metadata.md` and the upstream survey in
+`docs/metadata-sources.md`.
+
+Rules the tests enforce, so a change that breaks one fails CI rather than
+sitting there wrong: the filename stem equals `id`; ids are unique
+case-insensitively; every id in `connections.gets_results_from`/`calls` has a
+file (which is why `docmetadata-api` has one — `ui` calls it); every `owner`
+appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
+never URLs; and no file writes a `diagram:` flag at its default, which is what
+keeps that block absent rather than 26 copies of `ubiquitous: false`.
+
+`unknown.yaml` collects identifiers observed in the platform that no
+component file claims — today, the OpenTelemetry service names that could not
+be attributed. Do not delete an entry to make a test pass: an entry is removed
+only when its identifier moves into a component file. The tests enforce that
+no identifier is claimed twice, and that a `not-recorded` entry whose
+component now has a file fails until it is promoted.
+
+Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
+`datetime.date`, which is not a JSON Schema string, and the failure message
+points at the schema rather than the quoting.
+
+`pyyaml` and `jsonschema` are **dev-only** dependencies on purpose. Moving
+them to `[project.dependencies]` is the signal that `loading.py` has actually
+switched over — don't do it before then.
+
 ## Common change patterns
 
 **Change owner node colours** → edit `config/owner-colors.csv`. No code

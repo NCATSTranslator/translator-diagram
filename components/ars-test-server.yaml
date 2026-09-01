@@ -1,0 +1,28 @@
+# ARS Test Server (ars-test-server)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: ars-test-server
+name: ARS Test Server
+owner: NCATS
+refactor_status: Continues into Refactor
+layer: ARS and UI
+hosted_at: ITRB
+
+itrb:
+  app: Utility
+  group: NCATS
+
+connections:
+  gets_results_from: []
+  calls: [ars]
+  externals: []
+
+notes: >-
+  A small server that periodically runs performance tests on a cron job

@@ -1,0 +1,34 @@
+# SmartAPI (smartapi)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: smartapi
+name: SmartAPI
+owner: DOGSURF
+component_type: Utility
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: DogPark AWS
+
+identifiers:
+  smartapi: "27a5b60716c3a401f2c021a5b718c5b1"
+
+itrb:
+  app: SmartAPI
+  group: null
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+repositories:
+  - url: https://github.com/NCATSTranslator/smartAPI
+    role: source
+    visibility: public

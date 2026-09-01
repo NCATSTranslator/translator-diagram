@@ -1,0 +1,57 @@
+# Jaeger (OTel) (jaeger)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: jaeger
+name: Jaeger (OTel)
+owner: DOGSLED
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
+
+identifiers:
+  helm_chart: jaeger
+
+itrb:
+  app: jaeger
+  group: SRI-Ranking
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals:
+    - direction: out
+      name: Engineering
+
+repositories:
+  - url: https://github.com/jaegertracing/jaeger
+    role: related
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/jaeger
+    role: helm-chart
+    visibility: public
+
+endpoints:
+  services: api/services
+  docs: search
+
+environments:
+  ci:
+    url: https://translator-otel.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://translator-otel.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://translator-otel.transltr.io/
+    location: ITRB
+
+notes: >-
+  Third-party software, not a Translator component: we deploy upstream
+  Jaeger. Only the chart is ours.

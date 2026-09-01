@@ -1,0 +1,52 @@
+# Name Lookup (NameRes) (name-lookup)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: name-lookup
+name: Name Lookup (NameRes)
+owner: DOGSLED
+component_type: Utility
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
+
+identifiers:
+  infores: infores:sri-name-resolver
+  smartapi: "9995fed757acd034ef099dbb483c4c82"
+  helm_chart: name-lookup
+  translator_all_wiki: Name-Resolution-Service
+  otel_services:
+    - Nameres
+    - infores:sri-name-resolver
+
+itrb:
+  app: name-lookup
+  group: SRI-Ranking
+
+connections:
+  gets_results_from: []
+  calls: [jaeger]
+  externals: []
+
+repositories:
+  - url: https://github.com/NCATSTranslator/NameResolution
+    role: source
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/name-lookup
+    role: helm-chart
+    visibility: public
+
+documentation:
+  - url: https://github.com/NCATSTranslator/Translator-All/wiki/Name-Resolution-Service
+    kind: wiki
+
+endpoints:
+  openapi: openapi.json
+  status: status?full=true
+  docs: docs

@@ -1,0 +1,47 @@
+# BioThings Pending API (pending-api)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: pending-api
+name: BioThings Pending API
+owner: DOGSURF
+refactor_status: Continues into Refactor
+layer: Shared services
+hosted_at: ITRB
+
+itrb:
+  app: BioThings PendingAPI (BTEP)
+  group: Exploring-Agent
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+repositories:
+  - url: https://github.com/biothings/pending.api
+    role: source
+    visibility: public
+
+environments:
+  ci:
+    url: https://biothings.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://biothings.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://biothings.transltr.io/
+    location: ITRB
+
+notes: >-
+  Hosts a number of APIs from the previous phase. Some have moved to CoCo's own
+  ES server (nodenorm, annotator, nameres) and the BTE ones are expected to be
+  removed, but this host is likely to stay live while any of its APIs are still
+  in use, and could host tier 2 knowledge graph APIs later.

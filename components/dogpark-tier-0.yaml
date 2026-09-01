@@ -1,0 +1,47 @@
+# Tier 0: Gandalf (full KGX) (dogpark-tier-0)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: dogpark-tier-0
+name: "Tier 0: Gandalf (full KGX)"
+owner: DOGSLED
+component_type: KP
+refactor_status: New in Refactor
+layer: DogPark and Retriever
+part_of: Dog Park
+hosted_at: ITRB
+
+identifiers:
+  infores: infores:dogpark-tier0
+  otel_services:
+    - gandalf
+
+itrb:
+  app: retriever-ci-pipeline
+  group: Retriever
+
+connections:
+  gets_results_from: [kgx-storage-pipeline, ~dogpark-ranger]
+  calls: [jaeger]
+  externals: []
+
+repositories:
+  - url: https://github.com/ranking-agent/gandalf
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: openapi.json
+  docs: docs
+  status: null
+
+environments:
+  dev:
+    url: https://gandalf.renci.org/
+    location: RENCI

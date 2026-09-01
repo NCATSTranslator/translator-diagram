@@ -1,0 +1,35 @@
+# Translator SDK (translator-sdk)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: translator-sdk
+name: Translator SDK
+owner: Core Components WG
+refactor_status: New in Refactor
+layer: TSDK/TCT
+hosted_at: Local
+
+identifiers:
+  helm_chart: null
+
+itrb:
+  group: null
+
+connections:
+  gets_results_from: []
+  calls: [nodenorm-es, name-lookup, node-annotator, ~smartapi]
+  externals: []
+
+repositories:
+  - url: https://github.com/NCATSTranslator/Translator_sdk
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: null

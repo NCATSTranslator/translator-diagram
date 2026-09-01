@@ -138,6 +138,29 @@ embeds them in the main diagram instead.
 fold to the same stem (`Tier 1` and `Tier-1`) would overwrite each other, so
 the second gets a `_2` suffix and a warning.
 
+## Component metadata files (proposal)
+
+`components/<id>.yaml` records one file per component: what it is (owner,
+refactor status, layer, where it runs), its identifier in each of the naming
+spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
+ITRB's own `app` and `group`, links to its repositories and documentation, and
+the `connections:` edges the diagram is built from.
+`schema/component.schema.json` is the field reference, and
+`tests/test_components.py` checks every file against it.
+
+[`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
+platform that no component file claims yet — currently the OpenTelemetry
+service names that could not be attributed. Entries leave it by being promoted
+into a component file or confirmed out of use.
+
+**Nothing reads these files yet** — the generator still loads the sheet CSV.
+They are a proposal, and the case for them is in
+[`docs/component-metadata.md`](docs/component-metadata.md); the survey of what
+each upstream source actually offers is in
+[`docs/metadata-sources.md`](docs/metadata-sources.md), and
+[`docs/examples/name-lookup-enriched.yaml`](docs/examples/name-lookup-enriched.yaml)
+shows what a fetcher would build from one of them.
+
 ## Diagram conventions
 
 ### Node colours (by Owner)
@@ -259,6 +282,13 @@ translator-diagram/
 │   ├── export.py         # components.json
 │   ├── cli.py            # The command line
 │   └── data/             # owner-colors.csv, shipped with the package
+├── components/           # One YAML file per component (proposal; nothing
+│                         # reads these yet — see docs/component-metadata.md)
+├── unknown.yaml          # Identifiers no component file claims yet
+├── schema/
+│   ├── component.schema.json  # JSON Schema for a components/*.yaml file
+│   └── unknown.schema.json    # JSON Schema for unknown.yaml
+├── docs/                 # The component-metadata proposal and its research
 ├── config/
 │   └── owner-colors.csv  # Owner → fill colour mapping (edit me)
 ├── tests/                # One test file per module

@@ -1,0 +1,43 @@
+# Retriever (query API) (retriever)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see docs/component-metadata.md for the format and
+# docs/metadata-sources.md for what each of those places actually offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: retriever
+name: Retriever (query API)
+owner: DOGSURF
+component_type: KP
+refactor_status: New in Refactor
+layer: DogPark and Retriever
+hosted_at: ITRB
+
+identifiers:
+  infores: infores:retriever
+  smartapi: "7a12feb2fbd8fe4af532a77ee19b7800"
+  otel_services:
+    - retriever
+
+itrb:
+  app: retriever-ci-pipeline
+  group: Retriever
+
+connections:
+  gets_results_from: [dogpark-tier-0, dogpark-tier-1]
+  calls: [jaeger]
+  externals: []
+
+repositories:
+  - url: https://github.com/BioPack-team/retriever
+    role: source
+    visibility: public
+
+endpoints:
+  openapi: openapi.json
+
+notes: >-
+  API server to route calls to the different tiers
