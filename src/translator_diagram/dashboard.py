@@ -497,13 +497,22 @@ def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
     shape of question. Only a genuine split is marked: when every environment
     agrees, or only one reports at all, nothing is tinted — colouring every
     row would teach the reader to ignore the colour.
+
+    A tie has no minority in it, so every reporting environment is marked
+    rather than one arbitrary side. `Counter.most_common` breaks a tie by
+    insertion order, which is the column order — so a two-against-two split
+    used to tint whichever pair happened to sit further right, and a
+    one-against-one split made the later environment the deviant. Marking the
+    whole row says what is true: these environments disagree, and none of them
+    is the odd one out.
     """
     values = [
         cell.get(key) for cell in cells.values() if cell.get("deployed") and cell.get(key)
     ]
     if len(values) < 2 or len(set(values)) < 2:
         return
-    majority, _ = Counter(values).most_common(1)[0]
+    ranked = Counter(values).most_common()
+    majority = ranked[0][0] if ranked[0][1] > ranked[1][1] else None
     for cell in cells.values():
         if cell.get("deployed") and cell.get(key) and cell[key] != majority:
             cell.setdefault("drift", []).append(key)

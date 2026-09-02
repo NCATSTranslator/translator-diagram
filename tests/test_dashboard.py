@@ -226,9 +226,11 @@ class TestDrift:
         _mark_drift(cells, "version")
         assert "drift" not in cells["prod"]
 
-    def test_an_even_split_still_marks_one_side(self):
-        # Two against two has no majority worth the name, but leaving both
-        # unmarked would hide a genuine disagreement.
+    def test_an_even_split_marks_every_environment(self):
+        # Two against two has no majority worth the name: leaving both
+        # unmarked would hide a genuine disagreement, and marking one side
+        # would pick it by column order — the pair further right was always
+        # the deviant, whichever pair was newer.
         cells = {
             "dev": {"deployed": True, "version": "a"},
             "ci": {"deployed": True, "version": "a"},
@@ -237,7 +239,29 @@ class TestDrift:
         }
         _mark_drift(cells, "version")
         marked = [e for e, c in cells.items() if c.get("drift")]
-        assert len(marked) == 2
+        assert marked == ["dev", "ci", "test", "prod"]
+
+    def test_two_environments_that_disagree_are_both_marked(self):
+        # One against one: neither is in the minority, so calling either of
+        # them the odd one out is a coin toss dressed up as a finding.
+        cells = {
+            "test": {"deployed": True, "version": "a"},
+            "prod": {"deployed": True, "version": "b"},
+        }
+        _mark_drift(cells, "version")
+        assert [e for e, c in cells.items() if c.get("drift")] == ["test", "prod"]
+
+    def test_a_plurality_is_still_a_majority(self):
+        # Three ways, one of them twice: the two that agree are the baseline
+        # and the other two are each marked against it.
+        cells = {
+            "dev": {"deployed": True, "version": "a"},
+            "ci": {"deployed": True, "version": "a"},
+            "test": {"deployed": True, "version": "b"},
+            "prod": {"deployed": True, "version": "c"},
+        }
+        _mark_drift(cells, "version")
+        assert [e for e, c in cells.items() if c.get("drift")] == ["test", "prod"]
 
     def test_missing_values_are_not_drift(self):
         # An environment that reports nothing is not disagreeing.
