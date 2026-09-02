@@ -361,11 +361,43 @@ files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
 breaks `data/dashboard.js`.
 
-`type` and `layer` are the exception in the other direction: the page no
-longer shows either — neither told a reader anything the stage bands and the
-owner chip do not — so both are payload keys with no column, no filter and no
-query-string parameter. They stay in `overview.json` because it is a contract
-and dropping a key from it is the change that breaks a consumer.
+`type`, `layer` and `depth` are the exception in the other direction: nothing
+on the page reads any of them — the first two were dropped as columns because
+the stage bands and the owner chip say more, and `depth` has never been read
+by the JS at all. They stay in `overview.json` because it is a contract and
+dropping a key from it is the change that breaks a consumer. Do not delete
+`depth` because grepping `dashboard.js` for it finds nothing.
+
+**The connection chips are the recorded edges, and the vocabulary is load-
+bearing.** `row.connections` carries three lists — `gets_results_from` and
+`calls` as the file wrote them, and `used_by`, which `flow.neighbours`
+computes by inverting the other files. On the page they are chips in the
+Component cell rather than a column: there is no horizontal scroll above
+1100px, so a column of ids would have to come out of the four environment
+columns and would be blank on a third of the rows.
+
+`◀` and `▶` mean what they mean on an external chip — which side the other
+component sits on — and the *kind* of edge is the box: dashed for a call,
+outlined for an edge the other component's file recorded, dotted for one
+nobody has built. A third arrow glyph was the obvious alternative and is the
+one that renders as a colour emoji on some platforms, which is the same reason
+the theme control draws its own SVGs.
+
+Three states have to stay distinguishable, and two of them are easy to
+conflate: `◀ none recorded` is a claim (the file says there is nothing),
+`◀ 1 withheld` is the privacy policy (the neighbour exists and this build does
+not name it), and a dimmed chip is the reader's own filter hiding a row that
+is otherwise right there. An empty `used_by` gets no chip at all, because its
+emptiness is a fact about the other twenty-five files rather than a claim this
+component's author made.
+
+**Anything that adds component ids to the payload has to go through
+`privacy.apply`.** `connections` is the first field that names other
+components, and adding it aborted every published build until the filter
+existed — nine kept rows list `jaeger`, which the policy withholds. That is
+`privacy.verify` working exactly as its docstring says. Entries are dropped
+whole rather than blanked, because the display name travels with the id and
+`verify` matches names case-insensitively too.
 
 **Change what the published page withholds** → `config/privacy.yaml`. No code
 change: it lists whole components to drop and row or per-environment fields to

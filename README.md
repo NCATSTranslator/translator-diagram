@@ -243,6 +243,18 @@ nothing recording that the UI calls Name Lookup, a computed order put Name
 Lookup up beside the data sources. A written order is more honest than a
 plausible-looking one derived from data that is missing.
 
+**Which components feed which.** Under a component's name is a chip per
+recorded edge: `◀` for something it takes results from or calls, `▶` for
+something that names it, a dashed box for a call rather than a results edge,
+and a `~` for an edge that is planned rather than built. Each chip links to
+the row it names, so the graph can be walked by clicking. `none recorded` is
+a claim — the component file says it takes from nothing and calls nothing —
+and on a published build `1 withheld` marks a neighbour
+[`config/privacy.yaml`](config/privacy.yaml) leaves out, so a shortened list
+says that it is shortened. The chips are part of `Details` and, like the
+Repository column, they are for the widest layouts: below 1100px the four
+environment columns get the room instead.
+
 **`Last updated`** is the newer of a component's latest GitHub release and its
 SmartAPI registration, badged with which one it was. Thirteen of the
 twenty-six components have neither and show a dash: they publish no releases
