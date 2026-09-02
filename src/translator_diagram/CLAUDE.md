@@ -39,9 +39,10 @@ The dashboard is a second, parallel stack over the same components:
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
-| `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
+| `payload_details.py` | Pure helpers over the sync cache and component files: live OpenAPI facts, Helm chart index, SmartAPI infores matching, repo metadata, connection ids, free-text scrub |
+| `dashboard.py` | The version-source chain, drift detection, payload assembly, and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/dashboard.css`, `web/dashboard.js` | The browser half of the dashboard, inlined into the generated page |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged
@@ -62,6 +63,7 @@ components → {flow, sync, dashboard}
 flow → dashboard
 colors → dashboard
 privacy → dashboard
+payload_details → dashboard
 dashboard_cli → everything above
 ```
 
@@ -208,7 +210,7 @@ README (it is a hand-maintained paraphrase of `--help`, not generated).
 
 **Add a column to the dashboard** → `build_cell` or `build_rows` in
 `dashboard.py` for the value, then **one entry in the `COLUMNS` table** in
-`web/dashboard.js`, and `web/dashboard.css` if it needs a style. That entry
+`web/table.js`, and the matching `table.css` rule if it needs a style. That entry
 owns the header, the body cell, the `drop-*` class that hides both at narrow
 widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
@@ -218,7 +220,15 @@ The payload keys are independent of the YAML keys they happen to be spelled
 like: `layer` and `refactor_status` moved out of `diagram:` in the component
 files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
-breaks `web/dashboard.js`.
+breaks `web/table.js`.
+
+**Add a field to the drawer** → the value in `build_rows` or
+`payload_details.py` if it needs sync data, then the tab renderer in
+`web/drawer.js`. Per-environment fields that come from a live document must
+respect the same 200 gate as the table: `SyncedData` only reads bodies this
+run fetched successfully. Chart facts are labelled as intent, not deployment.
+`privacy.verify` runs on the finished payload, so a field added to the drawer
+must survive it — a withheld id in a new string aborts the published build.
 
 `type` and `layer` are the exception in the other direction: the page no
 longer shows either — neither told a reader anything the stage bands and the
@@ -342,6 +352,15 @@ rendering, and says something that is not true.
   non-alphanumerics. As a substring it would abort every published build the day
   someone withholds `ars` or `ui`, and a false alarm nobody can clear ends with
   the check switched off.
+- **Live operations where only a registration exists.** OpenAPI `operations`
+  and SmartAPI `paths` are read only from bodies this run fetched with a 200.
+  A stale registration that lists endpoints the live host no longer serves is
+  not shown as current.
+- **Per-environment uptime.** OpenTelemetry service counts are a platform-wide
+  tile, not a per-cell claim about whether one deployment is healthy.
+- **Free text as fact.** Repository descriptions, SmartAPI prose, and Helm
+  `description` fields are scrubbed for withheld ids and shown as context, not
+  as version or deployment truth.
 
 Two more of the same family live in the code because they are local: a
 malformed OpenTelemetry answer costs its tile rather than the run, and a
@@ -415,11 +434,26 @@ runs 1–8 and skips 9.
 make a point about drift, so someone looking up one component found it missing
 from a page that never said it was filtered. Drift is still the first thing the
 page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `web/dashboard.js`, listed in that
+`known`, `none`) live in `VERSION_VIEWS` in `web/table.js`, listed in that
 order so the default reads first, with `DEFAULT_VIEW` naming it. `differ` means
 any of the three tinted axes, not versions alone. It replaced a "Drift only"
 toggle rather than joining it: two controls that select the same rows cannot be
 told apart by a reader.
+
+**The browser code is not a module system.** `web/*.js` is concatenated in
+`JS_FILES` order into one shared scope. A name declared with `const` in two
+files is a syntax error only when the bundle is checked — which is why
+`tests/test_web_assets.py` concatenates before `node --check`, and why
+`tests/web/` runs under `node --test`.
+
+**`edges` and `stages` are built after `privacy.apply`.** The map reads the
+published payload, so withheld components must disappear from the graph as well
+as the table. Building the graph before redaction would leave ghost nodes a
+published build must not name.
+
+**OpenTelemetry joins are case-sensitive.** A service name in the OTel answer
+must match the deployment record exactly; normalising case would merge two
+different services and over-count.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`

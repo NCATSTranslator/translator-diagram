@@ -38,6 +38,14 @@ That takes about ten seconds of network time and reaches only public services.
 Everything it fetches is cached under `data/`, which is gitignored, so nothing
 you run can dirty the repository.
 
+To exercise the full page — map export, clipboard copy, and anything else a
+browser blocks from `file://` — serve the build instead:
+
+```bash
+cd data/dashboard && python3 -m http.server 8765
+# then open http://localhost:8765/
+```
+
 ### The diagram needs two more things
 
 The [Graphviz](https://graphviz.org/) system package (`brew install graphviz`,
@@ -195,16 +203,28 @@ each upstream source actually offers is in
 [`docs/examples/name-lookup-enriched.yaml`](docs/examples/name-lookup-enriched.yaml)
 shows what a fetcher builds from one of them.
 
-## The overview dashboard
+## The components dashboard
 
-A single self-contained HTML page with one row per component, in stages — data
-coming in at the top, the people who use it at the bottom — and a column per
-environment showing the deployed URL and the version running there.
+A single self-contained HTML page with two views over the same payload:
+
+- **Overview** — one row per component, in stages (data coming in at the top,
+  the people who use it at the bottom), with a column per environment showing
+  the deployed URL and the version running there.
+- **Map** — an interactive SVG diagram of which component connects to what,
+  laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
+  export, and the same detail drawer as the table.
+
+Click a row or a map node to open the drawer (Overview · Environments ·
+Releases · Helm · SmartAPI · Connections). Expand a row inline with the
+chevron for a side-by-side environment read without leaving the table.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
 uv run build-dashboard     # compile           into data/dashboard/
 open data/dashboard/index.html
+
+# Map export and other features some browsers block from file://:
+cd data/dashboard && python3 -m http.server 8765
 
 # Everything, including what a published build withholds. Local use only.
 uv run build-dashboard --include-private
@@ -246,8 +266,10 @@ things it reports are the answer:
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
 names — today the tracing console, the internal test rig, and the container
 image tags that would turn the version grid into a CVE-matching inventory. The
-page says so in its footer, and `--include-private` builds the full picture for
-local use.
+page says so in a one-line footer when anything was withheld, and
+`--include-private` builds the full picture for local use. Helm chart
+`appVersion` and other chart metadata stay in the published build; only image
+tags are redacted.
 
 Redaction is the default so that a forgotten flag costs information rather than
 publishing it, and the file is data rather than code so that the people who
@@ -303,6 +325,11 @@ arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
 which inlines its own data and so works straight from disk, and
 `overview.json`, the same payload as a file for anything that wants to consume
 it.
+
+**Map controls:** `f` fits the diagram, `+`/`-` zoom, arrow keys pan when the
+map has focus, `Esc` clears selection. Edge kinds can be toggled in the legend.
+SVG and PNG export buttons are in the toolbar; serve over `http://` if your
+browser blocks downloads from `file://`.
 
 ## Diagram conventions
 

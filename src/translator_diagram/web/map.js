@@ -1184,8 +1184,7 @@
   /* One download path for both formats, with an honest fallback: some embedded
      contexts refuse a programmatic download entirely, and opening the file in
      a tab is better than a button that does nothing. */
-  function save(blob, name) {
-    const url = URL.createObjectURL(blob);
+  function downloadUrl(url, name, revoke) {
     try {
       const link = document.createElement("a");
       if (!("download" in link)) throw new Error("no download attribute");
@@ -1202,7 +1201,20 @@
         ? `This browser blocked the download; ${name} opened in a new tab instead.`
         : `This browser blocked the download and the pop-up; allow one to save ${name}.`);
     }
-    setTimeout(() => URL.revokeObjectURL(url), 20000);
+    if (revoke) setTimeout(() => URL.revokeObjectURL(url), 20000);
+  }
+
+  function save(blob, name) {
+    // blob: URLs are blocked for programmatic downloads from file:// in most
+    // browsers; a data URL of the same bytes usually still works.
+    if (location.protocol === "file:") {
+      const reader = new FileReader();
+      reader.onload = () => downloadUrl(reader.result, name, false);
+      reader.onerror = () => say(`Could not prepare ${name} for download.`);
+      reader.readAsDataURL(blob);
+      return;
+    }
+    downloadUrl(URL.createObjectURL(blob), name, true);
   }
 
   function exportSvg() {
@@ -1228,6 +1240,10 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
       try {
+        if (location.protocol === "file:") {
+          downloadUrl(canvas.toDataURL("image/png"), "translator-components-map.png", false);
+          return;
+        }
         canvas.toBlob((blob) => {
           if (blob) save(blob, "translator-components-map.png");
           else say("This browser could not rasterise the map; the SVG still works.");

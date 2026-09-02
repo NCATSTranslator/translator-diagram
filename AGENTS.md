@@ -38,7 +38,8 @@ entries are there because someone already tried the obvious thing.
   drowned the table, a tile that counted 74 things where there were 41, and two
   environment columns unreachable at narrow widths. Render it and look —
   headless Firefox needs no extra tooling, and its own profile because yours is
-  probably already running:
+  probably already running. Screenshot **both views** (Overview and Map) in light
+  and dark:
 
   ```bash
   uv run build-dashboard
@@ -47,6 +48,9 @@ entries are there because someone already tried the obvious thing.
     --screenshot /tmp/dash.png --window-size=1700,1400 \
     "file://$PWD/data/dashboard/index.html"
   ```
+
+  For Map export and other features browsers block from `file://`, serve the
+  build first: `cd data/dashboard && python3 -m http.server 8765`.
 
   Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
   breakpoints — the table is wider than the window between about 1100 and
@@ -63,12 +67,12 @@ entries are there because someone already tried the obvious thing.
   ```
 
 - **JS with judgement in it can be tested, even with no JS harness here.** Slice
-  the block out of `web/dashboard.js`, stub `document`/`localStorage`/
+  the block out of `web/table.js` or `web/core.js`, stub `document`/`localStorage`/
   `matchMedia`, and run it under `node` from the scratchpad — that is how the
   theme cycle was checked against both system preferences, and how the sort
   comparators were driven over the real `overview.json` to prove undated rows
-  stay last in *both* directions. Throwaway scripts, not fixtures: nothing in
-  CI runs JS beyond `node --check`.
+  stay last in *both* directions. Layout and URL-state units live in
+  `tests/web/` and run under `node --test` via `tests/test_web_assets.py`.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`
