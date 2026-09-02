@@ -63,10 +63,10 @@ on what is currently relevant.
 |---|---|
 | change what a component records | `components/<id>.yaml`, and [`schema/component.schema.json`](schema/component.schema.json) for the field reference |
 | change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
-| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv) |
+| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
 | change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md), particularly *Things that look wrong but aren't* |
+| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -427,22 +427,24 @@ translator-diagram/
 │   ├── flow.py           # Data-flow depths, and the stage-order check
 │   ├── dashboard.py      # Version-source chain, drift, the rendered page
 │   ├── dashboard_cli.py  # sync-components and build-dashboard
-│   └── web/              # dashboard.css and dashboard.js, inlined into the page
+│   ├── web/              # dashboard.css and dashboard.js, inlined into the page
+│   └── CLAUDE.md         # The module map and the non-obvious decisions
 ├── components/           # One YAML file per component — see docs/
+│   └── CLAUDE.md         # What a component file must contain
 ├── unknown.yaml          # Identifiers no component file claims yet
 ├── config/               # The data files, edited by hand
 │   ├── owner-colors.csv  # Owner → fill colour
 │   ├── flow-steps.yaml   # The dashboard's stages, in page order
 │   └── privacy.yaml      # What a published build leaves out
 ├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
-├── docs/                 # The component-metadata case and its research
+├── docs/                 # The metadata case, its research, owner colours
 ├── tests/                # One test file per module
 ├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
 ├── env.default           # Template for .env (diagram only)
 ├── FUTURE.md             # Ideas with their costs worked out
-├── AGENTS.md             # The module map and the non-obvious decisions
+├── AGENTS.md             # Working agreements, and where the rest is
 └── data/                 # Gitignored — every input and output goes here
     ├── sync/             # Cached upstream responses + manifest.json
     ├── dashboard/        # index.html and overview.json
