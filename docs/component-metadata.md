@@ -209,7 +209,11 @@ usually missing.
 reachable; the transltr.io endpoints are all discoverable through SmartAPI. A
 private repository may be *linked* (`visibility: private`), but nothing inside
 it may be copied here, and no fetcher may read it. That rule is what keeps
-this repo publishable without a per-field review.
+this repo publishable without a per-field review — while it is public. The
+proposal in [`public-private-split.md`](public-private-split.md) makes the
+repository private and moves the border to the published page; under it,
+anything that must not be public goes in a component's `private:` block,
+and this rule applies to every other field.
 
 ## Open questions
 

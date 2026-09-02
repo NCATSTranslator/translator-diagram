@@ -54,3 +54,25 @@ unauthenticated address, 5000 with a `GITHUB_TOKEN` in the environment (see
 `_headers` in `sync.py`). One full sync currently spends 19. Release lists are
 already keyed by repository rather than by component, so the three shepherds
 cost one call between them; anything added here should be keyed the same way.
+
+## An authenticated web view of the full dashboard
+
+`content/` is the non-interactive private view, and the interactive one is a
+local build. The thing not built is the full dashboard, with its sorting and
+filtering, behind a sign-in — so someone without a checkout could open it.
+Considered in [`docs/public-private-split.md`](docs/public-private-split.md)
+and set aside, not rejected.
+
+The cheapest shape is a static site behind an identity proxy: the published
+workflow builds the full page as well as the redacted one, pushes the full
+one to a private host, and something like Cloudflare Access or an nginx
+`auth_request` in front of it checks a GitHub login against the same team
+that can read this repository. No application code; the page is already
+self-contained. The costs are what any hosted thing costs — a host, a
+certificate, a person who knows it exists when it breaks — plus a second
+access list that must be kept in step with the repository's collaborators,
+which is the part most likely to drift.
+
+If it is built, build it from `data/dashboard-full/`, the output of
+`build-dashboard --include-private`, and change nothing else: the full build
+is already the input this needs.

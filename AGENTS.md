@@ -17,6 +17,8 @@ when it is relevant rather than every time:
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
 | [`docs/owner-colours.md`](docs/owner-colours.md) | The four constraints on a new team colour |
+| [`docs/public-private-split.md`](docs/public-private-split.md) | The private-repository design for issue #7: the border, the refresh workflow, the go-private runbook |
+| [`content/README.md`](content/README.md) | What the generated `content/` tree holds and how to rebuild it |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** *Working agreements* below. Then, before simplifying anything in
@@ -96,6 +98,7 @@ uv run rumdl check .                                 # Markdown lint, gated in C
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
 uv run build-dashboard --include-private             # ignore config/privacy.yaml
+uv run build-content --diagram                       # -> content/, nothing withheld
 
 uv run generate-diagram --google-sheet               # most common
 uv run generate-diagram --input data/components.csv  # from a local CSV
@@ -116,11 +119,18 @@ could be made either in one of those files or in code, it belongs in the file.
 Each is validated — by a schema, a test, or a hard error at build time — so a
 wrong edit fails loudly rather than silently doing nothing.
 
-## What is not committed
+## What is committed, and what is not
 
-`data/` is gitignored in its entirety, so no generated diagram, `.dot`, `.json`
-or downloaded CSV is in the repo. That is currently load-bearing: this repo and
-its future GitHub Pages site are public, and what may be published from the
-component sheet is still being decided — see
+`data/` is gitignored in its entirety, so no downloaded CSV, sync cache or
+dashboard build is in the repo. `content/` is the one generated tree that
+*is* committed, on purpose: it is what people with repository access read,
+and `tests/test_content.py` fails when its static half is behind
+`components/`. After editing a component file, run `uv run build-content`
+and commit the result with the edit. Never edit anything under `content/`
+by hand except its README.
+
+The repo is public today, so the `private:` blocks in `components/` hold the
+placeholder `PRIVATE` and nothing real. Do not put a real private value
+anywhere in this repository until it is private — see
+[`docs/public-private-split.md`](docs/public-private-split.md) and
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7).
-Don't commit generated artifacts without checking first.

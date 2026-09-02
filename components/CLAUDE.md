@@ -22,6 +22,18 @@ appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
 never URLs; and no file writes a `diagram:` flag at its default, which is what
 keeps that block absent rather than 26 copies of `ubiquitous: false`.
 
+**`private:` is the one block the dashboard cannot see.** It holds what must
+stay in the repository — contacts, hosts that are not public, operational
+notes — and `components.py` deliberately does not parse the key, so
+`ComponentFile` has no such field and nothing in the dashboard stack can
+carry it into `overview.json`. `content.read_private` re-reads the YAML for
+it, and a component's page under `content/components/` is the only place it
+appears. Do not add a `private` field to `ComponentFile` to save that
+second read: the guarantee is structural precisely because the parser is
+ignorant of it, and `tests/test_components.py` and `tests/test_content.py`
+hold it. While this repository is public every value under `private:` is the
+literal string `PRIVATE`.
+
 `unknown.yaml` collects identifiers observed in the platform that no
 component file claims — today, the OpenTelemetry service names that could not
 be attributed. Do not delete an entry to make a test pass: an entry is removed
