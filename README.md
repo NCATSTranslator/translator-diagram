@@ -1,49 +1,76 @@
 # translator-diagram
 
-Diagrams describing the overall architecture of the
-[NCATS Biomedical Data Translator](https://ncats.nih.gov/research/research-activities/translator).
+Two views of the
+[NCATS Biomedical Data Translator](https://ncats.nih.gov/research/research-activities/translator)
+platform, built from the same set of components:
 
-A Python CLI tool reads a spreadsheet of Translator platform components,
-validates their dependency declarations, and produces Graphviz diagrams showing
-how data flows through the system and which services call each other.
+- **The dashboard** — a single self-contained HTML page with one row per
+  component, showing which version each environment is running, where that
+  version was read from, and where the environments disagree.
+- **The diagram** — Graphviz pictures of how data flows between components and
+  which services call each other.
 
-## Purpose
+They are two commands over two sources that are converging: the dashboard reads
+`components/*.yaml`, which are committed here; the diagram still reads a Google
+Sheet. Merging them is
+[issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
 
-The Translator platform comprises many components maintained by different teams.
-This tool makes the overall architecture visible by turning a human-maintained
-Google Sheet into a shareable diagram. The default view filters to components
-that are active in the current refactor ("Continues into Refactor" and
-"New in Refactor"), so the diagram stays focused on what is currently relevant.
+The platform comprises many components maintained by different teams, and both
+views exist to make the whole thing visible at once — to people inside the
+project who need to see how the pieces fit together, to performance work that
+needs a map of where the bottlenecks might be (usefully combined with our
+OpenTelemetry data), and to people outside the project trying to understand how
+Translator works.
 
-It is meant to serve three audiences at once: everyone inside the project who
-needs to see how the pieces fit together, performance work that needs a map of
-where the bottlenecks might be (usefully combined with our OpenTelemetry data),
-and people outside the project trying to understand how Translator works.
+## Start here
 
-## Quick start
-
-Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
-The [Graphviz](https://graphviz.org/) system package must also be installed
-(`brew install graphviz` on macOS, `apt-get install graphviz` on Debian/Ubuntu).
+Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/) — and for the
+dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 
 ```bash
-uv sync                          # first-time setup; creates .venv/
+uv sync                    # first-time setup; creates .venv/
+uv run sync-components     # follow what components/*.yaml points at -> data/sync/
+uv run build-dashboard     # compile that into a page      -> data/dashboard/
+open data/dashboard/index.html
+```
 
-# Download latest data from the Google Sheet and regenerate
-uv run generate-diagram --google-sheet
+That takes about ten seconds of network time and reaches only public services.
+Everything it fetches is cached under `data/`, which is gitignored, so nothing
+you run can dirty the repository.
 
-# Use a locally cached CSV instead
-uv run generate-diagram
+### The diagram needs two more things
 
-# Include all components, not just the refactor-active ones
-uv run generate-diagram --all
+The [Graphviz](https://graphviz.org/) system package (`brew install graphviz`,
+or `apt-get install graphviz`), and read access to the Google Sheet the
+component list still lives in — copy [`env.default`](env.default) to `.env` and
+fill in `GOOGLE_SHEET_ID`.
 
-# Also produce a PDF (useful for presentations)
+```bash
+uv run generate-diagram --google-sheet          # download the sheet, then render
+uv run generate-diagram                         # use the cached data/components.csv
+uv run generate-diagram --all                   # include non-refactor components
 uv run generate-diagram --google-sheet --format pdf
-
-# One sub-figure per tier, plus the main diagram
 uv run generate-diagram --google-sheet --layer-column Tier
 ```
+
+The default view filters to components active in the current refactor
+("Continues into Refactor" and "New in Refactor"), so the picture stays focused
+on what is currently relevant.
+
+## Where things live
+
+| If you want to | Look at |
+|---|---|
+| change what a component records | `components/<id>.yaml`, and [`schema/component.schema.json`](schema/component.schema.json) for the field reference |
+| change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
+| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv) |
+| change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
+| change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
+| know why something is the way it is | [AGENTS.md](AGENTS.md), particularly *Things that look wrong but aren't* |
+| see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
+
+The first four are data files, editable by anyone who knows the platform
+without opening a Python module. That is deliberate, and worth keeping.
 
 ## Input data
 
@@ -138,15 +165,19 @@ embeds them in the main diagram instead.
 fold to the same stem (`Tier 1` and `Tier-1`) would overwrite each other, so
 the second gets a `_2` suffix and a warning.
 
-## Component metadata files (proposal)
+## Component metadata files
 
 `components/<id>.yaml` records one file per component: what it is (owner,
 refactor status, layer, where it runs), its identifier in each of the naming
 spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
 ITRB's own `app` and `group`, links to its repositories and documentation, and
-the `connections:` edges the diagram is built from.
-`schema/component.schema.json` is the field reference, and
-`tests/test_components.py` checks every file against it.
+the `connections:` edges between components.
+[`schema/component.schema.json`](schema/component.schema.json) is the field
+reference; `tests/test_component_files.py` validates every file against it, and
+`tests/test_components.py` covers the parser.
+
+These files are the dashboard's only input, and they are committed — which is
+why the dashboard needs no credentials to run.
 
 [`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
 platform that no component file claims yet — currently the OpenTelemetry
@@ -377,45 +408,59 @@ uv run generate-diagram [OPTIONS]
 
 ```text
 translator-diagram/
-├── src/translator_diagram/   # The tool
-│   ├── model.py          # Component, index_by_id
-│   ├── naming.py         # SVG ids and output filename stems
+├── src/translator_diagram/
+│   │                     # shared by both stacks
 │   ├── colors.py         # Owner colours and the palette
+│   ├── components.py     # Reads components/<id>.yaml
+│   ├── privacy.py        # What a published dashboard withholds
+│   │                     # the diagram
+│   ├── model.py          # Component, index_by_id (one sheet row)
+│   ├── naming.py         # SVG ids and output filename stems
 │   ├── loading.py        # CSV parsing and the Google Sheet download
 │   ├── validation.py     # Reference and id checks
 │   ├── render.py         # The diagram and the per-layer sub-figures
 │   ├── legend.py         # The two legends
 │   ├── export.py         # components.json
-│   ├── cli.py            # The command line
-│   └── data/             # dashboard.css and dashboard.js
-├── components/           # One YAML file per component — see
-│                         # docs/component-metadata.md
+│   ├── cli.py            # generate-diagram
+│   │                     # the dashboard
+│   ├── sync.py           # Fetches what the component files point at
+│   ├── flow.py           # Data-flow depths, and the stage-order check
+│   ├── dashboard.py      # Version-source chain, drift, the rendered page
+│   ├── dashboard_cli.py  # sync-components and build-dashboard
+│   └── web/              # dashboard.css and dashboard.js, inlined into the page
+├── components/           # One YAML file per component — see docs/
 ├── unknown.yaml          # Identifiers no component file claims yet
-├── schema/
-│   ├── component.schema.json  # JSON Schema for a components/*.yaml file
-│   └── unknown.schema.json    # JSON Schema for unknown.yaml
-├── docs/                 # The component-metadata proposal and its research
-├── config/
-│   └── owner-colors.csv  # Owner → fill colour mapping (edit me)
+├── config/               # The data files, edited by hand
+│   ├── owner-colors.csv  # Owner → fill colour
+│   ├── flow-steps.yaml   # The dashboard's stages, in page order
+│   └── privacy.yaml      # What a published build leaves out
+├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
+├── docs/                 # The component-metadata case and its research
 ├── tests/                # One test file per module
+├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
-├── env.default           # Template for .env
-├── .env                  # GOOGLE_SHEET_ID — gitignored, fill in locally
-├── AGENTS.md             # Orientation for coding agents
-├── README.md             # This file
-└── data/                 # Gitignored — all inputs and outputs go here
-    ├── components.csv    # Downloaded from Google Sheet
-    ├── components.json   # Parsed component data (all statuses, minus hidden rows)
-    ├── diagram.dot       # Graphviz source
-    └── diagram.png       # Rendered diagram
+├── env.default           # Template for .env (diagram only)
+├── FUTURE.md             # Ideas with their costs worked out
+├── AGENTS.md             # The module map and the non-obvious decisions
+└── data/                 # Gitignored — every input and output goes here
+    ├── sync/             # Cached upstream responses + manifest.json
+    ├── dashboard/        # index.html and overview.json
+    ├── components.csv    # Downloaded from the Google Sheet
+    └── diagram.png       # Rendered diagram (plus .dot, .json, .svg, .pdf)
 ```
 
 ## Status and next steps
 
-This is a work in progress. The tool itself works; what is not yet built is the
-public-facing view — a single static page over the generated SVG and
-`components.json`, deployed from a scheduled GitHub Actions run. That is
+Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
+runs the tests, lints and a build on every pull request, and
+`.github/workflows/pages.yml` builds the page on every pull request as a
+downloadable artifact while deploying only from `main`, a nightly schedule, or
+an explicit manual run. A published build applies
+[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+
+What is *not* built is the interactive view of the **diagram** — a static page
+over the generated SVG and `components.json`. That is
 [issue #10](https://github.com/NCATSTranslator/translator-diagram/issues/10),
 and it waits on
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7):
@@ -449,18 +494,24 @@ is the live list. Ideas that started here:
 ## Contributing
 
 ```bash
-uv sync            # first-time setup
-uv run pytest      # the test suite
-uv run ruff check  # Python lint
-uv run rumdl check # Markdown lint
+uv sync              # first-time setup
+uv run pytest        # the test suite
+uv run ruff check    # Python lint
+uv run rumdl check . # Markdown lint
 ```
 
-All four run in CI on every pull request. The source is one module per subject
-under `src/translator_diagram/`, and `tests/` has one file per module — a
-change to `loading.py` belongs in `tests/test_loading.py`.
-[AGENTS.md](AGENTS.md) has the module map, the rule about which module may
-import which, and the non-obvious decisions worth knowing before changing
-rendering.
+All four run in CI on every pull request, along with a dashboard build. The
+source is one module per subject under `src/translator_diagram/`, and `tests/`
+has one file per module — a change to `loading.py` belongs in
+`tests/test_loading.py`.
+
+Two things are worth reading before a first change. [AGENTS.md](AGENTS.md) has
+the module map, the rule about which module may import which (enforced by
+`tests/test_package_layout.py`), and a *Things that look wrong but aren't*
+section that exists because most of them were arrived at the hard way. And if
+you change the dashboard, render it and look at it: the page has passed a full
+test suite while visibly broken more than once, and AGENTS.md carries the
+headless-Firefox recipe for checking it at several widths and in both themes.
 
 ## Licence
 

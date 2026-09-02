@@ -1,8 +1,25 @@
 # translator-diagram
 
-Generates Graphviz dependency diagrams for Translator platform components from
-a Google Sheet CSV. The tool is the `translator_diagram` package under `src/`.
-See [README.md](README.md) for user-facing documentation.
+Two commands over the Translator platform's components, in one package under
+`src/translator_diagram/`: `generate-diagram` renders Graphviz pictures from a
+Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
+`components/*.yaml`. [README.md](README.md) is the user-facing documentation and
+the faster way in; this file is what you need before changing the code.
+
+**Read first:** *Working agreements* below, and *Things that look wrong but
+aren't* before you simplify anything. Most entries in the latter are there
+because someone already tried the obvious thing.
+
+| Section | What it answers |
+|---|---|
+| [Working agreements](#working-agreements) | How to check your work, and what only a human can judge |
+| [Quick start](#quick-start) | The commands, with the flags worth knowing |
+| [Package layout](#package-layout-srctranslator_diagram) | Which module holds what, and which may import which |
+| [Data model](#data-model) | CSV column → `Component` field |
+| [components/](#components--the-component-metadata-files) | The YAML files, and the rules the tests enforce on them |
+| [Common change patterns](#common-change-patterns) | "I want to change X" → the file to open |
+| [Things that look wrong but aren't](#things-that-look-wrong-but-arent) | Decisions with a reason that is not visible locally |
+| [Special features](#special-features) | Ubiquitous clones, the SVG id namespace, ghost nodes |
 
 ## Working agreements
 
@@ -13,12 +30,12 @@ See [README.md](README.md) for user-facing documentation.
   in an awkward place. That is the operator's call, so report what changed and
   let them look rather than declaring the result good.
 - **Look at the dashboard before saying it is fine.** Structural checks do not
-  catch visual bugs: this page once passed 301 tests, `node --check`, a
-  self-containment assertion and a payload-consistency check while shipping a
-  badge on 27 of 45 cells that drowned the table, a tile that counted 74 things
-  where there were 41, and two environment columns unreachable at narrow
-  widths. Render it and look — Firefox does this with no extra tooling, and
-  needs its own profile because yours is probably already running:
+  catch visual bugs: this page once passed 301 tests, `node --check` and a
+  self-containment assertion while shipping a badge on 27 of 45 cells that
+  drowned the table, a tile that counted 74 things where there were 41, and two
+  environment columns unreachable at narrow widths. Render it and look —
+  headless Firefox needs no extra tooling, and its own profile because yours is
+  probably already running:
 
   ```bash
   uv run build-dashboard
@@ -28,15 +45,15 @@ See [README.md](README.md) for user-facing documentation.
     "file://$PWD/data/dashboard/index.html"
   ```
 
-  Shoot it narrow (`--window-size=760,1000`) too; the column-dropping rules
-  only misbehave there, and shoot the widths *between* the breakpoints — the
-  filter bar wraps around 1200–1500px, which is where the sticky header and the
-  band descriptions go wrong. Whether the result *reads* well is still the
-  operator's call — report what you saw and let them look.
+  Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
+  breakpoints — the table is wider than the window between about 1100 and
+  1500px, which is where the sticky header and the band descriptions go wrong.
+  Whether the result *reads* well is still the operator's call: report what you
+  saw and let them look.
 
   A headless profile follows the system theme, so on a dark machine every
   screenshot is dark and half the palette goes unchecked. A second profile with
-  one pref shoots the other theme:
+  one pref shoots the other theme (use `1` for dark on a light machine):
 
   ```bash
   mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
@@ -116,13 +133,10 @@ The dashboard is a second, parallel stack over the same components:
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
 | `web/dashboard.css`, `web/dashboard.js` | The browser half of the dashboard, inlined into the generated page |
 
-`web/` holds what the browser gets and nothing else. It was `data/` until the
-name collided with `/data/`, the gitignored scratch space at the root, in a
-repository where every other reference to "data" means that — and where the
-only thing keeping the package's own CSS and JS tracked by git was the leading
-slash in the ignore rule. The packaged fallback copy of `owner-colors.csv`
-sits at the package root instead, because a colour table the diagram generator
-reads is not a web file either.
+`web/` holds what the browser gets and nothing else — it was `data/`, which
+collided with the gitignored `/data/` scratch space at the root. The packaged
+fallback copy of `owner-colors.csv` sits at the package root instead: a colour
+table the diagram generator reads is not a web file.
 
 **Imports run one way**, and a new one must not break it:
 
@@ -254,26 +268,20 @@ a description and the components it holds, shown in the order it lists them.
 Prose about the platform, and the order it is read in, belong where the people
 who know both can edit them — same reasoning as `config/owner-colors.csv`.
 
-**That file is the order.** It began as labels on an order computed from the
-recorded `connections:` edges, and that order was wrong in ways
-the edges cannot fix: nothing records the UI calling Name Lookup, so Name
-Lookup sorted up beside the data sources, and nothing records the ARS calling
-Answer Appraiser, so Answer Appraiser sorted above everything. Twenty-six
-components is too many to order from a graph this sparse. `flow.py` still
-computes depths — `isolated` is what draws the left bar and what
-`build-dashboard` reports — but nothing derives the page order from them any
-more, and `flow_steps` was deleted rather than left as a second answer to a
-question with one.
+**That file is the order**, not labels on a computed one. It began as the
+latter, and the computed order was wrong in ways the edges cannot fix: only 13
+of 26 components appear in a results edge at all, so Name Lookup sorted up
+beside the data sources. `flow.py` still computes depths — `isolated` draws the
+left bar and `build-dashboard` reports it — but nothing derives the page order
+from them, and `flow_steps` was deleted rather than left as a second answer.
 
 A component no stage names lands in a trailing band, and
 `tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
-the same contract as `unknown.yaml`, so a new component file cannot quietly
-appear at the bottom looking deliberate. The file is required: it is looked
-for in the working directory and every directory above it, the same walk
-`load_owner_colors` and `load_policy` do, and `build-dashboard` fails if it
-finds none. `in_stage_order` does still fall back to `in_flow_order` with no
-bands, and that fallback is exactly why the missing file is refused — a build
-run from outside a checkout would otherwise publish the derived order this
+the same contract as `unknown.yaml`. The file is required, found by the same
+upward walk `load_owner_colors` and `load_policy` use, and `build-dashboard`
+fails without it. `in_stage_order` *does* still fall back to `in_flow_order`
+with no bands, and that fallback is exactly why a missing file is refused: a
+build run from outside a checkout would otherwise publish the derived order the
 file exists to replace, and look finished doing it.
 
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
@@ -308,11 +316,10 @@ obvious from the file:
   above constrains. Re-deriving all of them together reaches about 43, and is
   the honest fix when it comes to that.
 
-Generating the packaged copy from `config/` at build time is the obvious way to
-drop one of them, and it does not work: hatchling's `force-include` reaches the
-wheel but not an editable install, so `uv sync` would leave every developer
-without the fallback that wheel users have — and CI, which installs editable,
-would never exercise it. Two files and a test is the cheaper trade.
+Generating that copy at build time is the obvious simplification and it does
+not work: hatchling's `force-include` reaches the wheel but not an editable
+install, so `uv sync` would leave every developer — and CI — without the
+fallback wheel users get.
 
 **Change ghost or external node colours** → the `GHOST_*` /
 `EXTERNAL_FILL_COLOR` constants in `colors.py`.
@@ -471,18 +478,16 @@ than showing as an empty header. Step numbers come from the stage's position
 in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
-**The dashboard opens on every component.** It used to open on `Environments
-disagree`, which showed 7 rows of 24 and hid the platform to make a point
-about drift: someone who came to look up one component found it missing from a
-page that never said it was filtered. The drift is still the first thing the
-page says, in the finding above the table, and `Environments disagree` is
-still one selection away. The four views (`all`, `differ`, `known`, `none`)
-live in `VERSION_VIEWS` in `web/dashboard.js` with the default in
-`DEFAULT_VIEW`, and the dropdown lists them in that order, so the default
-reads first. `differ` means any of the three tinted axes, not versions alone —
-a component whose TRAPI version drifts while its software version does not is
-exactly as interesting. It replaced a "Drift only" toggle rather than joining
-it: two controls that select the same rows cannot be told apart by a reader.
+**The dashboard opens on every component**, having once opened on
+`Environments disagree` — which showed 7 rows of 24 and hid the platform to
+make a point about drift, so someone looking up one component found it missing
+from a page that never said it was filtered. Drift is still the first thing the
+page says, in the finding above the table. The four views (`all`, `differ`,
+`known`, `none`) live in `VERSION_VIEWS` in `web/dashboard.js`, listed in that
+order so the default reads first, with `DEFAULT_VIEW` naming it. `differ` means
+any of the three tinted axes, not versions alone. It replaced a "Drift only"
+toggle rather than joining it: two controls that select the same rows cannot be
+told apart by a reader.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
