@@ -347,6 +347,43 @@ class TestPayload:
             assert key in row
 
 
+class TestOtelTile:
+    def _synced(self, tmp_path, bodies):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        (tmp_path / "otel").mkdir()
+        for env, body in bodies.items():
+            (tmp_path / "otel" / f"{env}.json").write_text(json.dumps(body))
+        return SyncedData(tmp_path)
+
+    def test_the_total_is_distinct_across_collectors(self, tmp_path, component):
+        # Only a couple of services report to all three, so summing the three
+        # counts would count most of them twice over.
+        synced = self._synced(tmp_path, {
+            "ci": {"data": ["a", "b"]},
+            "test": {"data": ["b", "c"]},
+            "prod": {"data": ["c"]},
+        })
+        payload = build_payload([component], synced)
+        assert payload["otel_service_counts"] == {"ci": 2, "test": 2, "prod": 1}
+        assert payload["otel_service_total"] == 3
+
+    def test_a_collector_answering_with_objects_costs_the_tile_not_the_build(
+        self, tmp_path, component
+    ):
+        # `data` is an array of service names today. An array of objects would
+        # be unhashable, and taking the whole build down over a footnote tile
+        # is not a trade worth making.
+        synced = self._synced(tmp_path, {
+            "ci": {"data": [{"name": "a"}, "b"]},
+            "test": {"data": "not-a-list"},
+            "prod": {},
+        })
+        payload = build_payload([component], synced)
+        assert payload["otel_service_counts"] == {"ci": 1, "test": 0, "prod": 0}
+        assert payload["otel_service_total"] == 1
+
+
 class TestRendering:
     def test_every_component_appears(self, component, synced):
         html = render_html(build_payload([component], synced))

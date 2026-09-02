@@ -199,6 +199,20 @@ def _read_yaml(path: Path) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
+def _service_names(document: dict[str, Any] | None) -> list[str]:
+    """The service names one OpenTelemetry collector reported.
+
+    Strings only, and a list only. The tile that counts these is a footnote,
+    and a collector that answers with a `data` array of objects — or with no
+    array at all — must cost that tile its number rather than take the whole
+    build down on an unhashable name.
+    """
+    data = (document or {}).get("data")
+    if not isinstance(data, list):
+        return []
+    return [name for name in data if isinstance(name, str)]
+
+
 class SyncedData:
     """Everything `sync` wrote, read back."""
 
@@ -219,7 +233,7 @@ class SyncedData:
             ).items()
         }
         self.otel = {
-            env: (_read_json(root / "otel" / f"{env}.json") or {}).get("data") or []
+            env: _service_names(_read_json(root / "otel" / f"{env}.json"))
             for env in ("ci", "test", "prod")
         }
         self.statuses = {
@@ -711,9 +725,9 @@ def build_payload(
         },
         # Distinct across the three collectors, not their sum: only two names
         # report to all three, so summing counts most services twice over.
-        "otel_service_total": len(set().union(*synced.otel.values()))
-        if synced.otel
-        else 0,
+        "otel_service_total": len(
+            {name for names in synced.otel.values() for name in names}
+        ),
         # Absent when nothing was withheld, so the page says nothing rather
         # than announcing an empty redaction on a full build.
         **({"redacted": report.for_payload()} if report else {}),
