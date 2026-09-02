@@ -174,6 +174,41 @@ def in_flow_order(components: list[ComponentFile]) -> list[ComponentFile]:
     )
 
 
+def order_conflicts(
+    components: list[ComponentFile], position: dict[str, int]
+) -> list[tuple[str, str, bool]]:
+    """Recorded results edges that run backwards through a written order.
+
+    `(component, the thing it gets results from, planned)` for every edge whose
+    source sits later than its target. `position` maps an id to its place in
+    whatever order the caller decided on — passed in rather than loaded,
+    because this module may not import the one that reads `config/`, and
+    because a check that took `config/flow-steps.yaml` as a parameter would be
+    a check about one file rather than about an order.
+
+    `gets_results_from` only, and that is the whole design. Results flow along
+    the pipeline, so a results edge from a later stage is a contradiction:
+    either the placement is wrong or the edge is. `calls` says "uses this
+    service" and nothing about position — eleven recorded calls run backwards
+    and every one of them is correct, nine being calls to the tracing service,
+    which sits in Engineering at the end of the page. A check that fires eleven
+    times on the day it ships is a check somebody switches off.
+
+    A component the order does not place is skipped rather than assumed: it has
+    no position to contradict.
+    """
+    conflicts = []
+    for cid, edges in neighbours(components).items():
+        here = position.get(cid)
+        if here is None:
+            continue
+        for edge in edges.gets_results_from:
+            there = position.get(edge.id)
+            if there is not None and there > here:
+                conflicts.append((cid, edge.id, edge.planned))
+    return sorted(conflicts)
+
+
 def isolated(components: list[ComponentFile]) -> list[str]:
     """Ids with no recorded edges in either direction.
 

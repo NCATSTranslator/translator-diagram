@@ -12,8 +12,14 @@ from pathlib import Path
 import click
 
 from .components import load_components
-from .dashboard import SyncedData, build_payload, write_dashboard
-from .flow import isolated
+from .dashboard import (
+    SyncedData,
+    build_payload,
+    in_stage_order,
+    load_stages,
+    write_dashboard,
+)
+from .flow import isolated, order_conflicts
 from .privacy import load_policy
 from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
@@ -143,5 +149,39 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     stranded = isolated(components)
     if stranded:
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
+    _report_order_conflicts(components)
     click.echo(f"Wrote {json_path}")
     click.echo(f"Wrote {html_path}")
+
+
+def _report_order_conflicts(components) -> None:
+    """Say where the written order and the recorded edges disagree.
+
+    Reported, not fatal — the same treatment `isolated` gets. Both are the page
+    arguing with the data it was built from, and neither is a reason to refuse
+    to publish: a build that stopped over a prose inconsistency would be a
+    build nobody runs.
+
+    Computed from every component and every stage rather than from the rows
+    that survived the privacy policy, so a published build reports the same
+    contradictions as a full one. A withheld component still has a place in the
+    order, and still contradicts it or does not.
+    """
+    steps = {
+        component.id: number
+        for component, number, _ in in_stage_order(components, load_stages())
+    }
+    conflicts = order_conflicts(components, steps)
+    if not conflicts:
+        return
+    click.echo("Stage order disagrees with the recorded edges:")
+    for cid, feeder, planned in conflicts:
+        mark = " (planned)" if planned else ""
+        click.echo(
+            f"  {cid} (step {steps[cid]}) gets results from "
+            f"{feeder} (step {steps[feeder]}){mark}"
+        )
+    click.echo(
+        "  Either the placement in config/flow-steps.yaml is wrong or the "
+        "edge is."
+    )

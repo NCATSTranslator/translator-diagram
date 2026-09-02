@@ -257,6 +257,19 @@ computes depths — `isolated` is what draws the left bar and what
 more, and `flow_steps` was deleted rather than left as a second answer to a
 question with one.
 
+**The recorded edges now check the written order rather than deriving it.**
+`flow.order_conflicts` reports a component staged before something it gets
+results from: either the placement is wrong or the edge is. It is clean across
+all twenty recorded results edges today, so `tests/test_flow_steps.py` holds it
+there, and `build-dashboard` prints any conflict without refusing to build —
+the same treatment `isolated` gets. That is the answer to issue #25: the module
+is a check on the order, not a second answer to it.
+
+Only `gets_results_from` is checked. Eleven `calls` edges run backwards and
+every one is correct — nine of them are calls to `jaeger`, which sits in
+Engineering at the end of the page. A check that fires eleven times on the day
+it ships is one somebody switches off.
+
 A component no stage names lands in a trailing band, and
 `tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
 the same contract as `unknown.yaml`, so a new component file cannot quietly

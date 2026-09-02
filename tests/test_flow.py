@@ -9,6 +9,7 @@ from translator_diagram.flow import (
     in_flow_order,
     isolated,
     neighbours,
+    order_conflicts,
 )
 
 
@@ -200,3 +201,41 @@ class TestNeighbours:
             if component.externals:
                 continue
             assert (component.id in stranded) is (not n[component.id])
+
+
+class TestOrderConflicts:
+    def test_a_results_edge_from_a_later_stage_is_a_conflict(self):
+        components = [_comp("early", gets=["late"]), _comp("late")]
+        assert order_conflicts(components, {"early": 1, "late": 2}) == [
+            ("early", "late", False)]
+
+    def test_the_right_way_round_is_not(self):
+        components = [_comp("late", gets=["early"]), _comp("early")]
+        assert order_conflicts(components, {"early": 1, "late": 2}) == []
+
+    def test_two_in_the_same_stage_do_not_conflict(self):
+        # Within-stage listing order is a judgement, not a rule, so it is not
+        # checked. Only a later stage feeding an earlier one is a contradiction.
+        components = [_comp("a", gets=["b"]), _comp("b")]
+        assert order_conflicts(components, {"a": 3, "b": 3}) == []
+
+    def test_a_call_backwards_is_not_a_conflict(self):
+        # The whole design: nine components call the tracing service, which
+        # sits at the end of the page. That is a shared service, not a stage.
+        components = [_comp("worker", calls=["tracing"]), _comp("tracing")]
+        assert order_conflicts(components, {"worker": 2, "tracing": 9}) == []
+
+    def test_a_planned_edge_conflicts_and_says_so(self):
+        components = [_comp("early", gets=["~late"]), _comp("late")]
+        assert order_conflicts(components, {"early": 1, "late": 2}) == [
+            ("early", "late", True)]
+
+    def test_a_component_the_order_does_not_place_is_skipped(self):
+        components = [_comp("placed", gets=["unplaced"]), _comp("unplaced")]
+        assert order_conflicts(components, {"placed": 1}) == []
+
+    def test_conflicts_come_back_in_a_stable_order(self):
+        components = [
+            _comp("z", gets=["late"]), _comp("a", gets=["late"]), _comp("late")]
+        assert [c[0] for c in order_conflicts(
+            components, {"a": 1, "z": 1, "late": 2})] == ["a", "z"]
