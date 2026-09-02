@@ -101,6 +101,43 @@ class TestVersionSourceChain:
         # babel_version is a *data* release, not the software version.
         assert cell["data_release"] == "babel 2025sep1 · biolink master"
 
+    def test_a_data_release_is_never_read_as_the_software_version(self, tmp_path):
+        # A body that reports its Biolink and TRAPI versions before its own.
+        # Taking the first *_version key would badge "4.2.5" as the software
+        # this component is running, tint its neighbours for drifting from it,
+        # and look for release notes under that tag.
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        path = tmp_path / "status" / "svc" / "ci.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({
+            "biolink_version": "4.2.5",
+            "trapi_version": "1.6.0",
+            "plover_version": "2.3.1",
+        }))
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("2.3.1", "status")
+
+    def test_a_body_with_only_data_releases_reports_no_version(self, tmp_path):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        path = tmp_path / "status" / "svc" / "ci.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"babel_version": "2025sep1"}))
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        assert cell["version"] is None
+        assert cell["data_release"] == "babel 2025sep1"
+
     def test_the_helm_chart_is_the_last_resort(self, tmp_path):
         # Tier four, and the only tier that describes what *should* be
         # deployed rather than what is. jaeger reaches it: no OpenAPI, no

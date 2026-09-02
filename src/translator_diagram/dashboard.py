@@ -53,6 +53,16 @@ SOURCE_LABELS = {
 # the list answer "where are the notes for the version in front of me?".
 RELEASES_SHOWN = 3
 
+# `*_version` keys in a /status body that name something other than the
+# software's own version. Babel and Biolink are *data* releases and TRAPI is a
+# spec, and a body is free to report any of them before it reports its own
+# version — at which point the first `*_version` key would become the
+# component's version, badged `status`, tinted for drift against its
+# neighbours, and matched against the repository's releases.
+NOT_SOFTWARE_VERSIONS = frozenset(
+    {"babel_version", "biolink_version", "biolink_model_version", "trapi_version"}
+)
+
 # Where a "last updated" date came from. A separate vocabulary from
 # SOURCE_LABELS on purpose: that one says where a version number came from,
 # this one says where a date did, and conflating them would put "OpenAPI" and
@@ -284,10 +294,15 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
 
     There is no Translator-wide /status schema — NameRes's shape is its own,
     and its OpenAPI declares the response `additionalProperties: true`. So this
-    looks for conventions rather than parsing a schema: any `*_version` key,
-    plus the Babel and Biolink fields that carry the *data* release, which is a
-    genuinely separate axis from the software version and which nothing else
-    exposes at runtime.
+    looks for conventions rather than parsing a schema: any `*_version` key
+    that is not one of the known data or spec releases, plus the Babel and
+    Biolink fields that carry the *data* release, which is a genuinely
+    separate axis from the software version and which nothing else exposes at
+    runtime.
+
+    Key order is the tie-break when a body reports several, which is why the
+    exclusions matter: a document that lists its Biolink version before its
+    own would otherwise have that reported as the software it is running.
     """
     if not document:
         return {}
@@ -303,9 +318,8 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(biolink, dict) and biolink.get("tag"):
         release.append(f"biolink {biolink['tag']}")
     return {
-        # babel_version is a data release, not the software's version.
         "version": next(
-            (v for k, v in versions.items() if k != "babel_version"), None
+            (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
         ),
         "data_release": " · ".join(release) or None,
         "reported": document.get("status"),
