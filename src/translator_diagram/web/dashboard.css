@@ -52,13 +52,17 @@
 
 * { box-sizing: border-box; }
 
+/* A deep link to a component must not land under the sticky filter bar. On
+   `body` this did nothing: the document's scrolling box is the root element,
+   so that is where the padding has to be, and the drift sentence's links have
+   been landing behind the bar since they were written. */
+html { scroll-padding-top: 8rem; }
+
 body {
   margin: 0;
   background: var(--page);
   color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* A deep link to a component must not land under the sticky filter bar. */
-  scroll-padding-top: 8rem;
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -235,7 +239,46 @@ tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent
   display: inline-block; padding: 0 6px; border-radius: 4px;
   background: var(--quiet-bg); color: var(--quiet-fg);
   font-size: 0.72rem; white-space: nowrap;
+  /* Transparent rather than absent, so the bordered variants below sit at the
+     same height as the plain external chips beside them. */
+  border: 1px solid transparent;
 }
+
+/* Neighbour chips: one per recorded edge, in the cell that names the
+   component the edge belongs to. `◀`/`▶` carry the side, exactly as they do
+   on an external chip, and the box carries the kind — solid for a results
+   edge, dashed for a call, outlined for an edge the other component's file
+   recorded rather than this one's. */
+.links { display: block; margin-top: 3px; }
+.chip.link { margin: 2px 3px 0 0; }
+a.chip.link { text-decoration: none; }
+a.chip.link:hover { border-color: var(--accent); color: var(--accent); }
+.chip.calls { background: none; border-color: var(--border-strong); border-style: dashed; }
+.chip.used { background: none; border-color: var(--border); color: var(--muted); }
+.chip.used.callside { border-style: dashed; }
+.chip.planned { border-style: dotted; opacity: 0.75; }
+/* The row exists; a filter is hiding it. Not a link, because there is nothing
+   to jump to until the filter changes. */
+.chip.gone { opacity: 0.55; }
+.chip.withheld { background: none; border-style: dashed; border-color: var(--border);
+                 color: var(--muted); font-style: italic; }
+/* "Checked, and there is nothing" — a claim, not an absence. */
+.chip.none { background: none; color: var(--muted); font-style: italic; }
+
+/* Room for two chips side by side. Without a floor the auto table layout
+   gives the first column just enough for the longest id and every chip takes
+   its own line, so `dingo-ingest` needs three lines to say two things.
+   1500px, not the 1100px where the chips start being shown: between those two
+   widths the table is already wider than the window — `prod` is off the right
+   edge at 1200px, with or without any of this — and a floor there would spend
+   width the environment columns are already short of. */
+@media (min-width: 1500px) {
+  th:first-child, td:first-child { min-width: 310px; }
+}
+
+/* Where a chip click landed. The drift sentence links to rows too, so this
+   was already worth having. */
+tbody tr:target td { background: var(--drift-bg); }
 
 /* Release tags under a repository link. Quiet by default: on most rows these
    are context, and three tags per row across 26 rows would shout if each were

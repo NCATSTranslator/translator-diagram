@@ -8,7 +8,8 @@
     "id",
     "name",
     "owner",
-    "refactor_status"
+    "refactor_status",
+    "connections"
   ],
   "additionalProperties": false,
   "properties": {
@@ -152,9 +153,14 @@
       }
     },
     "connections": {
-      "description": "The data flow between components, recorded by hand because nothing upstream records it. An empty list is a claim -- checked, there are none; an absent one means not yet recorded.",
+      "description": "The data flow between components, recorded by hand because nothing upstream records it. All three lists are required, and an empty one is a claim -- checked, there are none. The dashboard renders that claim, which is why absence is not allowed to stand in for it: a reader cannot tell an unanswered question from an answered one.",
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "gets_results_from",
+        "calls",
+        "externals"
+      ],
       "properties": {
         "gets_results_from": {
           "description": "Components this one gets results from.",

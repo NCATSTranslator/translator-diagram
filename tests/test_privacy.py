@@ -42,6 +42,69 @@ def _rows():
     ]
 
 
+def _connected_rows():
+    """Two rows where the one that survives names the one that does not."""
+    return [
+        {
+            "id": "keep",
+            "environments": {},
+            "connections": {
+                "gets_results_from": [{"id": "other", "name": "Other"}],
+                "calls": [{"id": "drop", "name": "Dropped Thing"}],
+                "used_by": [{"id": "drop", "name": "Dropped Thing",
+                             "kind": "calls"}],
+            },
+        },
+        {"id": "drop", "environments": {}, "connections": {
+            "gets_results_from": [], "calls": [], "used_by": []}},
+    ]
+
+
+class TestWithheldNeighbours:
+    """A withheld component must not survive as somebody else's neighbour."""
+
+    def test_the_entry_leaves_and_is_counted(self):
+        kept, _ = apply(_connected_rows(), _policy(components=["drop"]))
+        block = kept[0]["connections"]
+        assert [e["id"] for e in block["calls"]] == []
+        assert block["withheld"] == {"calls": 1, "used_by": 1}
+
+    def test_the_computed_direction_is_filtered_too(self):
+        # used_by is inverted rather than recorded, so it is the list a change
+        # is most likely to add without thinking about the policy.
+        kept, _ = apply(_connected_rows(), _policy(components=["drop"]))
+        assert kept[0]["connections"]["used_by"] == []
+
+    def test_a_neighbour_nobody_withheld_is_untouched(self):
+        kept, _ = apply(_connected_rows(), _policy(components=["drop"]))
+        block = kept[0]["connections"]
+        assert [e["id"] for e in block["gets_results_from"]] == ["other"]
+        assert "gets_results_from" not in block["withheld"]
+
+    def test_the_name_does_not_survive_either(self):
+        # verify matches case-insensitively, so a placeholder keeping the
+        # display name would fail the build as surely as one keeping the id.
+        kept, _ = apply(_connected_rows(), _policy(components=["drop"]))
+        assert "Dropped Thing" not in json.dumps(kept)
+
+    def test_a_filtered_payload_passes_verify(self):
+        policy = _policy(components=["drop"])
+        kept, _ = apply(_connected_rows(), policy)
+        verify({"rows": kept}, policy)
+
+    def test_an_unfiltered_neighbour_list_is_caught(self):
+        # The guard, from the other side: this is what the build does without
+        # _withhold_neighbours.
+        rows = _connected_rows()
+        payload = {"rows": [row for row in rows if row["id"] != "drop"]}
+        with pytest.raises(click.ClickException, match="still appear"):
+            verify(payload, _policy(components=["drop"]))
+
+    def test_a_row_with_no_connections_block_is_not_an_error(self):
+        kept, _ = apply(_rows(), _policy(components=["drop"]))
+        assert "connections" not in kept[0]
+
+
 class TestApply:
     def test_a_withheld_component_leaves_the_rows(self):
         kept, report = apply(_rows(), _policy(components=["drop"]))
@@ -280,6 +343,32 @@ class TestVerify:
         }
         with pytest.raises(click.ClickException, match="still set on"):
             verify(payload, _policy(environment_fields=["uptime"]))
+
+    def test_the_real_components_verify_with_no_sync(self, tmp_path):
+        """The regression gate, and the reason it does not need a sync.
+
+        `test_the_real_public_build_verifies` below skips unless someone has
+        run sync-components, and `data/` is gitignored — so it does not run in
+        CI, which is where a leak has to be caught. This one builds the real
+        component files against an empty cache: no network, no fixtures, and
+        every recorded edge in the payload.
+        """
+        from translator_diagram.components import load_components
+
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        policy = load_policy()
+        payload = build_payload(
+            load_components(pathlib.Path("components")),
+            SyncedData(tmp_path),
+            policy,
+        )
+        verify(payload, policy)
+        # Not a vacuous pass: the real files do name the withheld components.
+        withheld = [
+            row["id"] for row in payload["rows"]
+            if row["connections"].get("withheld")
+        ]
+        assert len(withheld) >= 9
 
     def test_the_real_public_build_verifies(self):
         """What `build-dashboard` does before it writes, on real data."""

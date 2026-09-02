@@ -71,6 +71,29 @@ class TestEdges:
         component = _parse(connections={"calls": ["~a"]})
         assert component.upstream == ["a"]
 
+    def test_the_two_kinds_stay_apart(self):
+        # `upstream` merges them for ordering; the page does not, because
+        # "takes results from" and "calls" are different claims.
+        component = _parse(
+            connections={"gets_results_from": ["a"], "calls": ["b"]})
+        assert [e.id for e in component.gets_results_from] == ["a"]
+        assert [e.id for e in component.calls] == ["b"]
+
+    def test_a_planned_edge_is_flagged_not_spelled(self):
+        component = _parse(connections={"calls": ["~a", "b"]})
+        assert [(e.id, e.planned) for e in component.calls] == [
+            ("a", True), ("b", False)]
+
+    def test_the_files_order_is_kept(self):
+        # The order a file lists its edges in is a judgement, the same as the
+        # order a stage lists its components in.
+        component = _parse(connections={"calls": ["z", "a", "m"]})
+        assert [e.id for e in component.calls] == ["z", "a", "m"]
+
+    def test_an_absent_list_is_no_edges(self):
+        assert _parse(connections={}).calls == []
+        assert _parse().gets_results_from == []
+
     def test_externals_are_direction_and_name(self):
         component = _parse(connections={"externals": [
             {"direction": "in", "name": "Sources"}]})

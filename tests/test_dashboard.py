@@ -347,6 +347,60 @@ class TestPayload:
             assert key in row
 
 
+class TestConnectionsOnRows:
+    def _rows(self, tmp_path, *specs):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        components = [
+            _comp(cid, name=cid.upper(), connections=conns)
+            for cid, conns in specs
+        ]
+        rows = build_rows(components, SyncedData(tmp_path))
+        return {row["id"]: row["connections"] for row in rows}
+
+    def test_both_recorded_directions_reach_the_payload(self, tmp_path):
+        blocks = self._rows(
+            tmp_path,
+            ("a", {"gets_results_from": ["b"], "calls": ["c"]}),
+            ("b", {}), ("c", {}),
+        )
+        assert [e["id"] for e in blocks["a"]["gets_results_from"]] == ["b"]
+        assert [e["id"] for e in blocks["a"]["calls"]] == ["c"]
+
+    def test_the_inversion_reaches_it_too(self, tmp_path):
+        blocks = self._rows(
+            tmp_path, ("a", {"calls": ["b"]}), ("b", {}))
+        assert blocks["b"]["used_by"] == [
+            {"id": "a", "name": "A", "kind": "calls"}]
+
+    def test_a_display_name_travels_with_every_id(self, tmp_path):
+        # Looked up in the browser it would come back blank for a neighbour
+        # the privacy policy withheld, which is worse than no chip at all.
+        blocks = self._rows(tmp_path, ("a", {"calls": ["b"]}), ("b", {}))
+        assert blocks["a"]["calls"][0]["name"] == "B"
+
+    def test_planned_is_present_only_when_true(self, tmp_path):
+        blocks = self._rows(
+            tmp_path, ("a", {"calls": ["~b", "c"]}), ("b", {}), ("c", {}))
+        assert blocks["a"]["calls"][0]["planned"] is True
+        assert "planned" not in blocks["a"]["calls"][1]
+
+    def test_a_component_with_no_edges_carries_empty_lists(self, tmp_path):
+        # Empty rather than absent: the file's empty list is a claim, and the
+        # page renders it as one.
+        blocks = self._rows(tmp_path, ("lonely", {}))
+        assert blocks["lonely"] == {
+            "gets_results_from": [], "calls": [], "used_by": []}
+
+    def test_nothing_is_withheld_without_a_policy(self, tmp_path):
+        blocks = self._rows(tmp_path, ("a", {"calls": ["b"]}), ("b", {}))
+        assert "withheld" not in blocks["a"]
+
+    def test_depth_is_still_in_the_payload(self, tmp_path, component, synced):
+        # Unread by this page's JS, and still a key overview.json promises.
+        assert "depth" in build_rows([component], synced)[0]
+
+
 class TestOtelTile:
     def _synced(self, tmp_path, bodies):
         (tmp_path / "manifest.json").write_text('{"fetches": []}')

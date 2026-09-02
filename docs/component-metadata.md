@@ -200,10 +200,13 @@ file only because `ui` calls it.
 **An empty list is a claim; a default flag is not.** `gets_results_from: []`
 says this component was checked and gets results from nothing, which is the
 absent-versus-`null` rule applied to a list — so `connections:` keeps its
-empty lists. A `diagram:` flag at its default says only what the schema
-already says, so it is not written at all, and the block goes with it once it
-is empty. The distinction is why one block is full of `[]` and the other is
-usually missing.
+empty lists. The block and all three of its lists are *required*, which is the
+one place this format does not let absence stand for "not recorded yet": the
+dashboard renders the empty list as a claim, and a reader cannot tell an
+unanswered question from an answered one. A `diagram:` flag at its default
+says only what the schema already says, so it is not written at all, and the
+block goes with it once it is empty. The distinction is why one block is full
+of `[]` and the other is usually missing.
 
 **Public information only.** Every URL in this repo is already publicly
 reachable; the transltr.io endpoints are all discoverable through SmartAPI. A

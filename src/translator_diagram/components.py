@@ -68,6 +68,19 @@ MATURITY_TO_ENV = {
 
 
 @dataclass(frozen=True)
+class Edge:
+    """One recorded edge from a component file to another component.
+
+    `planned` is the `~` prefix the files write: an edge somebody intends but
+    has not built. It is kept rather than dropped because an intention is a
+    claim about the architecture, and the page says so.
+    """
+
+    id: str
+    planned: bool = False
+
+
+@dataclass(frozen=True)
 class Deployment:
     """One environment a component is deployed to."""
 
@@ -137,6 +150,28 @@ class ComponentFile:
     def hidden(self) -> bool:
         return bool(self.diagram.get("hide"))
 
+    def _edges(self, key: str) -> list[Edge]:
+        """One recorded edge list, with the planned marker split out.
+
+        `~` is stripped here and nowhere else: an id that keeps its tilde
+        matches no component file, so every consumer would have to remember to
+        strip it, and the one that forgot would silently find nothing.
+        """
+        return [
+            Edge(id=ref.lstrip("~"), planned=ref.startswith("~"))
+            for ref in (self.connections.get(key) or [])
+        ]
+
+    @property
+    def gets_results_from(self) -> list[Edge]:
+        """Components this one takes results from, in the file's order."""
+        return self._edges("gets_results_from")
+
+    @property
+    def calls(self) -> list[Edge]:
+        """Components this one calls."""
+        return self._edges("calls")
+
     @property
     def upstream(self) -> list[str]:
         """Component ids that supply this one, '~' stripped.
@@ -145,12 +180,12 @@ class ComponentFile:
         component you call both hand you data back, and for a data-flow
         ordering that is the same relationship. The diagram draws them
         differently because *how* they are called differs, which is a
-        rendering concern, not a flow one.
+        rendering concern, not a flow one — and the dashboard now makes the
+        same distinction, which is what `gets_results_from` and `calls` are
+        for. This stays the flattened view, because flow ordering is the one
+        question that genuinely does not care.
         """
-        edges = (self.connections.get("gets_results_from") or []) + (
-            self.connections.get("calls") or []
-        )
-        return [ref.lstrip("~") for ref in edges]
+        return [edge.id for edge in self.gets_results_from + self.calls]
 
     @property
     def externals(self) -> list[tuple[str, str]]:

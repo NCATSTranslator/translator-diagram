@@ -250,7 +250,96 @@ function repoCell(row) {
   return releases ? `${link}<span class="releases">${releases}</span>` : link;
 }
 
+/* Which rows the filters are showing, so a neighbour chip can say "hidden"
+   rather than link to a row that is not on the page. Set by render() before
+   the body is built, because the chips are drawn from the full component set
+   and the filter is applied to the rows. */
+let visibleIds = new Set();
+
+/* One neighbour, as a chip. The label is the id and not the display name:
+   ids are short, every pixel here is a pixel the environment columns do not
+   get, and the finding above the table already names components by id.
+
+   `◀` and `▶` mean the same thing they mean on an external chip — which side
+   of this component the other one sits on — so the *kind* of edge is carried
+   by the box instead: a dashed border for a call, an outline for an edge the
+   other file recorded, a dotted one for an edge nobody has built yet. That
+   keeps one glyph vocabulary on the page rather than two, and avoids a third
+   arrow, which is the one that would have rendered as a colour emoji on some
+   platform. */
+function linkChip(entry, glyph, cls, title) {
+  const label = `${glyph} ${entry.planned ? "~" : ""}${entry.id}`;
+  const full = entry.planned ? `${title} — planned, not built yet` : title;
+  const classes = `chip link ${cls}${entry.planned ? " planned" : ""}`;
+  if (!visibleIds.has(entry.id)) {
+    // The row exists but a filter is hiding it. Deliberately not the same as
+    // a neighbour the published build withheld: one is your filter, the other
+    // is not on this page at all.
+    const hidden = `${full} — hidden by the current filter`;
+    return `<span class="${classes} gone" title="${esc(hidden)}">${esc(label)}</span>`;
+  }
+  return `<a class="${classes}" href="#c-${esc(entry.id)}"
+     title="${esc(full)}">${esc(label)}</a>`;
+}
+
+/* Carries the glyph of the list it stands in, because it stands *in* that
+   list: on a component whose only call is to a withheld service, this chip is
+   the entire calls list, and without the side marker it reads as a stray. */
+function withheldChip(count, what, glyph) {
+  const many = count !== 1;
+  const title = `${count} component${many ? "s" : ""} this one ${what} `
+    + `${many ? "are" : "is"} withheld from the published build; `
+    + `see config/privacy.yaml`;
+  return `<span class="chip withheld" title="${esc(title)}"
+    >${glyph} ${count} withheld</span>`;
+}
+
+/* An empty `gets_results_from` and an empty `calls` are a claim: the file
+   format requires both keys, so writing them empty says somebody checked and
+   there is nothing. Saying nothing here would lose that — and it matters most
+   on a row that has inbound chips, where "checked, nothing" and "nobody has
+   looked" would otherwise be the same blank.
+
+   There is deliberately no matching chip for an empty `used_by`. That list is
+   computed by inverting the other twenty-five files, so its emptiness is a
+   fact about them, not a claim this component's author made. */
+function noneChip() {
+  const title = "Checked: this component's file records nothing it gets "
+    + "results from and nothing it calls";
+  return `<span class="chip none" title="${esc(title)}">◀ none recorded</span>`;
+}
+
+function linkChips(row) {
+  const links = row.connections;
+  if (!links) return "";
+  const held = links.withheld ?? {};
+  const nothingOut = !links.gets_results_from.length && !links.calls.length
+    && !held.gets_results_from && !held.calls;
+  const chips = [
+    ...(nothingOut ? [noneChip()] : []),
+    ...links.gets_results_from.map((e) =>
+      linkChip(e, "◀", "from", `Gets results from ${e.name}`)),
+    ...(held.gets_results_from
+      ? [withheldChip(held.gets_results_from, "gets results from", "◀")] : []),
+    ...links.calls.map((e) => linkChip(e, "◀", "calls", `Calls ${e.name}`)),
+    ...(held.calls ? [withheldChip(held.calls, "calls", "◀")] : []),
+    ...links.used_by.map((e) => linkChip(
+      e, "▶", `used${e.kind === "calls" ? " callside" : ""}`,
+      `${e.name} ${e.kind === "calls" ? "calls" : "gets results from"} this`)),
+    ...(held.used_by ? [withheldChip(held.used_by, "is named by", "▶")] : []),
+  ];
+  // drop-md, so the block goes at the width where the environment columns
+  // start needing the room. Same reason the rule at that breakpoint hides the
+  // per-environment sub-lines: those four columns are what the page is for.
+  return chips.length
+    ? `<span class="links drop-md">${chips.join(" ")}</span>` : "";
+}
+
 function componentCell(row) {
+  // Externals are not gated on Details, and the neighbours are. An external
+  // has no row to jump to, so its chip is the only record of that edge
+  // anywhere on the page; a neighbour chip is a shortcut to a row that is
+  // already right there.
   const externals = (row.externals ?? [])
     .map((e) => `<span class="chip">${e.direction === "in" ? "◀" : "▶"} ${esc(e.name)}</span>`)
     .join(" ");
@@ -258,6 +347,7 @@ function componentCell(row) {
       <span class="component">${esc(row.name)}</span>
       <span class="cid">${esc(row.id)}</span>
       ${externals}
+      ${state.details ? linkChips(row) : ""}
     </td>`;
 }
 
@@ -473,6 +563,7 @@ function measureFilters() {
 
 function render() {
   const rows = sortRows(visibleRows());
+  visibleIds = new Set(rows.map((row) => row.id));
   document.getElementById("count").textContent =
     `${rows.length} of ${DATA.rows.length} components`;
   document.getElementById("order").innerHTML = orderHtml();
@@ -612,7 +703,11 @@ function shell() {
       notes, and a filled tag is running in one of the environments on its row. Ages
       are counted from your clock to the exact date in the tooltip, and they date a
       release or a registration — nothing here knows when an environment was last
-      deployed. Click any header to sort; a third click returns to stage order.
+      deployed. In Component, a chip naming another component is a recorded edge:
+      ◀ is something this one takes results from or calls, ▶ is something that
+      names it, a dashed box is a call rather than a results edge, and a ~ marks
+      an edge that is planned rather than built.
+      Click any header to sort; a third click returns to stage order.
       Generated by <code>build-dashboard</code>.${withheldNote()}
     </footer>
   </div>`;
@@ -709,3 +804,9 @@ render();
 addEventListener("resize", measureFilters);
 // Only now: everything above can set state without the URL fighting it back.
 urlReady = true;
+// A pasted chip link names a row that did not exist when the browser went
+// looking for it — the table is built by render(), two lines up. Nothing
+// scrolls to it unless we do it here.
+if (location.hash.startsWith("#c-")) {
+  document.getElementById(location.hash.slice(1))?.scrollIntoView();
+}

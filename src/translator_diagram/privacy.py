@@ -205,6 +205,39 @@ def _redactions(
     return tuple(out)
 
 
+NEIGHBOUR_LISTS = ("gets_results_from", "calls", "used_by")
+"""The lists inside a row's `connections` block that name components by id.
+
+The hazard `verify`'s docstring describes, made real: nine kept rows list
+`jaeger` under `calls`, and `used_by` is computed rather than recorded, so it
+is the one a later change is most likely to add without thinking about the
+policy at all.
+"""
+
+
+def _withhold_neighbours(row: dict[str, Any], withheld: set[str]) -> None:
+    """Drop withheld components from one row's connection lists, and count them.
+
+    Whole entries, never blanked ones: the display name travels beside the id,
+    `verify` matches names case-insensitively, and a placeholder carrying
+    "Jaeger" would fail the build as surely as one carrying "jaeger".
+
+    The count is what stops the removal being a lie. A list one entry shorter
+    with nothing said reads as a component that calls eight things; the page
+    can say "and one withheld", which is true, and which is all this policy
+    ever claims to do.
+    """
+    block = row.get("connections")
+    if not block:
+        return
+    for key in NEIGHBOUR_LISTS:
+        entries = block.get(key) or []
+        kept = [entry for entry in entries if entry.get("id") not in withheld]
+        if len(kept) != len(entries):
+            block.setdefault("withheld", {})[key] = len(entries) - len(kept)
+        block[key] = kept
+
+
 def apply(
     rows: list[dict[str, Any]], policy: Policy
 ) -> tuple[list[dict[str, Any]], Report]:
@@ -231,6 +264,7 @@ def apply(
                 if name in cell:
                     cell[name] = _emptied(cell.get(name))
             _drop_withheld_versions(cell, withheld_sources)
+        _withhold_neighbours(row, withheld_ids)
     report = Report(
         components=tuple(
             row["id"] for row in rows if row.get("id") in withheld_ids
