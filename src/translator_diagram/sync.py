@@ -291,8 +291,14 @@ def _confirm_derived(
     fetcher: Fetcher,
     root: Path,
     max_age: int,
-) -> FetchResult | None:
+) -> tuple[FetchResult | None, bool]:
     """Contact a derived host, and keep it only if it is really this component.
+
+    Returns what the request was, and whether it confirmed the candidate. The
+    two are separate because they answer different questions: the manifest
+    records every request this run made, and a probe that reached a host and
+    was turned away is still a request. Returning only the accepted ones is how
+    the manifest came to under-report its own attempts.
 
     A 200 alone is not enough. Hostnames in one namespace can and do resolve to
     something adjacent, so where the component records an infores the document
@@ -304,14 +310,14 @@ def _confirm_derived(
     the candidate is dropped: an unverifiable guess is worth less than a gap.
     """
     if not component.infores:
-        return None
+        return None, False
     url = endpoint_url_in(component, candidate, "openapi")
     if not url:
-        return None
+        return None, False
     destination = root / "openapi" / component.id / f"{candidate.env}.json"
     result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
     if not result.ok:
-        return None
+        return result, False
     try:
         document = json.loads(destination.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError, OSError):
@@ -329,8 +335,8 @@ def _confirm_derived(
         # Answered, but it is not this component. Drop the body so a later run
         # does not read it as though it were.
         destination.unlink(missing_ok=True)
-        return None
-    return result
+        return result, False
+    return result, True
 
 
 def sync(
@@ -474,13 +480,17 @@ def sync(
                              _confirm_derived(job[0], job[2], fetcher, root, max_age)),
                 pending,
             ))
-        for component, env, candidate, result in confirmed:
-            if result is None:
+        for component, env, candidate, (result, accepted) in confirmed:
+            # Every request, not every success: nine of these hostnames do not
+            # resolve, and a manifest that leaves them out is one that cannot
+            # be used to ask what this run actually did.
+            if result is not None:
+                report.fetches.append(result)
+            if not accepted:
                 rejected.setdefault(component.id, {})[env] = {
                     "url": candidate.url, "checked_at": _now(),
                 }
                 continue
-            report.fetches.append(result)
             derived.setdefault(component.id, {})[env] = {
                 "url": candidate.url, "location": candidate.location,
             }
