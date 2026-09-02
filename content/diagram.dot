@@ -1,0 +1,229 @@
+digraph translator_components {
+	graph [concentrate=false dpi=150 fontname=Helvetica fontsize=12 newrank=true nodesep=0.3 rankdir=TB ranksep=0.5 splines=true]
+	node [fontname=Helvetica fontsize=11 shape=box style="filled,rounded"]
+	edge [fontname=Helvetica fontsize=9]
+	subgraph cluster_group_dog_park {
+		bgcolor=transparent color="#555555" fillcolor="#DDDDDD" fontname=Helvetica label=<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3"><TR><TD><FONT COLOR="white" POINT-SIZE="12"><B>Dog Park</B></FONT></TD></TR></TABLE>> labelloc=t penwidth=1.5 style=filled
+		"dogpark-ranger" [label="DogPark Ranger
+dogpark-ranger
+Hosted at: Scripps 🌐" URL="https://github.com/NCATSTranslator/DogPark-Ranger" fillcolor="#AD5389" fontcolor=white id=dogpark_ranger penwidth=2.0 target=_blank tooltip="DogPark Ranger (dogpark-ranger)
+Owner: DOGSURF
+Status: New in Refactor"]
+		"dogpark-tier-0" [label="Tier 0: Gandalf (full KGX)
+dogpark-tier-0" URL="https://github.com/ranking-agent/gandalf" fillcolor="#42A5F5" fontcolor=black id=dogpark_tier_0 penwidth=2.0 target=_blank tooltip="Tier 0: Gandalf (full KGX) (dogpark-tier-0)
+Owner: DOGSLED
+Status: New in Refactor"]
+		"dogpark-tier-1" [label="Tier 1: ElasticSearch (KGX split out by data source)
+dogpark-tier-1" fillcolor="#AD5389" fontcolor=white id=dogpark_tier_1 penwidth=2.0 tooltip="Tier 1: ElasticSearch (KGX split out by data source) (dogpark-tier-1)
+Owner: DOGSURF
+Status: New in Refactor
+Actual data later, called by retriever"]
+	}
+	subgraph cluster_group_shepherd {
+		bgcolor=transparent color="#555555" fillcolor="#DDDDDD" fontname=Helvetica label=<<TABLE BGCOLOR="#555555" BORDER="0" CELLPADDING="3"><TR><TD><FONT COLOR="white" POINT-SIZE="12"><B>Shepherd</B></FONT></TD></TR></TABLE>> labelloc=t penwidth=1.5 style=filled
+		"shepherd-aragorn" [label="ARAGORN
+shepherd-aragorn" URL="https://github.com/BioPack-team/shepherd" fillcolor="#42A5F5" fontcolor=black id=shepherd_aragorn penwidth=2.0 target=_blank tooltip="ARAGORN (shepherd-aragorn)
+Owner: DOGSLED
+Status: New in Refactor"]
+		"shepherd-arax" [label="ARAX
+shepherd-arax" URL="https://github.com/BioPack-team/shepherd" fillcolor="#3F51B5" fontcolor=white id=shepherd_arax penwidth=2.0 target=_blank tooltip="ARAX (shepherd-arax)
+Owner: CATRAX
+Status: New in Refactor
+Contains ARAX, ARAGORN and BTE"]
+		"shepherd-bte" [label="BioThings Explorer (BTE)
+shepherd-bte" URL="https://github.com/BioPack-team/shepherd" fillcolor="#AD5389" fontcolor=white id=shepherd_bte penwidth=2.0 target=_blank tooltip="BioThings Explorer (BTE) (shepherd-bte)
+Owner: DOGSURF
+Status: New in Refactor"]
+	}
+	"answer-appraiser" [label="Answer Appraiser
+answer-appraiser" URL="https://github.com/TranslatorSRI/answer-appraiser" fillcolor="#42A5F5" fontcolor=black id=answer_appraiser penwidth=1.0 target=_blank tooltip="Answer Appraiser (answer-appraiser)
+Owner: DOGSLED
+Status: Continues into Refactor"]
+	arax [label="RTX/ARAX
+arax" URL="https://github.com/RTXteam/RTX" fillcolor="#3F51B5" fontcolor=white id=arax penwidth=1.0 target=_blank tooltip="RTX/ARAX (arax)
+Owner: CATRAX
+Status: Continues into Refactor
+SmartAPI registers the TRAPI base URL with the API version in the path (.../api/arax/v1.4), so the version moves when TRAPI does."]
+	ars [label="ARS
+ars" URL="https://github.com/NCATSTranslator/Relay" fillcolor="#DDB4F9" fontcolor=black id=ars penwidth=1.0 target=_blank tooltip="ARS (ars)
+Owner: NCATS
+Status: Continues into Refactor
+Calls SmartAPI on boot to fetch registration data"]
+	"ars-test-server" [label="ARS Test Server
+ars-test-server" fillcolor="#DDB4F9" fontcolor=black id=ars_test_server penwidth=1.0 tooltip="ARS Test Server (ars-test-server)
+Owner: NCATS
+Status: Continues into Refactor
+A small server that periodically runs performance tests on a cron job"]
+	"dingo-ingest" [label="DINGO Ingests
+dingo-ingest" URL="https://github.com/NCATSTranslator/translator-ingests" fillcolor="#26C6DA" fontcolor=black id=dingo_ingest penwidth=2.0 target=_blank tooltip="DINGO Ingests (dingo-ingest)
+Owner: DINGO
+Status: New in Refactor"]
+	"kgx-storage-pipeline" [label="KGX Storage
+kgx-storage-pipeline" URL="https://github.com/RTXteam/kgx-storage" fillcolor="#26C6DA" fontcolor=black id=kgx_storage_pipeline penwidth=2.0 target=_blank tooltip="KGX Storage (kgx-storage-pipeline)
+Owner: DINGO
+Status: New in Refactor"]
+	"name-lookup" [label="Name Lookup (NameRes)
+name-lookup" URL="https://github.com/NCATSTranslator/NameResolution" fillcolor="#42A5F5" fontcolor=black id=name_lookup penwidth=1.0 target=_blank tooltip="Name Lookup (NameRes) (name-lookup)
+Owner: DOGSLED
+Status: Continues into Refactor"]
+	"node-annotator" [label="Node Annotator
+node-annotator" URL="https://github.com/biothings/biothings_annotator" fillcolor="#AB47BC" fontcolor=white id=node_annotator penwidth=1.0 target=_blank tooltip="Node Annotator (node-annotator)
+Owner: CoCoWG
+Status: Continues into Refactor
+Registered in SmartAPI without an infores, and its ci/test servers carry no x-maturity and are declared http:// not https://. SmartAPI registers it at biothings.ci.transltr.io/annotator, which does not serve the OpenAPI document; annotator.ci.transltr.io does. Both were live on 2026-08-31, so the ci base URL is recorded here rather than pulled. Prod serves its OpenAPI at openapi.json rather than the webapp/openapi.json that ci and test use, so it carries a per-environment override; ci and test are the intended convention going forward."]
+	"nodenorm-es" [label="NodeNorm ES
+nodenorm-es" URL="https://github.com/biothings/NodeNormalizationAPI" fillcolor="#AB47BC" fontcolor=white id=nodenorm_es penwidth=2.0 target=_blank tooltip="NodeNorm ES (nodenorm-es)
+Owner: CoCoWG
+Status: New in Refactor"]
+	"pending-api" [label="BioThings Pending API
+pending-api" URL="https://github.com/biothings/pending.api" fillcolor="#AD5389" fontcolor=white id=pending_api penwidth=1.0 target=_blank tooltip="BioThings Pending API (pending-api)
+Owner: DOGSURF
+Status: Continues into Refactor
+Hosts a number of APIs from the previous phase. Some have moved to CoCo's own ES server (nodenorm, annotator, nameres) and the BTE ones are expected to be removed, but this host is likely to stay live while any of its APIs are still in use, and could host tier 2 knowledge graph APIs later."]
+	ploverdb [label="Ploverdb
+ploverdb" URL="https://github.com/RTXteam/PloverDB" fillcolor="#3F51B5" fontcolor=white id=ploverdb penwidth=1.0 target=_blank tooltip="Ploverdb (ploverdb)
+Owner: CATRAX
+Status: Continues into Refactor
+The SmartAPI record is registered as infores:rtx-kg2 — the knowledge graph — not as PloverDB, the server that hosts it. Its servers are kg2cploverdb.*.transltr.io."]
+	retriever [label="Retriever (query API)
+retriever" URL="https://github.com/BioPack-team/retriever" fillcolor="#AD5389" fontcolor=white id=retriever penwidth=2.0 target=_blank tooltip="Retriever (query API) (retriever)
+Owner: DOGSURF
+Status: New in Refactor
+API server to route calls to the different tiers"]
+	smartapi [label="SmartAPI
+smartapi
+Hosted at: DogPark AWS" URL="https://github.com/NCATSTranslator/smartAPI" fillcolor="#AD5389" fontcolor=white id=smartapi penwidth=1.0 target=_blank tooltip="SmartAPI (smartapi)
+Owner: DOGSURF
+Status: Continues into Refactor"]
+	"test-harness" [label="Test Harness
+test-harness
+Hosted at: RENCI 🌐" URL="https://github.com/TranslatorSRI/TestHarness" fillcolor="#42A5F5" fontcolor=black id=test_harness penwidth=1.0 target=_blank tooltip="Test Harness (test-harness)
+Owner: DOGSLED
+Status: Continues into Refactor
+The Test Harness uses Smart API to grab the urls for the various components it tests. It isn't really hosted, but is a spawned python script that runs on the RENCI server."]
+	"translator-component-toolkit" [label="Translator Component Toolkit
+translator-component-toolkit
+Hosted at: Local 💻" URL="https://github.com/NCATSTranslator/Translator_component_toolkit" fillcolor="#3F51B5" fontcolor=white id=translator_component_toolkit penwidth=1.0 target=_blank tooltip="Translator Component Toolkit (translator-component-toolkit)
+Owner: CATRAX
+Status: Continues into Refactor"]
+	"translator-sdk" [label="Translator SDK
+translator-sdk
+Hosted at: Local 💻" URL="https://github.com/NCATSTranslator/Translator_sdk" fillcolor="#AB47BC" fontcolor=white id=translator_sdk penwidth=2.0 target=_blank tooltip="Translator SDK (translator-sdk)
+Owner: CoCoWG
+Status: New in Refactor"]
+	ui [label="Translator UI
+ui" URL="https://github.com/NCATSTranslator/ui-fe" fillcolor="#C2185B" fontcolor=white id=ui penwidth=1.0 target=_blank tooltip="Translator UI (ui)
+Owner: UI
+Status: Continues into Refactor"]
+	"docmetadata-api" [label="docmetadata-api
+docmetadata-api
+(excluded)" color="#999999" fillcolor="#D3D3D3" fontcolor="#666666" id=docmetadata_api style="filled,rounded,dashed" tooltip="docmetadata-api (docmetadata-api) — excluded by the current filter"]
+	"shepherd-arax" -> ars
+	"shepherd-aragorn" -> ars
+	"shepherd-bte" -> ars
+	ars -> "nodenorm-es" [style=dashed]
+	ars__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=ars__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	ars -> ars__jaeger [style=dashed]
+	ars -> "answer-appraiser" [style=dashed]
+	ars -> "node-annotator" [style=dashed]
+	ars -> smartapi [style=dashed]
+	"ars-test-server" -> ars [style=dashed]
+	"dingo-ingest" -> "nodenorm-es" [style=dashed]
+	"kgx-storage-pipeline" -> "dogpark-ranger"
+	"kgx-storage-pipeline" -> "dogpark-tier-0"
+	"dogpark-ranger" -> "dogpark-tier-0" [color=red style=solid]
+	dogpark_tier_0__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=dogpark_tier_0__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"dogpark-tier-0" -> dogpark_tier_0__jaeger [style=dashed]
+	"dogpark-ranger" -> "dogpark-tier-1"
+	"dingo-ingest" -> "kgx-storage-pipeline"
+	name_lookup__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=name_lookup__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"name-lookup" -> name_lookup__jaeger [style=dashed]
+	"node-annotator" -> "pending-api" [style=dashed]
+	node_annotator__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=node_annotator__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"node-annotator" -> node_annotator__jaeger [color=red style=dashed]
+	nodenorm_es__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=nodenorm_es__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"nodenorm-es" -> nodenorm_es__jaeger [style=dashed]
+	"dogpark-tier-0" -> retriever
+	"dogpark-tier-1" -> retriever
+	retriever__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=retriever__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	retriever -> retriever__jaeger [style=dashed]
+	retriever -> "shepherd-aragorn"
+	shepherd_aragorn__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=shepherd_aragorn__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"shepherd-aragorn" -> shepherd_aragorn__jaeger [style=dashed]
+	retriever -> "shepherd-arax"
+	shepherd_arax__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=shepherd_arax__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"shepherd-arax" -> shepherd_arax__jaeger [style=dashed]
+	retriever -> "shepherd-bte"
+	shepherd_bte__jaeger [label="Jaeger (OTel)
+jaeger" fillcolor="#42A5F5" fontcolor=black id=shepherd_bte__jaeger penwidth=1.0 tooltip="Jaeger (OTel) (jaeger)
+Owner: DOGSLED
+Status: Continues into Refactor
+Third-party software, not a Translator component: we deploy upstream Jaeger. Only the chart is ours."]
+	"shepherd-bte" -> shepherd_bte__jaeger [style=dashed]
+	ars -> "test-harness"
+	"test-harness" -> smartapi [style=dashed]
+	ars -> "translator-component-toolkit"
+	"shepherd-arax" -> "translator-component-toolkit"
+	"shepherd-aragorn" -> "translator-component-toolkit"
+	"shepherd-bte" -> "translator-component-toolkit"
+	retriever -> "translator-component-toolkit"
+	"translator-component-toolkit" -> "translator-sdk" [style=dashed]
+	"translator-component-toolkit" -> smartapi [style=dashed]
+	"translator-sdk" -> "nodenorm-es" [style=dashed]
+	"translator-sdk" -> "name-lookup" [style=dashed]
+	"translator-sdk" -> "node-annotator" [style=dashed]
+	"translator-sdk" -> smartapi [color=red style=dashed]
+	ars -> ui
+	ui -> "docmetadata-api" [style=dashed]
+	ui -> "name-lookup" [style=dashed]
+	ext__external_data_sources [label="External Data Sources" fillcolor="#FFE082" fontname=Helvetica fontsize=13 id=ext__external_data_sources penwidth=2.5 shape=cylinder style=filled tooltip="External Data Sources"]
+	ext__engineering [label=Engineering fillcolor="#FFE082" fontname=Helvetica fontsize=13 id=ext__engineering penwidth=2.5 peripheries=2 shape=oval style=filled tooltip=Engineering]
+	ext__super_user [label="Super User" fillcolor="#FFE082" fontname=Helvetica fontsize=13 id=ext__super_user penwidth=2.5 peripheries=2 shape=oval style=filled tooltip="Super User"]
+	ext__user [label=User fillcolor="#FFE082" fontname=Helvetica fontsize=13 id=ext__user penwidth=2.5 peripheries=2 shape=oval style=filled tooltip=User]
+	{
+		rank=min
+		ext__external_data_sources
+	}
+	{
+		rank=max
+		ext__engineering
+		ext__super_user
+		ext__user
+	}
+	ext__external_data_sources -> "dingo-ingest"
+	"test-harness" -> ext__engineering
+	"translator-component-toolkit" -> ext__super_user
+	ui -> ext__user
+}

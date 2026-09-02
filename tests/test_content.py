@@ -279,3 +279,39 @@ class TestContentTree:
         page = (out / "components" / "alpha.md").read_text()
         assert page.index("## Private") < page.index(LIVE_MARKER)
 
+
+
+class TestCommittedContent:
+    """The committed tree is what `build-content` writes from this checkout.
+
+    Only the half a checkout alone determines is compared: the sheet CSV and
+    every page down to its marker. The live half needs data/sync, which is not
+    in the repository, and diagram.svg carries the Graphviz version that drew
+    it. Those are refreshed by the workflow, not checked here.
+    """
+
+    @pytest.fixture(scope="class")
+    def rebuilt(self, tmp_path_factory):
+        out = tmp_path_factory.mktemp("content")
+        files = load_files(COMPONENTS)
+        write_content(files, None, read_private(COMPONENTS), out)
+        return out
+
+    def test_the_tree_exists(self):
+        assert (CONTENT / "components.csv").exists(), (
+            "content/ is missing. Run `uv run build-content` and commit it."
+        )
+
+    def test_the_sheet_csv_is_fresh(self, rebuilt):
+        assert (CONTENT / "components.csv").read_bytes() == (
+            rebuilt / "components.csv"
+        ).read_bytes(), "content/components.csv is stale: run `uv run build-content`."
+
+    def test_every_page_is_fresh(self, rebuilt):
+        fresh = sorted(p.name for p in (rebuilt / "components").glob("*.md"))
+        committed = sorted(p.name for p in (CONTENT / "components").glob("*.md"))
+        assert committed == fresh, "content/components/ is stale: run `uv run build-content`."
+        for name in fresh:
+            assert static_half((CONTENT / "components" / name).read_text()) == static_half(
+                (rebuilt / "components" / name).read_text()
+            ), f"content/components/{name} is stale: run `uv run build-content`."
