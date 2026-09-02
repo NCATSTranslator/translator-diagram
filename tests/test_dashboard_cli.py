@@ -11,7 +11,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from translator_diagram.dashboard_cli import build_main
+from translator_diagram.dashboard_cli import build_main, content_main
 
 
 @pytest.fixture
@@ -130,3 +130,54 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestBuildContent:
+    """build-content writes what it can from what it has, and says so."""
+
+    def _run(self, workspace, *args):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=workspace):
+            return runner.invoke(
+                content_main,
+                [
+                    "--components", str(workspace / "components"),
+                    "--sync-dir", str(workspace / "sync"),
+                    "--output-dir", str(workspace / "content"),
+                    *args,
+                ],
+            )
+
+    def test_a_full_build_writes_every_file(self, workspace):
+        result = self._run(workspace)
+        assert result.exit_code == 0, result.output
+        out = workspace / "content"
+        for name in ("components.csv", "dashboard.md", "deployments.csv",
+                     "components/README.md", "components/keeper.md",
+                     "components/secret.md"):
+            assert (out / name).exists(), name
+        # Nothing is withheld: the policy names `secret`, and here it is.
+        assert "secret" in (out / "dashboard.md").read_text()
+        assert "2 components" in result.output
+
+    def test_without_a_sync_only_the_static_half_is_written(self, workspace):
+        (workspace / "sync" / "manifest.json").unlink()
+        result = self._run(workspace)
+        assert result.exit_code == 0, result.output
+        out = workspace / "content"
+        assert (out / "components.csv").exists()
+        assert not (out / "dashboard.md").exists()
+        assert not (out / "deployments.csv").exists()
+        assert "static half" in result.output
+        assert "No live data" in (out / "components" / "keeper.md").read_text()
+
+    def test_the_private_block_is_reported_and_placed(self, workspace):
+        path = workspace / "components" / "secret.yaml"
+        path.write_text(path.read_text() + "private:\n  notes: SENTINEL\n")
+        result = self._run(workspace)
+        assert result.exit_code == 0, result.output
+        assert "1 with a private block" in result.output
+        out = workspace / "content"
+        assert "SENTINEL" in (out / "components" / "secret.md").read_text()
+        assert "SENTINEL" not in (out / "components" / "keeper.md").read_text()
+        assert "SENTINEL" not in (out / "dashboard.md").read_text()

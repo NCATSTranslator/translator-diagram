@@ -43,7 +43,13 @@ ALLOWED = {
     # anything in the graph moving.
     "privacy": set(),
     "dashboard": {"colors", "components", "flow", "privacy"},
-    "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
+    # content renders the payload dashboard already built and the stage order
+    # it already computed. It re-derives nothing, which is why it sits above
+    # dashboard rather than beside it.
+    "content": {"components", "dashboard"},
+    "dashboard_cli": {
+        "components", "content", "dashboard", "flow", "privacy", "sync",
+    },
 }
 
 # Neither entry point may be imported: a module that pulls in a CLI drags

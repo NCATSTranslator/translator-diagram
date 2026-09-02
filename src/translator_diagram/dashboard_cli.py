@@ -1,18 +1,24 @@
-"""The two dashboard commands: sync, then build.
+"""The dashboard commands: sync, then build the page, or build the content tree.
 
-Split for the same reason the reference implementations split them: fetching
-is slow and rate-limited, rendering is fast and iterated on. Keeping them apart
-means you can rebuild the page a hundred times against one sync.
+Sync and build are split for the same reason the reference implementations
+split them: fetching is slow and rate-limited, rendering is fast and iterated
+on. Keeping them apart means you can rebuild the page a hundred times against
+one sync. `build-content` is a second consumer of the same sync: the full
+payload as Markdown and CSV for the repository, rather than one redacted page
+for the web.
 
 Nothing imports this module, in either direction — same rule as cli.py.
 """
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import click
 
 from .components import load_components
-from .dashboard import SyncedData, build_payload, write_dashboard
+from .content import read_private, write_content
+from .dashboard import DEFAULT_CONTENT_URL, SyncedData, build_payload, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -21,6 +27,11 @@ from .sync import DEFAULT_MAX_AGE, sync
 DEFAULT_COMPONENTS = Path("components")
 DEFAULT_SYNC_DIR = Path("data/sync")
 DEFAULT_OUTPUT_DIR = Path("data/dashboard")
+DEFAULT_CONTENT_DIR = Path("content")
+# Where --diagram renders before copying the picture into the content tree:
+# under data/, so the PNG, the legends and components.json it also writes stay
+# out of the repository.
+DIAGRAM_SCRATCH_DIR = Path("data/content-diagram")
 
 
 def _load(components_dir: Path):
@@ -33,6 +44,14 @@ def _load(components_dir: Path):
     if not components:
         raise click.ClickException(f"No *.yaml files in {components_dir}.")
     return components
+
+
+def _synced(sync_dir: Path) -> SyncedData:
+    if not (sync_dir / "manifest.json").exists():
+        raise click.ClickException(
+            f"No manifest at {sync_dir / 'manifest.json'}. Run sync-components first."
+        )
+    return SyncedData(sync_dir)
 
 
 @click.command()
@@ -90,7 +109,10 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
 @click.option("--include-private", is_flag=True,
               help="Skip config/privacy.yaml and build the full page. For "
                    "local use: the result is not safe to publish.")
-def build_main(components_dir, sync_dir, output_dir, include_private):
+@click.option("--content-url", default=DEFAULT_CONTENT_URL, show_default=True,
+              help="Where the page links for the unredacted content/ tree. "
+                   "An empty string drops the link.")
+def build_main(components_dir, sync_dir, output_dir, include_private, content_url):
     """Compile the synced responses into a single self-contained page.
 
     Withholds what config/privacy.yaml names unless --include-private is
@@ -99,13 +121,9 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     at all, so it cannot regress into a full build by being edited.
     """
     components = _load(components_dir)
-    if not (sync_dir / "manifest.json").exists():
-        raise click.ClickException(
-            f"No manifest at {sync_dir / 'manifest.json'}. Run sync-components first."
-        )
-    synced = SyncedData(sync_dir)
+    synced = _synced(sync_dir)
     policy = None if include_private else load_policy()
-    payload = build_payload(components, synced, policy)
+    payload = build_payload(components, synced, policy, content_url or None)
     if policy is not None:
         # Read back what is about to be written, rather than trusting that the
         # step which removed it covered every place it could appear.
@@ -145,3 +163,78 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
     click.echo(f"Wrote {json_path}")
     click.echo(f"Wrote {html_path}")
+
+
+@click.command()
+@click.option("--components", "components_dir", type=click.Path(path_type=Path),
+              default=DEFAULT_COMPONENTS, show_default=True,
+              help="Directory of component YAML files.")
+@click.option("--sync-dir", type=click.Path(path_type=Path),
+              default=DEFAULT_SYNC_DIR, show_default=True,
+              help="Cache written by sync-components. Without one, only the "
+                   "files a checkout alone determines are written.")
+@click.option("--output-dir", type=click.Path(path_type=Path),
+              default=DEFAULT_CONTENT_DIR, show_default=True,
+              help="The content tree to write.")
+@click.option("--diagram/--no-diagram", default=False, show_default=True,
+              help="Also render diagram.svg from the generated components.csv. "
+                   "Needs Graphviz; runs generate-diagram in a subprocess.")
+def content_main(components_dir, sync_dir, output_dir, diagram):
+    """Write the repository's Markdown and CSV view of the components.
+
+    Nothing is withheld: this tree is read by people who already have the
+    repository. The sheet-format components.csv and the static half of every
+    page come from the component files alone; dashboard.md, deployments.csv
+    and the live half of each page come from the last sync, and are skipped
+    with a note when there is none.
+    """
+    components = _load(components_dir)
+    private = read_private(components_dir)
+    if (sync_dir / "manifest.json").exists():
+        payload = build_payload(components, _synced(sync_dir), None)
+    else:
+        payload = None
+        click.echo(
+            f"No manifest at {sync_dir / 'manifest.json'}: writing components.csv "
+            f"and the static half of each page only. Run sync-components for "
+            f"the rest."
+        )
+    written = write_content(components, payload, private, output_dir)
+    if diagram:
+        written.extend(_render_diagram(output_dir))
+    click.echo(
+        f"{len(components)} components, {len(private)} with a private block, "
+        f"{len(written)} files under {output_dir}."
+    )
+    for path in written:
+        click.echo(f"Wrote {path}")
+
+
+def _render_diagram(output_dir: Path) -> list[Path]:
+    """diagram.svg and diagram.dot from the CSV just written.
+
+    A subprocess rather than an import: cli.py is an entry point, and nothing
+    may import one. The layer column is the sheet's, which `sheet_row` names
+    `Tier` for exactly this call.
+    """
+    DIAGRAM_SCRATCH_DIR.mkdir(parents=True, exist_ok=True)
+    command = [
+        "generate-diagram",
+        "--input", str(output_dir / "components.csv"),
+        "--output-dir", str(DIAGRAM_SCRATCH_DIR),
+        "--format", "svg",
+        "--layer-column", "Tier",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"generate-diagram failed:\n{result.stderr.strip() or result.stdout.strip()}"
+        )
+    written = []
+    for name in ("diagram.svg", "diagram.dot"):
+        source = DIAGRAM_SCRATCH_DIR / name
+        if not source.exists():
+            raise click.ClickException(f"generate-diagram wrote no {name}.")
+        shutil.copyfile(source, output_dir / name)
+        written.append(output_dir / name)
+    return written

@@ -45,3 +45,15 @@ documentation:
 notes: >-
   SmartAPI registers the TRAPI base URL with the API version in the path
   (.../api/arax/v1.4), so the version moves when TRAPI does.
+
+# Demonstration values for issue #7. Everything under `private:` stays in the
+# repository: components.py never parses the key, so it cannot reach
+# overview.json or the published page, and `build-content` is the only thing
+# that reads it. While this repository is public every value is the literal
+# string PRIVATE; real values go in only once it is private.
+private:
+  contacts:
+    - PRIVATE
+  internal_hosts:
+    - PRIVATE
+  notes: PRIVATE

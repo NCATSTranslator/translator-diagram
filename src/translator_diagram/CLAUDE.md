@@ -40,7 +40,8 @@ The dashboard is a second, parallel stack over the same components:
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
-| `dashboard_cli.py` | `sync-components` and `build-dashboard` |
+| `content.py` | `write_content` and what it calls: the sheet-format CSV, the per-component pages, `dashboard.md` and `deployments.csv`. Renders the payload `dashboard` built; derives nothing |
+| `dashboard_cli.py` | `sync-components`, `build-dashboard` and `build-content` |
 | `web/dashboard.css`, `web/dashboard.js` | The browser half of the dashboard, inlined into the generated page |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
@@ -62,6 +63,7 @@ components → {flow, sync, dashboard}
 flow → dashboard
 colors → dashboard
 privacy → dashboard
+{components, dashboard} → content
 dashboard_cli → everything above
 ```
 
@@ -198,9 +200,17 @@ nodes, `_add_ghost_nodes` for ghosts. The bold "New in Refactor" border is the
 **Change graph layout** (dpi, ranksep, splines) → the `graph_attr` dict in
 `build_graph`.
 
-**Add a new CSV column** → five places: the `Component` dataclass in
-`model.py`, `load_components` in `loading.py`, `write_json` in `export.py`, the
-data-model table above, and the CSV-format table in the README.
+**Add a new CSV column** → six places: the `Component` dataclass in
+`model.py`, `load_components` in `loading.py`, `write_json` in `export.py`,
+`SHEET_COLUMNS` and `sheet_row` in `content.py` (which write that CSV from
+the component files), the data-model table above, and the CSV-format table
+in the README.
+
+**Add something to the content/ tree** → `content.py`. A new row field goes
+in `component_page` (static half if the component file determines it, live
+half if the sync does), a new cell field in `DEPLOYMENT_COLUMNS`. Then run
+`build-content` and commit `content/`, or `tests/test_content.py` will say
+the committed copy is stale. Never write a timestamp into anything there.
 
 **Add a new CLI flag** → an `@click.option` above `main` in `cli.py`, plus the
 matching parameter in the `main` signature, plus the options block in the
@@ -364,6 +374,12 @@ fix for that is upstream, at that API. Redacting it here would only make it
 harder to notice. So treat a finding as "review it and revert" rather than as
 an emergency, and do not let the filter become the reason nobody looks at what
 the sources are publishing.
+
+**Nothing under `content/` says when it was built.** A refresh that changes
+nothing must write nothing, or the scheduled workflow would open a pull
+request every day whose only diff is a date. The date is `git log -1 --
+content/`, which also says who merged it. `synced_at` and the sync's cached
+count stay out for the same reason.
 
 **A published build is the local build minus rows, not a different page.**
 `privacy.apply` runs inside `build_payload` *after* `build_rows`, so

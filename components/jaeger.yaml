@@ -37,6 +37,11 @@ repositories:
     role: helm-chart
     visibility: public
 
+# Drawn as a clone beside each caller rather than as one node with every
+# edge converging on it, as the sheet has always marked it.
+diagram:
+  ubiquitous: true
+
 endpoints:
   services: api/services
   docs: search
