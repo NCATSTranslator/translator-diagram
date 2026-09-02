@@ -145,3 +145,52 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestTheStageOrderReport:
+    """`build-dashboard` says where the written order and the edges disagree."""
+
+    def _stage(self, workspace, components):
+        (workspace / "config" / "flow-steps.yaml").write_text(
+            "stages:\n"
+            "  - title: First\n"
+            "    description: Comes first.\n"
+            f"    components: [{components[0]}]\n"
+            "  - title: Second\n"
+            "    description: Comes second.\n"
+            f"    components: [{components[1]}]\n"
+            "unplaced:\n"
+            "  description: Nothing is unplaced.\n"
+            "  components: []\n"
+        )
+
+    def test_a_backwards_results_edge_is_reported(self, workspace):
+        # keeper is staged first and takes results from secret, which is
+        # staged second: either the placement is wrong or the edge is.
+        self._stage(workspace, ["keeper", "secret"])
+        (workspace / "components" / "keeper.yaml").write_text(
+            "id: keeper\nname: keeper\nowner: DOGSLED\n"
+            "environments:\n  ci:\n    url: https://example.invalid/\n"
+            "refactor_status: New in Refactor\n"
+            "connections:\n"
+            "  gets_results_from: [secret]\n  calls: []\n  externals: []\n"
+        )
+        result, _ = _run(workspace, "--include-private")
+        assert result.exit_code == 0, result.output
+        assert "Stage order disagrees with the recorded edges" in result.output
+        assert "keeper (step 1) gets results from secret (step 2)" in result.output
+
+    def test_an_order_that_agrees_says_nothing(self, workspace):
+        # The common case, and the one that must stay quiet: a report that
+        # fires on every build is one nobody reads.
+        self._stage(workspace, ["secret", "keeper"])
+        (workspace / "components" / "keeper.yaml").write_text(
+            "id: keeper\nname: keeper\nowner: DOGSLED\n"
+            "environments:\n  ci:\n    url: https://example.invalid/\n"
+            "refactor_status: New in Refactor\n"
+            "connections:\n"
+            "  gets_results_from: [secret]\n  calls: []\n  externals: []\n"
+        )
+        result, _ = _run(workspace, "--include-private")
+        assert result.exit_code == 0, result.output
+        assert "Stage order disagrees" not in result.output
