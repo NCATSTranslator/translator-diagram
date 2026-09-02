@@ -116,6 +116,11 @@ Nothing generated carries a timestamp, so a sync that changes nothing
 produces no diff and no pull request; when a file was last rebuilt is
 `git log -1 -- content/`.
 
+One gotcha, found the hard way: GitHub will only dispatch a
+`workflow_dispatch` workflow that exists on the default branch. Until this
+pull request merges, `gh workflow run content.yml` answers 404, so the first
+manual run happens after the merge, not before it.
+
 When to run it by hand: after editing a component file, run
 `uv run build-content` and commit the result with the edit, or the freshness
 test will say so. After a deployment you want reflected today, dispatch the
