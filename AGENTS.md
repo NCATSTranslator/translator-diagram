@@ -271,7 +271,29 @@ constant. There is one copy: the wheel build maps this file to
 checkout to read falls back to, so nothing has to be kept in step by hand. In
 a source checkout that packaged path does not exist and nothing needs it,
 because `config/` is right there. See `load_owner_colors` for the resolution
-order and `[tool.hatch.build.targets.wheel.force-include]` for the mapping.
+ order and `[tool.hatch.build.targets.wheel.force-include]` for the mapping.
+
+Four rules constrain what a new owner colour may be, and three of them are not
+obvious from the file:
+
+- **Not red, amber, green or teal.** The page spends those on meaning:
+  `--bad-bg` is red, `--warn-bg` and `--drift-bg` are amber, `--ok-bg` is
+  green, and the dark theme's `--ok-bg` is a deep teal. A team chip in one of
+  those reads as a status about the team. CATRAX was orange and DOGSURF was
+  green; both moved for this reason, and NCATS left red because `--bad-bg` is
+  red.
+- **4.5:1 against the text colour.** `text_color_for` picks black or white by
+  luminance, and `tests/test_colors.py` fails the build below WCAG AA. The
+  chips are 0.75rem, so the 3:1 large-text allowance does not apply.
+- **Keep clear of the 0.5 luminance line** that `text_color_for` switches on.
+  A colour sitting on it has poor contrast whichever side it lands, and an
+  innocent nudge flips the text. Material's Purple 300 sits 0.003 from it.
+- **The palette is full.** Its own separation floor is about 31 dE (UI against
+  DOGSURF), and after the reserved hues the usable space is the blue-to-magenta
+  arc, which five teams already share. A tenth owner has no good colour left;
+  `ColorAssigner` will hand it one from `FALLBACK_COLORS`, which none of the
+  above constrains. Re-deriving all of them together reaches about 43, and is
+  the honest fix when it comes to that.
 
 Generating the packaged copy from `config/` at build time is the obvious way to
 drop one of them, and it does not work: hatchling's `force-include` reaches the
