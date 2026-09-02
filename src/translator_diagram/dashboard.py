@@ -189,10 +189,34 @@ class SyncedData:
         }
 
     def openapi(self, component_id: str, env: str) -> dict[str, Any] | None:
-        return _read_json(self.root / "openapi" / component_id / f"{env}.json")
+        return self._endpoint_body("openapi", component_id, env)
 
     def status(self, component_id: str, env: str) -> dict[str, Any] | None:
-        return _read_json(self.root / "status" / component_id / f"{env}.json")
+        return self._endpoint_body("status", component_id, env)
+
+    def _endpoint_body(
+        self, kind: str, component_id: str, env: str
+    ) -> dict[str, Any] | None:
+        """One endpoint's body, but only if this run's fetch of it succeeded.
+
+        `sync` writes a body on a 200 and leaves the previous one in place
+        otherwise, so a file on disk is not by itself evidence that the
+        endpoint answered. Without this a deployment that has gone away keeps
+        reporting the version it last served, and the cell says `reachable`
+        next to its own `http_status` of 404 — the one contradiction this page
+        must never print, because "was this endpoint up at 14:05" is the
+        question it exists to answer.
+
+        Only the endpoints are gated this way. A release list or a Helm chart
+        makes no claim about what is running right now, so dropping a cached
+        one when GitHub rate-limits a run would lose real information and say
+        nothing new in its place.
+        """
+        relative = f"{kind}/{component_id}/{env}.json"
+        fetch = self.statuses.get(relative)
+        if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
+            return None
+        return _read_json(self.root / relative)
 
     def releases(self, repo: str | None) -> list[dict[str, Any]]:
         """One repository's releases, newest first, as GitHub returned them."""

@@ -149,6 +149,62 @@ class TestVersionSourceChain:
         assert cell == {"deployed": False}
 
 
+class TestStaleBodies:
+    """A cached body from an earlier run must not answer for this one."""
+
+    def _synced(self, tmp_path, fetch):
+        (tmp_path / "manifest.json").write_text(json.dumps({"fetches": [fetch]}))
+        (tmp_path / "smartapi.json").write_text('{"hits": []}')
+        path = tmp_path / "openapi" / "svc" / "ci.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"info": {"version": "1.5.4"}}))
+        return SyncedData(tmp_path)
+
+    def _cell(self, synced):
+        component = _comp(
+            "svc", environments={"ci": Deployment(env="ci", url="https://svc.ci/")}
+        )
+        return build_rows([component], synced)[0]["environments"]["ci"]
+
+    def test_a_404_this_run_does_not_report_last_run_version(self, tmp_path):
+        # The failure this is here for: prod's OpenAPI is cached at 1.5.4,
+        # prod goes away, and the page keeps saying prod runs 1.5.4 and is
+        # reachable — beside its own http_status of 404.
+        synced = self._synced(tmp_path, {
+            "path": "openapi/svc/ci.json", "url": "https://svc.ci/openapi.json",
+            "status": 404,
+        })
+        cell = self._cell(synced)
+        assert cell["http_status"] == 404
+        assert cell["version"] is None
+        assert cell["reachable"] is False
+
+    def test_a_failed_fetch_this_run_does_not_either(self, tmp_path):
+        # A DNS failure records no status at all, which is not a 200 either.
+        synced = self._synced(tmp_path, {
+            "path": "openapi/svc/ci.json", "url": "https://svc.ci/openapi.json",
+            "status": None, "error": "URLError: [Errno 8] nodename nor servname",
+        })
+        assert self._cell(synced)["reachable"] is False
+
+    def test_a_cached_hit_is_still_a_hit(self, tmp_path):
+        # --max-age skips the fetch and records a 200 from cache. That is an
+        # answer, not a gap.
+        synced = self._synced(tmp_path, {
+            "path": "openapi/svc/ci.json", "url": "https://svc.ci/openapi.json",
+            "status": 200, "cached": True,
+        })
+        assert self._cell(synced)["version"] == "1.5.4"
+
+    def test_a_body_this_run_never_asked_for_is_left_alone(self, tmp_path):
+        # No manifest entry means no contradiction to resolve: the endpoint
+        # was not planned this run, so the file is all there is to go on.
+        synced = self._synced(tmp_path, {
+            "path": "openapi/other/ci.json", "url": "https://other/", "status": 200,
+        })
+        assert self._cell(synced)["version"] == "1.5.4"
+
+
 class TestDrift:
     def test_the_minority_environment_is_flagged(self):
         cells = {
