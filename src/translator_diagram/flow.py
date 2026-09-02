@@ -7,7 +7,9 @@ already carry, which is itself a test of whether those edges are worth
 recording.
 """
 
-from .components import ComponentFile
+from dataclasses import dataclass
+
+from .components import ComponentFile, Edge
 
 # Components nothing feeds and nothing consumes sort last rather than first. A
 # component with no recorded edges is not a data source, it is a gap in the
@@ -16,19 +18,93 @@ from .components import ComponentFile
 NO_EDGES_DEPTH = 10_000
 
 
+@dataclass(frozen=True)
+class Inbound:
+    """An edge arriving from another component, seen from the target's side.
+
+    `kind` is the key it was written under on the *other* component's file:
+    "the ARS gets results from this" and "the UI calls this" are different
+    facts about this component, and only the far side records either.
+    """
+
+    id: str
+    kind: str
+    planned: bool = False
+
+
+@dataclass(frozen=True)
+class Neighbours:
+    """Everything one component's edges connect it to, both directions."""
+
+    gets_results_from: tuple[Edge, ...] = ()
+    calls: tuple[Edge, ...] = ()
+    used_by: tuple[Inbound, ...] = ()
+
+    def __bool__(self) -> bool:
+        return bool(self.gets_results_from or self.calls or self.used_by)
+
+
+def neighbours(components: list[ComponentFile]) -> dict[str, Neighbours]:
+    """Each component's edges, resolved against the components we have.
+
+    One traversal, and the only one. `isolated` draws a left bar meaning "no
+    recorded edges in either direction" while the page draws a chip per edge;
+    if those came from two traversals that resolved ids differently, a row
+    would eventually carry the bar and the chips at once. Everything here is
+    built on this, so they cannot disagree.
+
+    Resolution is the same rule `flow_depths` has always applied: match ids
+    case-insensitively against the files that exist, drop an id no file
+    matches, and drop a self-edge. An unknown id is a broken reference, and
+    `tests/test_component_files.py` is where that is caught — silently
+    ignoring it here would be the second place it could hide.
+    """
+    known = {c.id.lower(): c.id for c in components}
+
+    def resolve(edges: list[Edge], source: str) -> list[Edge]:
+        out = []
+        for edge in edges:
+            target = known.get(edge.id.lower())
+            if target and target != source:
+                out.append(Edge(id=target, planned=edge.planned))
+        return out
+
+    outgoing = {
+        c.id: (resolve(c.gets_results_from, c.id), resolve(c.calls, c.id))
+        for c in components
+    }
+    inbound: dict[str, list[Inbound]] = {c.id: [] for c in components}
+    for cid, (results, calls) in outgoing.items():
+        # A component named under both keys is one neighbour, not two: the
+        # results edge is the stronger claim, so it wins the single chip.
+        seen: set[str] = set()
+        for kind, edges in (("gets_results_from", results), ("calls", calls)):
+            for edge in edges:
+                if edge.id not in seen:
+                    seen.add(edge.id)
+                    inbound[edge.id].append(
+                        Inbound(id=cid, kind=kind, planned=edge.planned)
+                    )
+    return {
+        cid: Neighbours(
+            gets_results_from=tuple(results),
+            calls=tuple(calls),
+            # No natural order on the far side, so a stable one: the ids are
+            # somebody else's list, not this component's judgement.
+            used_by=tuple(sorted(inbound[cid], key=lambda i: i.id.lower())),
+        )
+        for cid, (results, calls) in outgoing.items()
+    }
+
+
 def _upstream_within(
     components: list[ComponentFile],
 ) -> dict[str, set[str]]:
     """Each component's upstream ids, restricted to components we have."""
-    known = {c.id.lower(): c.id for c in components}
-    out: dict[str, set[str]] = {}
-    for component in components:
-        out[component.id] = {
-            known[ref.lower()]
-            for ref in component.upstream
-            if ref.lower() in known and known[ref.lower()] != component.id
-        }
-    return out
+    return {
+        cid: {edge.id for edge in n.gets_results_from + n.calls}
+        for cid, n in neighbours(components).items()
+    }
 
 
 def _downstream_from(upstream: dict[str, set[str]]) -> dict[str, set[str]]:
