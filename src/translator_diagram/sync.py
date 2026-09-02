@@ -291,8 +291,14 @@ def _confirm_derived(
     fetcher: Fetcher,
     root: Path,
     max_age: int,
-) -> FetchResult | None:
+) -> tuple[FetchResult | None, bool]:
     """Contact a derived host, and keep it only if it is really this component.
+
+    Returns what the request was, and whether it confirmed the candidate. The
+    two are separate because they answer different questions: the manifest
+    records every request this run made, and a probe that reached a host and
+    was turned away is still a request. Returning only the accepted ones is how
+    the manifest came to under-report its own attempts.
 
     A 200 alone is not enough. Hostnames in one namespace can and do resolve to
     something adjacent, so where the component records an infores the document
@@ -304,25 +310,33 @@ def _confirm_derived(
     the candidate is dropped: an unverifiable guess is worth less than a gap.
     """
     if not component.infores:
-        return None
+        return None, False
     url = endpoint_url_in(component, candidate, "openapi")
     if not url:
-        return None
+        return None, False
     destination = root / "openapi" / component.id / f"{candidate.env}.json"
     result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
     if not result.ok:
-        return None
+        return result, False
     try:
         document = json.loads(destination.read_text(encoding="utf-8"))
-        reported = (document.get("info", {}).get("x-translator") or {}).get("infores")
     except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        reported = None
+        document = None
+    # Every level checked, because a guessed hostname answers with whatever it
+    # likes: a JSON array, or `{"info": null}`, both of which are valid JSON and
+    # neither of which has an infores. Chaining `.get` through them raises
+    # AttributeError, and one unlucky candidate would end the whole sync.
+    info = document.get("info") if isinstance(document, dict) else None
+    translator = info.get("x-translator") if isinstance(info, dict) else None
+    reported = (
+        translator.get("infores") if isinstance(translator, dict) else None
+    )
     if reported != component.infores:
         # Answered, but it is not this component. Drop the body so a later run
         # does not read it as though it were.
         destination.unlink(missing_ok=True)
-        return None
-    return result
+        return result, False
+    return result, True
 
 
 def sync(
@@ -403,9 +417,22 @@ def sync(
     by_smartapi = {}
     smartapi_path = root / "smartapi.json"
     if smartapi_path.exists():
-        payload = json.loads(smartapi_path.read_text(encoding="utf-8"))
+        # Several Translator hosts answer 200 with an HTML error page, and this
+        # file is whatever came back. Parsing it in the open would end the run
+        # after the registries, the charts and the release lists had all
+        # succeeded — the opposite of "a service being down is data".
+        try:
+            payload = json.loads(smartapi_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            payload = None
+        if not isinstance(payload, dict):
+            echo("  smartapi.json is not a registry response — continuing without it")
+            payload = {}
+        hits = payload.get("hits")
         by_smartapi = {
-            hit["_id"]: hit for hit in payload.get("hits", []) if hit.get("_id")
+            hit["_id"]: hit
+            for hit in (hits if isinstance(hits, list) else [])
+            if isinstance(hit, dict) and hit.get("_id")
         }
         echo(f"  {len(by_smartapi)} SmartAPI records")
 
@@ -453,13 +480,17 @@ def sync(
                              _confirm_derived(job[0], job[2], fetcher, root, max_age)),
                 pending,
             ))
-        for component, env, candidate, result in confirmed:
-            if result is None:
+        for component, env, candidate, (result, accepted) in confirmed:
+            # Every request, not every success: nine of these hostnames do not
+            # resolve, and a manifest that leaves them out is one that cannot
+            # be used to ask what this run actually did.
+            if result is not None:
+                report.fetches.append(result)
+            if not accepted:
                 rejected.setdefault(component.id, {})[env] = {
                     "url": candidate.url, "checked_at": _now(),
                 }
                 continue
-            report.fetches.append(result)
             derived.setdefault(component.id, {})[env] = {
                 "url": candidate.url, "location": candidate.location,
             }
@@ -468,8 +499,15 @@ def sync(
     # Carry forward anything confirmed earlier whose candidate was not re-derived
     # this run — a URL recorded in a component file stops being derived, and
     # dropping it here would look like the deployment had disappeared.
+    #
+    # Not the ones this run probed and rejected, though: those were asked and
+    # answered, and reinstating them would publish a derived deployment forever
+    # on the strength of one confirmation, however long ago it stopped being
+    # true. A rejection is the newer fact.
     for cid, envs in confirmed_before.items():
         for env, spec in envs.items():
+            if env in rejected.get(cid, {}):
+                continue
             derived.setdefault(cid, {}).setdefault(env, spec)
     (root / "derived.json").write_text(
         json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",

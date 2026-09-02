@@ -301,8 +301,8 @@ class TestConfirmDerived:
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json":
                 (200, self._openapi("infores:svc"))})
-        result = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
-        assert result is not None and result.ok
+        result, accepted = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
+        assert accepted and result is not None and result.ok
         assert (tmp_path / "openapi" / "svc" / "ci.json").exists()
 
     def test_a_different_infores_is_rejected_and_the_body_removed(self, tmp_path):
@@ -313,7 +313,10 @@ class TestConfirmDerived:
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json":
                 (200, self._openapi("infores:something-else"))})
-        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+        result, accepted = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
+        assert not accepted
+        # The request still happened, so the manifest still has to hear about it.
+        assert result is not None and result.ok
         assert not (tmp_path / "openapi" / "svc" / "ci.json").exists()
 
     def test_no_recorded_infores_means_no_confirmation_is_possible(self, tmp_path):
@@ -323,13 +326,16 @@ class TestConfirmDerived:
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json": (200, self._openapi(None))})
-        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+        # Nothing to check against, so nothing is asked: no request, no entry.
+        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) == (
+            None, False)
 
     def test_an_unreachable_candidate_is_dropped(self, tmp_path):
         component = _comp("svc", identifiers={"infores": "infores:svc"})
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
-        assert _confirm_derived(component, candidate, FakeFetcher({}),
-                                tmp_path, 0) is None
+        result, accepted = _confirm_derived(
+            component, candidate, FakeFetcher({}), tmp_path, 0)
+        assert not accepted and result is not None and not result.ok
 
     def test_a_body_that_is_not_json_is_rejected(self, tmp_path):
         # Several Translator hosts answer 200 with an HTML error page.
@@ -337,7 +343,61 @@ class TestConfirmDerived:
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json": (200, b"<html>nope</html>")})
-        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
+        assert _confirm_derived(component, candidate, fetcher, tmp_path, 0)[1] is False
+
+    def test_json_of_an_unexpected_shape_is_rejected_not_raised(self, tmp_path):
+        # Copilot: a guessed hostname answers with whatever it likes. All three
+        # of these are valid JSON with no infores in them, and chaining `.get`
+        # through any of them used to raise AttributeError and end the sync.
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        for body in (b"[]", b'{"info": null}', b'{"info": {"x-translator": 3}}'):
+            fetcher = FakeFetcher({
+                "https://svc.ci.transltr.io/openapi.json": (200, body)})
+            assert _confirm_derived(
+                component, candidate, fetcher, tmp_path, 0)[1] is False
+
+
+class TestAMalformedRegistry:
+    """The registry is whatever came back, and the run has to survive it."""
+
+    def _smartapi(self, hits):
+        return json.dumps({"hits": hits}).encode()
+
+    def test_an_html_error_page_does_not_end_the_run(self, tmp_path):
+        # Copilot: parsing this in the open ended the sync after the registries,
+        # the charts and the release lists had all already succeeded.
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, b"<html>bad gateway</html>")})
+        report = sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
+        assert (tmp_path / "manifest.json").exists()
+        assert report.finished_at
+
+    def test_a_registry_of_the_wrong_shape_is_ignored(self, tmp_path):
+        for n, body in enumerate((b"[]", b'{"hits": "nope"}', b'{"hits": [1, 2]}')):
+            root = tmp_path / f"run{n}"
+            root.mkdir()
+            fetcher = FakeFetcher({SMARTAPI_QUERY: (200, body)})
+            sync([_comp("svc")], root, fetcher=fetcher, max_age=0)
+            assert (root / "manifest.json").exists()
+
+
+class TestTheManifestRecordsEveryAttempt:
+    def test_a_rejected_probe_is_still_a_fetch(self, tmp_path):
+        # Copilot: the counts omitted exactly the unsuccessful probes, against
+        # this module's promise to record every attempt including the failures.
+        component = _comp(
+            "svc",
+            identifiers={"infores": "infores:svc"},
+            environments={"prod": Deployment(env="prod", url="https://svc.transltr.io/")},
+        )
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
+        report = sync([component], tmp_path, fetcher=fetcher, max_age=0)
+        probes = [f for f in report.fetches if "transltr.io" in f.url]
+        assert probes, "the derived probes should be in the manifest"
+        assert all(not f.ok for f in probes)
+        counts = report.to_dict()["counts"]
+        assert counts["attempted"] == len(report.fetches)
+        assert counts["failed"] >= len(probes)
 
 
 class TestNegativeCaching:
@@ -406,6 +466,25 @@ class TestNegativeCaching:
         sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
         after = json.loads((tmp_path / "derived.json").read_text())
         assert after["confirmed"]["svc"]["ci"]["url"] == "https://svc.ci.transltr.io/"
+
+    def test_a_rejection_this_run_beats_an_older_confirmation(self, tmp_path):
+        # Copilot (suppressed): the carry-forward reinstated a confirmation the
+        # same run had just probed and rejected, so a derived deployment stayed
+        # published for good once it had been confirmed a single time.
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {"svc": {"ci": {"url": "https://svc.ci.transltr.io/"}}},
+            "rejected": {},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi([]))})
+        component = _comp(
+            "svc",
+            identifiers={"infores": "infores:svc"},
+            environments={"prod": Deployment(env="prod", url="https://svc.transltr.io/")},
+        )
+        sync([component], tmp_path, fetcher=fetcher, max_age=0)
+        after = json.loads((tmp_path / "derived.json").read_text())
+        assert "ci" not in after["confirmed"].get("svc", {})
+        assert "ci" in after["rejected"]["svc"]
 
     def test_an_unreadable_derived_file_does_not_stop_the_run(self, tmp_path):
         (tmp_path / "derived.json").write_text("{not json")

@@ -1,10 +1,19 @@
 """Ordering components the way data moves through them.
 
-The dashboard's rows run from the data sources to the user, which is the order
-someone explaining Translator draws on a whiteboard. Nothing records that
-order; it has to be derived from the dependency edges the component files
-already carry, which is itself a test of whether those edges are worth
-recording.
+Not the dashboard's row order any more. That is written by hand in
+`config/flow-steps.yaml`, because twenty recorded edges cannot order
+twenty-six components: nothing records the UI calling Name Lookup, so Name
+Lookup sorted up beside the data sources. Change the row order there, not here.
+
+What is left is still worth having, and has grown since. `neighbours` resolves
+every recorded edge in both directions and is the one traversal everything else
+is built on; `order_conflicts` checks the written order against those edges, so
+a component staged ahead of something it takes results from is reported rather
+than assumed correct. `in_flow_order` remains the fallback for the components no
+stage names and for a build with no config at all; `isolated` reports the
+components whose dependencies nothing records, which is a hole in the data the
+page shows rather than hides; and the depths behind both are the honest answer
+for anything nobody has placed.
 """
 
 from dataclasses import dataclass

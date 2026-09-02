@@ -21,7 +21,9 @@ import click
 # Without it, running from a subdirectory of the checkout took the sheet ID
 # from the repo's .env but the colours from the packaged copy.
 CONFIG_OWNER_COLORS_PATH = Path("config") / "owner-colors.csv"
-PACKAGED_OWNER_COLORS = ("translator_diagram", "data/owner-colors.csv")
+# At the package root rather than under web/: this is a colour table the
+# diagram generator reads, and nothing about it belongs to a browser.
+PACKAGED_OWNER_COLORS = ("translator_diagram", "owner-colors.csv")
 
 
 FALLBACK_COLORS = [

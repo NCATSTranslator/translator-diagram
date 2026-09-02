@@ -35,15 +35,17 @@ from .flow import Neighbours, flow_depths, in_flow_order, isolated, neighbours
 from .privacy import Policy, Report
 from .privacy import apply as apply_policy
 
-PACKAGED_ASSETS = ("translator_diagram.data", ("dashboard.css", "dashboard.js"))
+PACKAGED_ASSETS = ("translator_diagram.web", ("dashboard.css", "dashboard.js"))
 
-# Ordered best to worst. "Best" means closest to what is actually running: a
-# live endpoint beats a registration someone filed by hand, which beats a
-# chart that describes what should have been deployed.
+# Ordered best to worst, and the order `build_cell` actually asks in: two live
+# endpoints, then a registration someone filed by hand, then a chart that
+# describes what should have been deployed. This dict is only the badge
+# vocabulary, but writing it in a different order from the chain is how the
+# README came to document the precedence backwards.
 SOURCE_LABELS = {
     "openapi": "OpenAPI",
-    "smartapi": "SmartAPI",
     "status": "status",
+    "smartapi": "SmartAPI",
     "helm": "Helm",
 }
 
@@ -801,6 +803,7 @@ def render_html(payload: dict[str, Any]) -> str:
     # </script> inside a JSON string would close the tag early.
     data = data.replace("</", "<\\/")
     return f"""<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Reachable, but not indexed. Someone given the link gets the page; a search

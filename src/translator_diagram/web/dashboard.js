@@ -589,11 +589,14 @@ function findingSentence() {
     ? `, and <strong>${tally.none}</strong> from nothing at all`
     : "";
   if (!total) return "No deployments were found — has <code>sync-components</code> run?";
+  // Only what every one of them has in common. The count is computed from the
+  // registry rather than from how the URL was found, so it covers deployments
+  // recorded by hand and deployments registered without an x-maturity as well
+  // as the ones a probe discovered — saying they were all found by probing
+  // would be untrue of most of them.
   const gaps = DATA.unregistered_count
-    ? ` <strong>${DATA.unregistered_count}</strong> of them are missing from their
-       component's SmartAPI record, which does list other environments — found by
-       trying the conventional ITRB hostname and confirmed by the infores they
-       report.`
+    ? ` <strong>${DATA.unregistered_count}</strong> of them are absent from their
+       component's SmartAPI record, which does list other environments.`
     : "";
   return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
 }

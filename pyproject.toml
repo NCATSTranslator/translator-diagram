@@ -41,7 +41,7 @@ packages = ["src/translator_diagram"]
 # packaged copy -- so the build maps the one file into the package rather than
 # the repository carrying a second copy that has to be kept in step by hand.
 [tool.hatch.build.targets.wheel.force-include]
-"config/owner-colors.csv" = "translator_diagram/data/owner-colors.csv"
+"config/owner-colors.csv" = "translator_diagram/owner-colors.csv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
