@@ -96,6 +96,110 @@ class TestApply:
         assert [row["id"] for row in kept] == ["keep", "drop"]
         assert not report
 
+    def test_withholding_the_images_alone_leaves_the_chart_version(self):
+        """The narrowing that gave three cells their Helm badge back.
+
+        `helm_images` is not where any version on the page came from — the
+        chart's appVersion is — so mapping it to the `helm` source blanked
+        cells that had nothing to do with the images being withheld.
+        """
+        rows = [
+            {
+                "id": "keep",
+                "helm_images": ["img:1"],
+                "helm_version": "0.1.0",
+                "environments": {
+                    "ci": {
+                        "deployed": True,
+                        "version": "0.1.0",
+                        "version_source": "helm",
+                    }
+                },
+            }
+        ]
+        kept, _ = apply(rows, _policy(fields=["helm_images"]))
+        assert kept[0]["helm_images"] == []
+        assert kept[0]["helm_version"] == "0.1.0"
+        ci = kept[0]["environments"]["ci"]
+        assert (ci["version"], ci["version_source"]) == ("0.1.0", "helm")
+
+    def test_a_withheld_id_is_pruned_from_connections(self):
+        """Nine component files record `calls: [jaeger]`. Without this the
+        published build fails `verify` the moment rows carry connections."""
+        rows = [
+            {
+                "id": "keep",
+                "connections": {
+                    "gets_results_from": ["other"],
+                    "calls": ["drop", "other"],
+                    "planned_gets_results_from": [],
+                    "planned_calls": [],
+                },
+                "environments": {},
+            },
+            {"id": "drop", "connections": {}, "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["drop"]))
+        assert kept[0]["connections"]["calls"] == ["other"]
+        assert kept[0]["connections"]["gets_results_from"] == ["other"]
+
+    def test_a_planned_reference_to_a_withheld_component_goes_too(self):
+        """node-annotator records `~jaeger`. The tilde says the edge is
+        planned; it is not part of the id, and it does not make the mention
+        less of one."""
+        rows = [
+            {
+                "id": "keep",
+                "connections": {"planned_calls": ["~jaeger", "~other"]},
+                "environments": {},
+            },
+            {"id": "jaeger", "connections": {}, "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["jaeger"]))
+        assert kept[0]["connections"]["planned_calls"] == ["~other"]
+
+    def test_a_mention_in_free_text_is_scrubbed_and_counted(self):
+        """Third-party prose we cannot edit at the source: a note, a registry
+        description, a release title. A withheld id as a word there must not
+        abort the nightly publish."""
+        rows = [
+            {
+                "id": "keep",
+                "notes": "Traces go to jaeger, then to Jaeger's console.",
+                "smartapi_record": {
+                    "title": "jaeger bridge",
+                    "description_text": "Reads from jaeger.",
+                    "tags": ["jaeger", "tracing"],
+                },
+                "releases_detail": [
+                    {"name": "jaeger support", "body_excerpt": "Adds jaeger."}
+                ],
+                "environments": {},
+            },
+            {"id": "jaeger", "environments": {}},
+        ]
+        kept, report = apply(rows, _policy(components=["jaeger"]))
+        record = kept[0]["smartapi_record"]
+        assert kept[0]["notes"] == "Traces go to …, then to …'s console."
+        assert record["title"] == "… bridge"
+        assert record["description_text"] == "Reads from …."
+        assert record["tags"] == ["…", "tracing"]
+        assert kept[0]["releases_detail"][0]["name"] == "… support"
+        assert kept[0]["releases_detail"][0]["body_excerpt"] == "Adds …."
+        assert report.mentions == 7
+        assert "7 mentions in free text" in report.summary()
+
+    def test_a_word_that_merely_contains_a_withheld_id_is_left_alone(self):
+        """The same boundary `verify` uses. Scrubbing `ars` out of `parsers`
+        would rewrite prose that names nothing."""
+        rows = [
+            {"id": "keep", "notes": "Two parsers and a guide.", "environments": {}},
+            {"id": "ars", "environments": {}},
+        ]
+        kept, report = apply(rows, _policy(components=["ars"]))
+        assert kept[0]["notes"] == "Two parsers and a guide."
+        assert report.mentions == 0
+
 
 class TestThePolicyMustStillMatchTheData:
     """The failure this module exists to avoid is withholding nothing.
@@ -219,11 +323,45 @@ class TestInThePayload:
             "components": 1,
             "fields": ["notes"],
             "environment_fields": [],
+            "mentions": 0,
         }
 
     def test_a_full_build_carries_no_redaction_block(self, components, synced):
         assert "redacted" not in build_payload(components, synced)
         assert "redacted" not in build_payload(components, synced, Policy())
+
+    def test_no_edge_touches_a_withheld_component(self, synced):
+        """The reason `build_edges` runs after the policy rather than before.
+
+        Nine component files record `calls: [jaeger]`. An edge list built from
+        every component and filtered afterwards would need a second filter that
+        knows the policy; built from the kept rows, it cannot name a withheld
+        component at all.
+        """
+        components = [
+            ComponentFile(
+                id="alpha",
+                name="alpha",
+                owner="DOGSLED",
+                refactor_status="New in Refactor",
+                connections={"calls": ["hidden", "~hidden"], "gets_results_from": ["omega"]},
+            ),
+            ComponentFile(id="hidden", name="hidden", owner="DOGSLED"),
+            ComponentFile(id="omega", name="omega", owner="DOGSLED"),
+        ]
+        payload = build_payload(components, synced, _policy(components=["hidden"]))
+        assert payload["edges"] == [
+            {"from": "omega", "to": "alpha", "kind": "results", "planned": False}
+        ]
+        verify(payload, _policy(components=["hidden"]))
+
+    def test_the_stage_roster_never_names_a_withheld_component(
+        self, components, synced
+    ):
+        """Bands are built from the rows, so the roster is the table."""
+        payload = build_payload(components, synced, _policy(components=["hidden"]))
+        rostered = [cid for stage in payload["stages"] for cid in stage["components"]]
+        assert rostered == ["alpha", "omega"]
 
     def test_the_withheld_row_is_gone_from_the_json_entirely(
         self, components, synced

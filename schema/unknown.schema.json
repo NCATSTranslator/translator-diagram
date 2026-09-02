@@ -13,6 +13,13 @@
         "$ref": "#/$defs/entry"
       }
     },
+    "helm_charts": {
+      "description": "Chart directories in helxplatform/translator-devops/helm that no components/*.yaml claims.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    },
     "urls": {
       "description": "URLs seen in the wild that no component claims.",
       "type": "array",
@@ -65,7 +72,7 @@
           "uniqueItems": true
         },
         "component": {
-          "description": "The component id this belongs to, once known. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
+          "description": "The component id this belongs to, once known — for a chart, the component it deploys. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
           "type": [
             "string",
             "null"

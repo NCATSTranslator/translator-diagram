@@ -1,0 +1,567 @@
+/*
+  The Overview table.
+
+  Two structural decisions worth knowing before editing:
+
+  1. The table is the page's scroll container, not the window. `position:
+     sticky` resolves against the nearest scrollport, so a table inside an
+     `overflow-x: auto` wrapper cannot have a header that sticks to the
+     *window* — the wrapper is the scrollport, and it does not scroll
+     vertically. Making the wrapper scroll on both axes is what lets the
+     header and the first column both stick, at every width, and it is also
+     what stops the table pushing the page wider than the window between 1100
+     and 1500px (issue #31). Its height is measured, not guessed:
+     `--table-h` is set by app.js from the wrapper's own top edge.
+  2. Every column's header, cell, drop class and sort behaviour come from one
+     COLUMNS entry in table.js. Four things have to agree about a column, and
+     three of them used to be written out twice.
+  3. One row style. A row is a list item — its own --row surface, six pixels
+     of gutter, four-pixel outer corners, no hairline — drawn at the dense
+     metrics: 32px, the id beside the name, the source word beside the
+     version, nothing on a second line. The gutter is a transparent
+     bottom *border* with `background-clip: padding-box`, not
+     `border-spacing`: border-spacing is a property of the table, so it puts
+     six pixels between an open row and its own detail rows too, and no
+     amount of animating the content hides nine gutters appearing at once.
+     A border belongs to the cell, so the rows inside one open item can
+     simply not have it.
+  4. A stage is a group, and a group is spacing plus a header plus a spine:
+     28px of air, an all-left header (step, name, count, description), a 1px
+     rule under it, and one 2px accent rule down the far-left edge of the
+     rows. No box, because a box round twenty-six rows in eight groups is
+     eight boxes, which is the thing this page exists not to be. Lines in
+     general are rationed: the top bar, the filter strip, the table header,
+     the stage rule, and the one above an open row's detail. Everything else
+     separates by space, weight and colour.
+*/
+
+.tablewrap {
+  overflow: auto;
+  max-height: var(--table-h, 62vh);
+  min-height: 240px;
+  overscroll-behavior-x: contain;
+}
+
+table.grid {
+  width: 100%;
+  border-collapse: separate;   /* collapse drops the borders on sticky cells */
+  border-spacing: 0;           /* the gutter is a cell border; see note 3 */
+  font-size: var(--fs-table);
+}
+
+/* --- Header --------------------------------------------------------------- */
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--page);
+  text-align: left;
+  vertical-align: bottom;
+  padding: 0;
+  border-bottom: 1px solid var(--hairline-strong);
+  white-space: nowrap;
+}
+thead th:first-child { left: 0; z-index: 4; }
+thead th.env .sortcol { justify-content: center; }
+
+.sortcol {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  width: 100%;
+  padding: var(--sp-2) 10px;
+  font: inherit;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  text-align: inherit;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+.sortcol:hover { color: var(--text); }
+/* The caret appears on hover and stays once the column means something, so a
+   quiet header still says it is a control when a pointer is near it. */
+.sortcol .caret { opacity: 0; flex: none; transition: opacity var(--dur-fast) var(--ease); }
+.sortcol:hover .caret { opacity: 0.5; }
+thead th[aria-sort="ascending"] .caret { opacity: 1; }
+thead th[aria-sort="descending"] .caret { opacity: 1; transform: rotate(180deg); }
+thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
+
+/* --- Body ----------------------------------------------------------------- */
+
+/* The gutter under a row is a transparent bottom border, and the surface is
+   clipped to the padding box so it stops above it. The bottom corners are
+   written as two radii — 4px across, 4px+gutter down — because the padding
+   edge's curve is the border-box curve minus the border it sits inside, and
+   an un-corrected 4px there paints an ellipse. */
+tbody td {
+  height: var(--row-h);
+  padding: var(--cell-pad-y) var(--cell-pad-x);
+  border-bottom: var(--row-gap) solid transparent;
+  vertical-align: middle;
+  background-color: var(--row-bg);
+  background-clip: padding-box;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding-left: var(--cell-pad-left);
+  border-top-left-radius: var(--row-radius);
+  border-bottom-left-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
+}
+/* The environment columns never drop, so the last cell in the markup is
+   always the last cell on screen and the right pair of corners is safe. */
+tbody td:last-child {
+  border-top-right-radius: var(--row-radius);
+  border-bottom-right-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
+}
+tbody tr.row:hover td { background-color: var(--row-bg-hover); }
+
+/* FLIP: the transform is applied by table.js, this only says how it settles. */
+tbody tr.flip { transition: transform var(--dur-layout) var(--ease); }
+tbody tr.fade { animation: row-in var(--dur-layout) var(--ease) both; }
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* --- Groups: spine, indent, rail ------------------------------------------ */
+
+/* The spine. One 2px accent rule down the far-left edge of a group, drawn per
+   row and reaching down over its own gutter, so eight rows with six pixels
+   between them still read as one continuous bracket. Drawn on the first cell
+   because that cell is sticky: the spine then survives a horizontal scroll
+   along with the component name it belongs to. */
+tbody tr.grp > td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: calc(0px - var(--row-gap));
+  width: 2px;
+  background: var(--spine);
+}
+/* Except on the group's last row, where reaching over the gutter would leave
+   a six-pixel stub hanging below the group. */
+tbody tr.grp:has(+ tr.band) > td:first-child::before,
+tbody tr.grp:last-child > td:first-child::before { bottom: 0; }
+/* Twelve pixels of daylight between the spine and the first glyph. */
+tbody tr.grp > td:first-child { --rail-x: 5px; }
+
+/* Nothing records this component's dependencies. A rail, not a tint: it is a
+   fact about the metadata, not about the service. Inside a group it steps
+   aside for the spine rather than stacking under it. */
+tbody tr.isolated > td:first-child::after {
+  content: "";
+  position: absolute;
+  left: var(--rail-x, 0px);
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--hairline-strong);
+}
+
+.empty {
+  padding: var(--sp-6);
+  text-align: center;
+  color: var(--muted);
+  background-color: var(--page);
+}
+
+/* --- Bands ---------------------------------------------------------------- */
+
+/* A band is the group's header, not a row: 28px of air above it, the step
+   number, what the stage is called, how many are in it, and what it is for.
+   The 1px rule under it is the top of the bracket the spine finishes. */
+tbody tr.band td {
+  height: auto;
+  padding: 28px var(--cell-pad-x) var(--sp-2) var(--cell-pad-left);
+  border-bottom: 1px solid var(--hairline);
+  border-radius: 0;
+  background-color: var(--page);
+  background-clip: border-box;
+}
+tbody tr.band:first-child td { padding-top: var(--sp-1); }
+/* Everything on the left, and never past the environment columns: a count
+   pushed to the right edge sat under `prod` and read as a value in it. Pinned
+   to the left of the scrollport so a sideways scroll keeps the stage name. */
+.band-inner {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: fit-content;
+  max-width: 58%;
+  background: var(--page);
+}
+/* The step number and the stage name never wrap: they are the two things a
+   reader scans down the left edge for, and a long description behind them was
+   enough to break "Step 5" over two lines. The description wraps instead. */
+.band-step {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
+  color: var(--muted);
+}
+.band-title {
+  flex: none;
+  white-space: nowrap;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+}
+.band-note { min-width: 0; color: var(--muted); font-size: var(--fs-meta); }
+.band-count {
+  flex: none;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Component cell ------------------------------------------------------- */
+
+/* Inline, so the id sits beside the name rather than under it: a second line
+   per cell is what made a row 60px tall, and the row is the list item now. */
+.cnamewrap {
+  display: inline-flex;
+  vertical-align: middle;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.25;
+}
+.chev {
+  width: 18px; height: 18px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: none; padding: 0;
+  color: var(--muted); cursor: pointer;
+  border-radius: var(--r-control);
+}
+.chev:hover { color: var(--text); background: var(--raised-2); }
+.chev svg { transition: transform var(--dur-fast) var(--ease); }
+.chev[aria-expanded="true"] svg { transform: rotate(90deg); }
+.coin.narrow { display: none; }
+
+.cname {
+  font: inherit;
+  font-size: var(--fs-table);
+  font-weight: 600;
+  color: var(--text);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.cname:hover { color: var(--accent); text-decoration: underline; }
+.cid {
+  display: inline;
+  margin-left: var(--sp-2);
+  line-height: 1.2;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+}
+.chip {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+
+/* --- Repository cell ------------------------------------------------------ */
+
+td.repo { font-size: var(--fs-meta); }
+/* The chips live in the open row's Releases line now. Twenty-six rows each
+   carrying five of them was the widest thing on the page and the least read. */
+.releases { display: none; }
+.rel {
+  display: inline-block;
+  margin: 1px 4px 0 0;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rel:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+/* Running in one of the environments on this row: the link between this
+   column and the four to its right, and the only release worth the ink. */
+.rel.deployed { border-color: var(--text); color: var(--text); font-weight: 600; }
+.rel.pre { border-style: dashed; }
+
+/* --- Updated cell --------------------------------------------------------- */
+
+td.updated { font-size: var(--fs-meta); color: var(--muted); }
+.age { font-variant-numeric: tabular-nums; color: var(--text); }
+
+/* --- Environment cells ---------------------------------------------------- */
+
+td.env { text-align: center; min-width: 108px; }
+/* The tint is a layer over the row's own surface rather than a replacement
+   for it: painting the cell --drift on its own would punch the row colour out
+   from under it and break the list item in the middle. Hover then still
+   works, because hover moves background-*color* and the tint is an image. */
+td.env.drift { background-image: linear-gradient(var(--drift), var(--drift)); }
+td.env.absent { color: var(--muted); }
+
+/* After drift, deliberately: a selected row is selected whatever its cells
+   disagree about. */
+tbody tr.row.sel td {
+  background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+}
+
+.version {
+  font-family: var(--mono);
+  font-size: var(--fs-table);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* Deployed, but absent from a SmartAPI record that lists other environments.
+   Marked, not coloured: the deployment was confirmed live. */
+.unregistered .version { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+/* The table's cells no longer print a `≠` — the tint says it and a
+   visually-hidden sentence says it to a screen reader — but the drawer and the
+   map still do, and this is where the class has always been defined. Kept so
+   removing it from one surface does not un-style it on two others. */
+.neq { color: var(--drift-ink); font-weight: 600; margin-right: 3px; }
+
+/* One line: version, reachability, source. Inline-flex so the source word
+   sits beside it rather than under it. */
+.envline {
+  display: inline-flex;
+  vertical-align: middle;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.dot {
+  width: 6px; height: 6px; flex: none;
+  border-radius: var(--r-coin);
+  background: var(--muted);
+}
+.dot.up { background: var(--ok); }
+.dot.down { background: var(--bad); }
+
+/* Source labels are text, not fills: 30 of 46 cells read "OPENAPI", and a
+   filled badge on 30 cells is a wall. The two sources that are not the
+   running service get a hairline underline instead of a colour. */
+.src {
+  display: inline-block;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+.src[data-src="smartapi"],
+.src[data-src="helm"] { border-bottom: 1px solid var(--hairline-strong); }
+.src[data-src="registry"] { border-bottom: 1px solid var(--hairline-strong); }
+td.env .src { margin-left: 5px; }
+
+/* The per-cell detail line is gone from the row: TRAPI, Biolink, the release
+   date and the host are all in the open row's detail, one field per line and
+   under the right column, and in the tooltip before that. */
+.sub { display: none; }
+
+/* What a cell says when it has no version: why not, in the words the payload
+   uses. Two lines at most — past that it is a sentence, and a sentence
+   belongs in the tooltip. */
+.why {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 140px;
+  color: var(--muted);
+  font-size: var(--fs-label);
+  line-height: 1.25;
+  text-align: center;
+}
+/* This environment was not recorded anywhere: it was read off a server
+   description in the registry, which is a weaker claim than the rest of the
+   row and says so. */
+.inf {
+  display: block;
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  cursor: help;
+}
+
+/* --- Row expansion -------------------------------------------------------- */
+
+/* The expansion is more rows of this table, one per field, and every value
+   sits in its own environment's column. That alignment is why it is not a
+   panel: a free-standing grid made a reader match "ci" to "ci" by eye, four
+   times, for every field, and the lines drawn to help were the thing the
+   owner was reading past.
+
+   An open row and its detail are ONE item: same surface, no rule between
+   them, the row's bottom corners handed to the last detail row, and one soft
+   lift around the whole thing. The lift is the only shadow on this page
+   besides the tooltip and the drawer, and it means "this one is open". */
+
+/* Not a shadow per row: eleven of those stacked into a dark band down both
+   sides, because a row's shadow escapes at the table's edges and the rows
+   overlap there. One box instead, sized to the whole item from --open-w and
+   --open-h (measured by table.js, and --open-h transitions, so it grows with
+   the rows rather than snapping to full size while they unfold). Anchored to
+   the last cell, which is the one cell that does not move under a sideways
+   scroll. The negative offsets undo the cell's own padding, so the box lands
+   on the item's outer edge. */
+tbody tr.row { transition: --open-h var(--dur-layout) var(--ease); }
+tbody tr.row.open > td:last-child { position: relative; }
+tbody tr.row.open > td:last-child::before {
+  content: "";
+  position: absolute;
+  top: calc(0px - var(--cell-pad-y));
+  right: calc(0px - var(--cell-pad-x));
+  width: var(--open-w, 100%);
+  height: var(--open-h, 100%);
+  border-radius: var(--row-radius);
+  box-shadow: var(--lift);
+  pointer-events: none;
+  animation: lift-in var(--dur-layout) var(--ease) both;
+}
+tbody tr.row.open.closing > td:last-child::before {
+  animation: lift-out var(--dur-layout) var(--ease) both;
+}
+@keyframes lift-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lift-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* The item has no gutters inside it: an open row and every detail row but the
+   last simply drop their bottom border. */
+tbody tr.row.open > td,
+tbody tr.detail > td { border-bottom-width: 0; }
+tbody tr.row.open > td:first-child { border-bottom-left-radius: 0; }
+tbody tr.row.open > td:last-child { border-bottom-right-radius: 0; }
+/* An open row does not light up under the pointer: half an item changing
+   colour is the seam this whole section exists to close. */
+tbody tr.row.open:hover td { background-color: var(--row-bg); }
+
+tbody tr.detail > td {
+  position: relative;
+  height: auto;
+  padding: 0 var(--cell-pad-x);
+  background-color: var(--exp-bg);
+  border-radius: 0;
+  vertical-align: middle;
+  font-size: var(--fs-meta);
+}
+/* The label column stays put on a sideways scroll, the same as the component
+   name it lines up under. Restated because the rule above is more specific
+   than the one that made every first cell sticky. */
+tbody tr.detail > td:first-child { position: sticky; left: 0; z-index: 2; }
+/* One rule for the whole set, above the first row and nowhere else. */
+tbody tr.detail.detail-first > td { border-top: 1px solid var(--hairline); }
+tbody tr.detail.detail-last > td {
+  border-bottom-width: var(--row-gap);
+}
+tbody tr.detail.detail-last > td:first-child {
+  border-bottom-left-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
+}
+tbody tr.detail.detail-last > td:last-child {
+  border-bottom-right-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
+}
+
+/* A <tr> has no height a transition can interpolate, so the height lives one
+   level down: each cell holds a grid whose single row goes 0fr → 1fr. The
+   wrapper clips, the row's height follows its cells, and the whole item
+   unfolds and folds on the same curve instead of appearing at full size and
+   shoving everything below it down in one step. */
+.dg {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--dur-layout) var(--ease),
+              opacity var(--dur-layout) var(--ease);
+}
+tbody tr.detail.on .dg { grid-template-rows: 1fr; opacity: 1; }
+/* min-height: 0 is what lets a grid item shrink below its content. */
+.dw {
+  overflow: hidden;
+  min-height: 0;
+  line-height: var(--detail-h);
+}
+/* Inside the wrapper, so it folds away with everything else. */
+tbody tr.detail.detail-first .dw { padding-top: var(--sp-1); }
+tbody tr.detail.detail-last .dw { padding-bottom: var(--sp-1); }
+/* Used for one frame while the natural height is measured. */
+.dg.still { transition: none; }
+
+/* The label is written into every non-environment cell and shown in exactly
+   one of them: the rightmost that is still on screen, so it always sits
+   against the first environment column with no gap between the word and the
+   numbers it names. The ladder below is the reverse of the drop order —
+   Repository goes at 1400, Last updated at 1150, Owner at 800. */
+tbody tr.detail > td.dk {
+  text-align: right;
+  padding-right: var(--sp-4);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dkl { display: none; }
+td.dk-updated .dkl { display: inline; }
+@media (max-width: 1150px) {
+  td.dk-updated .dkl { display: none; }
+  td.dk-owner .dkl { display: inline; }
+}
+@media (max-width: 800px) {
+  td.dk-owner .dkl { display: none; }
+  td.dk-name .dkl { display: inline; }
+}
+.dv {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* Hosts at 10px mono, breaking only where table.js put a <wbr> — after a dot
+   — so a narrow column wraps them as "shepherd.test." / "transltr.io" rather
+   than as "…transltr.i / o". Four pixels of padding rather than ten, because
+   the column is as wide as it is. */
+.dv.mono {
+  font-family: var(--mono);
+  font-size: var(--fs-micro);
+  overflow-wrap: normal;
+  word-break: normal;
+}
+tbody tr.detail > td.mono { padding: 0 var(--sp-1); }
+.dv.rels { text-align: left; padding-left: 0; }
+.dv.rels .rel { margin: 0 4px 0 0; }
+
+/* Room the wide windows already have: at 1500 and up the four environment
+   columns stop crowding their own detail lines. */
+@media (min-width: 1500px) {
+  td.env { min-width: 150px; }
+}
+
+@media (max-width: 800px) {
+  .coin.narrow { display: inline-block; }
+  td.env { min-width: 92px; }
+  .cid { margin-left: 0; }
+}

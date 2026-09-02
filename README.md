@@ -232,6 +232,14 @@ things it reports are the answer:
   still on, each tag linking to its notes. A filled tag is deployed somewhere
   on that row, so the number in the `prod` column has its changelog one click
   away.
+- **Why a cell is empty.** Every cell with no version says what happened
+  instead, in a few words: `no such host`, `up · no API document`,
+  `up · serves HTML, no API document`, `not in registry for prod`,
+  `not a hosted service`. The distinctions matter — a host that does not
+  resolve, one that is up and publishes no version, and one nobody has
+  recorded a URL for are three different things, and an empty cell said all
+  three at once. Every deployment is contacted at its own URL for this, so
+  "reachable" means a host answered rather than a document parsed.
 
 ### What a published build leaves out
 

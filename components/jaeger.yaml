@@ -22,6 +22,12 @@ itrb:
   app: jaeger
   group: SRI-Ranking
 
+# Called by nearly everything for tracing. Drawn in the map's side rail with
+# its edges hidden by default, so the data-flow picture is not buried under
+# nine converging telemetry lines.
+diagram:
+  ubiquitous: true
+
 connections:
   gets_results_from: []
   calls: []

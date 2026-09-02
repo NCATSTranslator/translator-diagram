@@ -1,0 +1,366 @@
+/*
+  The Map view: the SVG canvas, its chrome (toolbar, legend, minimap, lane
+  pills) and every line style the diagram uses.
+
+  Two rules shape this sheet. Colours come only from tokens.css, because the
+  export writes a standalone SVG by resolving those same custom properties to
+  literals and any colour written here in hex would resolve to nothing. And
+  edge weight is carried by `opacity` on the whole `<g>`, never by
+  `stroke-opacity`, because a marker is painted as part of the element that
+  references it: fading the stroke alone leaves a full-strength arrowhead
+  floating at the end of a line nobody can see.
+*/
+
+.mp {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--hairline);
+  /* Set from JS: the window minus whatever sits above the view. */
+  height: var(--map-h, 640px);
+  touch-action: none;
+}
+
+.mp-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* The map is one figure, not a page of text: a drag must pan it rather
+     than sweep a selection across every label it passes. */
+  user-select: none;
+}
+.mp-svg.dragging { cursor: grabbing; }
+
+/* --- Lanes ---------------------------------------------------------------- */
+
+/* No band, no rule, no tint. The rows already read as rows because the nodes
+   line up; a shaded stripe behind every other one added a second, weaker
+   signal saying the same thing and put two greys on a page that has two
+   surfaces on purpose. The step is named once, in the margin the layout
+   already reserves for it, with a 2px accent tick to anchor the eye. */
+.mp-lane-tick { fill: var(--accent); }
+
+.mp-lane-step {
+  font-family: var(--font);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  fill: var(--muted);
+}
+.mp-lane-title {
+  font-family: var(--font);
+  font-size: var(--fs-meta);
+  font-weight: 600;
+  fill: var(--text);
+}
+.mp-lane-hit { fill: transparent; }
+
+/* First paint only: the lanes arrive top to bottom, so the eye is walked
+   down the pipeline once before anything else moves. */
+.mp-first .mp-lane { animation: mp-lane-in var(--dur-slow) var(--ease) both; }
+@keyframes mp-lane-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --- Groups (part_of) ------------------------------------------------------ */
+
+.mp-group-box {
+  fill: none;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.mp-group-label {
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  letter-spacing: var(--tracking-label);
+  fill: var(--muted);
+}
+
+/* --- Edges ----------------------------------------------------------------- */
+
+.mp-edge { opacity: 0.55; transition: opacity var(--dur-state) var(--ease); }
+.mp-edge .mp-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  transition: stroke-width var(--dur-fast) var(--ease);
+}
+.mp-edge .mp-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 11;
+  cursor: default;
+}
+
+.mp-edge.k-calls { opacity: 0.45; }
+.mp-edge.k-calls .mp-line { stroke-dasharray: 4 3; }
+.mp-edge.k-planned { opacity: 0.45; }
+.mp-edge.k-planned .mp-line { stroke-dasharray: 2 3; }
+.mp-edge.k-externals { opacity: 0.35; }
+.mp-edge.k-externals .mp-line { stroke-width: 1; }
+.mp-edge.k-crosscutting { opacity: 0.35; }
+.mp-edge.k-crosscutting .mp-line { stroke-dasharray: 4 3; }
+.mp-edge.k-catalog { opacity: 0.5; }
+.mp-edge.k-catalog .mp-line { stroke: var(--link); stroke-dasharray: 1 3; }
+
+.mp-edge:hover,
+.mp-edge.lit { opacity: 1; }
+.mp-edge:hover .mp-line,
+.mp-edge.lit .mp-line { stroke-width: 2; }
+
+.mp-arrow { fill: var(--text); }
+.mp-arrow-hollow { fill: var(--page); stroke: var(--text); stroke-width: 1; }
+.mp-arrow-muted { fill: var(--muted); }
+
+/* --- Nodes ----------------------------------------------------------------- */
+
+.mp-node { cursor: pointer; transition: opacity var(--dur-state) var(--ease); }
+.mp-node .mp-box {
+  fill: var(--page);
+  stroke: var(--hairline);
+  stroke-width: 1;
+  transition: stroke var(--dur-fast) var(--ease);
+}
+.mp-node:hover .mp-box { stroke: var(--hairline-strong); }
+.mp-node.sel .mp-box { stroke: var(--accent); stroke-width: 2; }
+.mp-node:focus { outline: none; }
+.mp-node:focus-visible .mp-box { stroke: var(--accent); stroke-width: 2; }
+.mp-node:focus-visible .mp-focus { stroke: var(--accent); stroke-width: 1; }
+.mp-focus { fill: none; stroke: none; }
+
+.mp-name {
+  font-family: var(--font);
+  font-size: var(--fs-table);
+  font-weight: 600;
+  fill: var(--text);
+}
+.mp-id,
+.mp-type,
+.mp-ver {
+  font-family: var(--mono);
+  fill: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mp-id { font-size: var(--fs-label); }
+.mp-type { font-size: var(--fs-micro); letter-spacing: 0.04em; }
+.mp-ownerrail { pointer-events: none; }
+.mp-ver { font-size: var(--fs-label); fill: var(--text); }
+.mp-neq { fill: var(--drift-ink); font-weight: 600; }
+
+.mp-dot-ok { fill: var(--ok); }
+.mp-dot-bad { fill: var(--bad); }
+.mp-lonely { fill: none; stroke: var(--muted); stroke-width: 1; }
+
+/* --- Externals -------------------------------------------------------------- */
+
+.mp-ext-box { fill: none; stroke: var(--hairline-strong); stroke-width: 1; }
+.mp-ext-label {
+  font-family: var(--font);
+  font-size: var(--fs-label);
+  fill: var(--muted);
+}
+
+/* --- Hover focus ------------------------------------------------------------ */
+
+/* One rule does the whole "brighten the neighbourhood" move: everything that
+   is not lit goes to a quarter, so the answer to "what talks to this" is a
+   shape rather than a list. */
+.mp-svg.hovering .mp-node:not(.lit),
+.mp-svg.hovering .mp-ext:not(.lit),
+.mp-svg.hovering .mp-group,
+.mp-svg.hovering .mp-edge:not(.lit) { opacity: 0.25; }
+
+/* Filtered out by the strip above the view. Dimmer than a hover fade and
+   applied whether or not anything is hovered, because it is a property of the
+   component and not of the pointer. */
+.mp-node.out,
+.mp-ext.out { opacity: 0.2; }
+.mp-edge.out { opacity: 0.1; }
+.mp-svg.hovering .mp-node.out:not(.lit) { opacity: 0.08; }
+
+/* --- Chrome ----------------------------------------------------------------- */
+
+.mp-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-3);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  background: var(--page);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+}
+.mp-tool {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+.mp-tool:hover { background: var(--raised); color: var(--text); }
+.mp-tool.on { color: var(--accent); }
+.mp-tool.wide { width: auto; padding: 0 10px; }
+.mp-toolsep {
+  width: 1px;
+  height: 18px;
+  background: var(--hairline);
+}
+
+.mp-legend {
+  position: absolute;
+  left: var(--sp-3);
+  bottom: var(--sp-3);
+  padding: var(--sp-2) 10px;
+  background: var(--page);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  font-size: var(--fs-meta);
+}
+.mp-legend[hidden] { display: none; }
+.mp-legend h3 {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+.mp-legend label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-legend input { margin: 0; accent-color: var(--accent); }
+.mp-legend svg { flex: none; }
+.mp-legend .mp-edge { opacity: 1; }
+
+.mp-minimap {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+  width: 160px;
+  height: 100px;
+  background: var(--page);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+.mp-minimap .mp-viewport {
+  fill: var(--accent-soft);
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The pill row is the narrow-window replacement for the lane labels in the
+   left margin: at 760px that margin is a third of the window. */
+.mp-pills {
+  display: none;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.mp-pill {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  white-space: nowrap;
+}
+.mp-pill b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .mp-pills { display: flex; }
+  .mp-lane-title,
+  .mp-lane-step { display: none; }
+  .mp-minimap { display: none; }
+  .mp-toolbar {
+    left: var(--sp-2);
+    right: var(--sp-2);
+    bottom: var(--sp-2);
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .mp-legend { bottom: 84px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-first .mp-lane { animation: none; }
+}
+
+/* Only the left-margin hit strip listens, and the group rectangle never does:
+   a dashed outline that swallowed a click would put the stage description on
+   the tooltip anywhere the pointer crossed it. */
+.mp-lane-tick,
+.mp-group { pointer-events: none; }
+
+/* A back edge running up the left margin passes behind the label rather than
+   through it. Cheaper than moving either, and it is what lets the margin be
+   both the label column and the return channel. */
+.mp-lane-title,
+.mp-lane-step,
+.mp-group-label {
+  paint-order: stroke fill;
+  stroke: var(--page);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* --- Tooltip lines ---------------------------------------------------------- */
+
+/* The map's tooltip answers "what does this talk to" by name, so it is a stack
+   of labelled lines rather than the two-column grid the table cells use. */
+.tip .mp-tip-line {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-1);
+  border-top: 1px solid var(--hairline);
+  line-height: 1.4;
+}
+.tip .mp-tip-line .k { margin-right: var(--sp-1); }
+.tip .mp-planned { color: var(--muted); font-style: italic; }
+.tip .mp-neq-tip { color: var(--drift-ink); font-weight: 600; }
+
+/* --- Toast ------------------------------------------------------------------ */
+
+/* Only ever says one thing: that a download was saved, or that the browser
+   refused to and what happened instead. */
+.mp-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 56px;
+  transform: translateX(-50%);
+  max-width: 420px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+.mp-toast[hidden] { display: none; }

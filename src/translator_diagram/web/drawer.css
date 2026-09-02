@@ -1,0 +1,583 @@
+/*
+  The detail drawer. Two rules govern everything below.
+
+  It is not modal. The table stays readable, sortable and scrollable while it
+  is open, which is why the page is given room with padding rather than being
+  covered — a drawer that hides the row you clicked answers the question and
+  loses the context.
+
+  And it is still the same page. No cards, no panels, no second visual
+  language: a hairline between rows, an 11px uppercase label, and the same
+  owner coin, source label, ≠ glyph and reachability dot the table uses, so a
+  value read here and the same value read in a cell look like one claim.
+
+  The edge shadow is the one exception to "no shadows except the tooltip",
+  and it is what separates two surfaces that are both --page.
+*/
+
+.drawer {
+  /* 280ms and 40ms, expressed in the tokens rather than typed: both collapse
+     to 0 under prefers-reduced-motion because their inputs do, so the
+     reduced-motion rule stays in one file. */
+  --dw-in: calc((var(--dur-layout) + var(--dur-slow)) / 2);
+  --dw-stagger: calc(var(--dur-fast) / 3);
+  --dw-w: 440px;
+
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  width: var(--dw-w);
+  display: flex;
+  flex-direction: column;
+  background: var(--page);
+  border-left: 1px solid var(--hairline);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.06);
+  font-size: var(--fs-table);
+}
+[data-theme="dark"] .drawer {
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.2);
+}
+.drawer[hidden] { display: none; }
+
+/* Re-triggered on every open rather than left as a transition, so reopening
+   on another component plays the entrance again instead of sitting still. */
+.drawer.in { animation: dw-in var(--dw-in) var(--ease) both; }
+@keyframes dw-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* The table reflows into what is left rather than being covered. app.js
+   re-measures its scrollport from a resize event the drawer dispatches.
+
+   The width is written out here rather than read from --dw-w: that variable
+   is declared on .drawer, and <main> is not inside the drawer, so the var()
+   would resolve to nothing and the padding would silently be zero. */
+html[data-drawer="open"] .page { padding-right: 440px; }
+
+/* Padding alone was not enough. base.css drops a column when the *window*
+   narrows past 1400 / 1150 / 800, but the drawer does not narrow the window —
+   it narrows the row, so at 1700px the table kept every column, outgrew the
+   1212px left to it, and pushed prod out of sight behind the drawer.
+
+   These are the same three rules with each breakpoint moved up by the
+   drawer's width, so "how much room does the table have" is asked about the
+   space the table actually has. Below 1400 the table scrolls sideways as it
+   always did; nothing here changes that. */
+@media (max-width: 1840px) { html[data-drawer="open"] .drop-md { display: none; } }
+@media (max-width: 1590px) { html[data-drawer="open"] .drop-sm { display: none; } }
+@media (max-width: 1240px) { html[data-drawer="open"] .drop-xs { display: none; } }
+
+/* --- Header --------------------------------------------------------------- */
+
+.dw-head {
+  flex: none;
+  padding: var(--sp-4) var(--sp-5) var(--sp-3);
+}
+.dw-headtop {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.dw-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.dw-name h2 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.dw-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin: -6px -8px 0 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.dw-close:hover { background: var(--raised); color: var(--text); }
+
+.dw-id {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: var(--fs-label);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* GitHub's one-liner for the repository. One line, clipped: it is orientation,
+   not content, and a three-line description would push the tabs off the top. */
+.dw-blurb {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The sheet has no drag handle — a handle that does not drag is a lie — so the
+   top edge carries a plain close bar instead. Hidden entirely on the desktop
+   drawer, where the ✕ is already at the top right. */
+.dw-sheetclose { display: none; }
+
+/* The same four metallic stops the map node's rail and the coin are built
+   from, so the header, the table and the diagram agree about an owner. */
+.dw-rule {
+  height: 4px;
+  margin: var(--sp-2) 0 var(--sp-3);
+  border-radius: var(--r-control);
+}
+
+.dw-metaline {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+}
+
+.dw-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-meta);
+}
+.dw-links a { color: var(--link); }
+
+/* --- Tabs ----------------------------------------------------------------- */
+
+/* One row, always. Six labels do not fit 440px, so the strip scrolls and its
+   scrollbar is hidden — a 15px system scrollbar under a 22px tab strip is
+   more furniture than the thing it measures. The fade at the right edge is
+   the only signal left that there is more, and drawer.js turns it on only
+   when there is (data-more), because a permanent fade dims a last tab that
+   was never cut. */
+.dw-tabs {
+  flex: none;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.dw-tabs::-webkit-scrollbar { display: none; }
+.dw-tabs[data-more="1"] {
+  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+}
+.dw-tabs .tabs {
+  width: max-content;
+  min-width: 100%;
+  gap: 0;
+  padding: 0 calc(var(--sp-5) - 10px);
+}
+.dw-tabs .tabs button {
+  padding: 6px 10px;
+  /* .04em, not the label tracking: at .06em the six labels are 20px wider
+     again, and this is the one place on the page where every pixel of width
+     is a tab the reader has to scroll for. */
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* --- Body ----------------------------------------------------------------- */
+
+.dw-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--sp-5) var(--sp-6);
+}
+.dw-panel:focus-visible { outline-offset: -2px; }
+
+.dw-sec {
+  animation: dw-sec-in var(--dur-layout) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * var(--dw-stagger));
+}
+.dw-sec + .dw-sec { margin-top: 20px; }
+/* The one rule left inside the body. Four environments are four separate
+   claims about four separate machines, and 20px of air alone let prod's rows
+   read as a continuation of test's. */
+.dw-sec.dw-envsec + .dw-sec.dw-envsec {
+  padding-top: 20px;
+  border-top: 1px solid var(--hairline);
+}
+@keyframes dw-sec-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.dw-h {
+  margin: 0 0 var(--sp-1);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--text);
+}
+/* A heading that is not the section's first child is a group inside it —
+   Dependencies under a chart, Servers under a record — and needs its own air. */
+.dw-h:not(:first-child) { margin-top: 20px; }
+
+.dw-cap,
+.dw-muted {
+  margin: var(--sp-2) 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+}
+.dw-prose {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-table);
+  line-height: 1.55;
+}
+.dw-sublabel {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+/* --- Definition list ------------------------------------------------------ */
+
+/* A label column and air, not rules. Sixteen fields once meant sixteen grey
+   lines in a 440px column, which read as a table nobody could scan; the
+   labels are already 11px uppercase muted against 13px text, and that
+   contrast is the separation. 6px between fields, 20px and a section label
+   between groups. 116px is what "app version, from the chart" needs before it
+   wraps to three lines; the value column keeps the rest and breaks anywhere,
+   because half of these values are URLs. */
+.dw-dl {
+  display: grid;
+  row-gap: 6px;
+  margin: var(--sp-2) 0 0;
+}
+.dw-r {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: var(--sp-1) var(--sp-3);
+}
+.dw-r dt {
+  font-size: var(--fs-label);
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+.dw-r dd {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-table);
+  line-height: 1.5;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.dw-r dd .dot { vertical-align: baseline; margin-right: 5px; display: inline-block; }
+
+.dw-mono {
+  font-family: var(--mono);
+  font-size: 0.94em;
+  font-variant-numeric: tabular-nums;
+}
+.dw-note {
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+.dw-off { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+.dw-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+}
+.dw-link { color: var(--link); }
+.dw-on { font-weight: 600; }
+.dw-ver {
+  font-family: var(--mono);
+  font-size: var(--fs-table);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* The same tint the table's cells carry, and never without the ≠ beside it. */
+.dw-drift {
+  background: var(--drift);
+  box-shadow: 0 0 0 3px var(--drift);
+  color: var(--drift-ink);
+}
+/* A key inside a value: an environment name in front of a probed URL, an
+   endpoint name in front of its path. Small caps so it does not read as part
+   of the string beside it. */
+.dw-key {
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+
+.dw-clip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.dw-stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dw-stack li { line-height: 1.55; }
+.dw-stack li + li { margin-top: 3px; }
+
+/* Text on a hairline, never a fill: fifteen filled tags on one record is a
+   wall of colour where the content is a list of words. */
+.dw-tag {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  line-height: 1.7;
+}
+
+/* --- Disclosure ----------------------------------------------------------- */
+
+.dw-disc {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  cursor: pointer;
+}
+.dw-disc:hover { color: var(--text); }
+.dw-disc svg { transition: transform var(--dur-fast) var(--ease); }
+.dw-disc[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+/* 0fr → 1fr is what animates a height nobody has measured. The inner div
+   carries the overflow, which is what the two-element shape is for. */
+.dw-disc-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-layout) var(--ease);
+}
+.dw-disc-body > div { overflow: hidden; }
+.dw-disc[aria-expanded="true"] + .dw-disc-body { grid-template-rows: 1fr; }
+
+/* --- Tables --------------------------------------------------------------- */
+
+/* Wide content scrolls inside its own box rather than widening the drawer. */
+.dw-tscroll {
+  margin-top: var(--sp-2);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.dw-t {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+  font-variant-numeric: tabular-nums;
+}
+/* table.css styles `thead th` and `tbody td` as bare element selectors — a
+   sticky header, a row height, a sticky rounded first column — and those
+   reach any table on the page, this one included. Rather than edit a file
+   this step does not own, the drawer's tables opt out of each of them by
+   name. The selectors carry a class so they outrank the originals.
+
+   Headers wrap here, which is the point: "Requests cpu / mem" on one line
+   costs the fourth column its place in a 392px drawer, and a header nobody
+   can read is worse than a header on two lines. */
+.dw-t thead th {
+  position: static;
+  top: auto;
+  z-index: auto;
+  background: none;
+  box-shadow: none;
+  white-space: normal;
+  padding: 4px 10px 4px 0;
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: 1.35;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+  vertical-align: bottom;
+}
+.dw-t tbody td {
+  position: static;
+  left: auto;
+  z-index: auto;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  /* No rule between rows: the header underline is the only line these tables
+     get, and seven server rows separated by seven hairlines was six lines
+     more than the reading needed. */
+  border-bottom: 0;
+  /* A server row is two lines — url over description — and with the rules
+     gone the only thing grouping the pair is the gap around it. */
+  padding: 6px 10px 6px 0;
+  vertical-align: top;
+}
+.dw-t tbody td:last-child,
+.dw-t thead th:last-child { padding-right: 0; }
+
+/* --- Releases ------------------------------------------------------------- */
+
+/* Ten releases once meant ten hairlines. The tag is bold mono and the meta
+   line under it is 10px muted, which is already two levels of contrast; the
+   third was a grey line, and it went. */
+.dw-rel + .dw-rel { margin-top: var(--sp-4); }
+.dw-relhead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.dw-relname { font-size: var(--fs-meta); }
+.dw-relmeta {
+  margin-top: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-2);
+}
+.dw-excerpt {
+  margin: var(--sp-2) 0 0;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* --- Connections ---------------------------------------------------------- */
+
+.dw-conns {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--sp-2);
+}
+.dw-conn {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 5px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-table);
+  text-align: left;
+  cursor: pointer;
+}
+.dw-conn .coin { align-self: center; }
+.dw-conn:hover { background: var(--raised); }
+.dw-conn.static { cursor: default; }
+.dw-conn.static:hover { background: none; }
+.dw-connname { flex: 0 1 auto; overflow-wrap: anywhere; }
+.dw-connid {
+  flex: 1 1 auto;
+  color: var(--muted);
+  font-size: var(--fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Recorded as an intention, not as a fact. The dashed underline is the same
+   mark the map uses for a planned edge, and the word says it too. */
+.dw-conn.planned .dw-connname {
+  text-decoration: underline dashed 1px;
+  text-underline-offset: 3px;
+}
+
+/* --- Bottom sheet --------------------------------------------------------- */
+
+/* Under 900px there is no room to sit beside the table, so the drawer becomes
+   a sheet over the bottom 70% and the page keeps its full width. */
+@media (max-width: 900px) {
+  .drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    height: 70vh;
+    border-left: 0;
+    border-top: 1px solid var(--hairline);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+  }
+  [data-theme="dark"] .drawer { box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.2); }
+  .drawer.in { animation-name: dw-in-up; }
+  @keyframes dw-in-up {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: none; }
+  }
+
+  /* No drag handle — a handle that does not drag is a lie — but the top edge
+     of a sheet is where a thumb goes, so it carries a full-width close bar
+     instead. Full width because it is the target, not a decoration. */
+  .dw-sheetclose {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: none;
+    width: 100%;
+    padding: 7px 0 6px;
+    border: 0;
+    border-bottom: 1px solid var(--hairline);
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    cursor: pointer;
+  }
+  .dw-sheetclose:hover { color: var(--text); background: var(--raised); }
+
+  /* The sheet takes 70vh, and app.js sizes the table from the window rather
+     than from what is left of it, so without this the table's first row sat
+     behind the sheet and the reader had to scroll to find the row they had
+     just clicked. 30vh is what fits above a 70vh sheet. */
+  html[data-drawer="open"] .tablewrap { max-height: 30vh; }
+  html[data-drawer="open"] .page { padding-right: 0; padding-bottom: 70vh; }
+
+  .dw-head { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
+  .dw-tabs .tabs { padding: 0 calc(var(--sp-4) - 10px); }
+  .dw-body { padding: 0 var(--sp-4) var(--sp-5); }
+  .dw-r { grid-template-columns: 100px minmax(0, 1fr); }
+}

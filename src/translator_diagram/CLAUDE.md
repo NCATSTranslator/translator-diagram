@@ -310,6 +310,34 @@ rendering, and says something that is not true.
 - **Attempts it did not record.** Every probe reaches `report.fetches`,
   including the ones that fail, which is why the Fetches tile counts more than
   the endpoints — the manifest promises every attempt.
+- **A host it never contacted.** `reachable` is three states, not two. Every
+  deployment gets a root probe of its own URL — `sync.probe_to`, which saves a
+  `{status, content_type, error}` summary rather than the page — and the cell
+  is reachable if the root or any document answered 2xx/3xx, not reachable if
+  every probe failed, and *null* if nothing was probed. Before the root probe
+  it meant "an API document parsed", so the four UI environments, which record
+  `openapi: null` and were therefore never fetched, were drawn as down with no
+  HTTP status beside them. `root_status` and `http_status` are separate keys
+  for the same reason: a host serving its app at `/` and nothing at
+  `openapi.json` is two facts.
+- **An empty cell with no explanation.** A cell with no version carries a
+  `reason` from `CELL_REASONS` — the one place the vocabulary lives, so the
+  page and this module cannot come to disagree about it. The distinctions it
+  draws are the ones that were being lost: an endpoint that 404s against one
+  that was never recorded, a host that does not resolve against one that
+  answers as another service, a 200 that was HTML against a 200 with no
+  version in it. `SyncedData.openapi_outcome` is what makes the last of those
+  visible: `synced.openapi` answers None for "not fetched", "not JSON" and
+  "fetch failed" alike, which is three findings wearing one face.
+- **A maturity read off a hostname.** `deployments_from_smartapi` will infer an
+  environment from a server's prose `description` when the record declares no
+  `x-maturity` — smartapi's own registration describes a production and a
+  development server and declares neither, and used to yield an empty row. It
+  never reads the URL: `dev.smart-api.info` and `x.ci.transltr.io` look like
+  they name a maturity, and a production host containing "test" would be filed
+  as test on the strength of a substring. What it infers is marked `inferred`
+  all the way to the cell, because a field somebody filled in and a sentence
+  somebody wrote are two strengths of claim.
 - **A leak that is not one.** `privacy.verify` matches a withheld id bounded by
   non-alphanumerics. As a substring it would abort every published build the day
   someone withholds `ars` or `ui`, and a false alarm nobody can clear ends with
