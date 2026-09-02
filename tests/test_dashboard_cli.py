@@ -39,6 +39,17 @@ def workspace(tmp_path):
     # owner-colors.csv lives only in config/ now, so a workspace without one
     # has no colours to find -- the same as any other checkout.
     (config / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
+    # A checkout has one of these too, and build-dashboard now refuses to
+    # guess at the row order without it.
+    (config / "flow-steps.yaml").write_text(
+        "stages:\n"
+        "  - title: Serving\n"
+        "    description: Answers questions.\n"
+        "    components: [keeper, secret]\n"
+        "unplaced:\n"
+        "  description: Nothing is unplaced.\n"
+        "  components: []\n"
+    )
     (config / "privacy.yaml").write_text(
         "components:\n"
         "  - id: secret\n"
@@ -109,3 +120,13 @@ class TestAMissingPolicyStopsTheBuild:
         result, payload = _run(workspace, "--include-private")
         assert result.exit_code == 0, result.output
         assert len(payload["rows"]) == 2
+
+
+class TestAMissingStageFileStopsTheBuild:
+    def test_no_stages_and_no_walk_is_an_error(self, workspace):
+        """The row order is a decision, not something to be derived. Without
+        the file the page would silently show data-flow order instead."""
+        (workspace / "config" / "flow-steps.yaml").unlink()
+        result, _ = _run(workspace)
+        assert result.exit_code != 0
+        assert "No stage file" in result.output

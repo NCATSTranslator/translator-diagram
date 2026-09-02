@@ -2,6 +2,7 @@
 
 import json
 
+import click
 import pytest
 
 from translator_diagram.components import ComponentFile, Deployment
@@ -712,10 +713,25 @@ stages:
         ordered = in_stage_order(self._components("a"), stages)
         assert [c.id for c, _, _ in ordered] == ["a"]
 
-    def test_no_file_means_data_flow_order(self, tmp_path):
-        assert load_stages(tmp_path / "absent.yaml") == []
+    def test_a_missing_file_is_refused_rather_than_worked_around(self, tmp_path):
+        # in_stage_order does fall back to data-flow order, and that is what
+        # makes the missing file worth refusing: the page would look finished
+        # while showing the ordering this file exists to replace.
+        with pytest.raises(click.ClickException):
+            load_stages(tmp_path / "absent.yaml")
         ordered = in_stage_order(self._components("a", "b"), [])
         assert len(ordered) == 2
+
+    def test_the_file_is_found_from_a_subdirectory(self, tmp_path, monkeypatch):
+        # The same upward walk load_owner_colors and load_policy do: running
+        # build-dashboard from anywhere inside a checkout finds the checkout's
+        # stages, not nothing.
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "flow-steps.yaml").write_text(self.FILE)
+        deep = tmp_path / "a" / "b"
+        deep.mkdir(parents=True)
+        monkeypatch.chdir(deep)
+        assert [stage["title"] for stage in load_stages()][:2] == ["Ingest", "Serving"]
 
     def test_an_empty_file_is_not_an_error(self, tmp_path):
         assert self._stages(tmp_path, "") == []

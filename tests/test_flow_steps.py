@@ -13,6 +13,7 @@ tests are what says so.
 
 from pathlib import Path
 
+import click
 import pytest
 import yaml
 
@@ -107,8 +108,12 @@ def test_unplaced_is_a_deliberate_list_not_a_leftover(raw):
     assert (raw.get("unplaced") or {}).get("description")
 
 
-def test_a_missing_file_falls_back_to_data_flow_order(components, tmp_path):
-    assert load_stages(tmp_path / "absent.yaml") == []
+def test_a_missing_file_is_refused(components, tmp_path):
+    # Not an empty list: in_stage_order falls back to data-flow order, which
+    # is the ordering this file exists to replace, so a build that cannot find
+    # it must stop rather than publish that page.
+    with pytest.raises(click.ClickException):
+        load_stages(tmp_path / "absent.yaml")
     ordered = in_stage_order(components, [])
     assert len(ordered) == len(components)
     assert {number for _, number, _ in ordered} == {1}

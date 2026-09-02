@@ -18,6 +18,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import click
 import yaml
 
 from .colors import load_owner_colors, text_color_for
@@ -59,12 +60,22 @@ RELEASES_SHOWN = 3
 UPDATED_LABELS = {"release": "release", "registry": "registry"}
 
 
-STAGES_FILE = Path("config/flow-steps.yaml")
+CONFIG_STAGES_PATH = Path("config/flow-steps.yaml")
 
 UNPLACED_TITLE = "Not yet placed"
 
 
-def load_stages(path: Path = STAGES_FILE) -> list[dict[str, Any]]:
+def _find_stages() -> Path | None:
+    """config/flow-steps.yaml in the working directory or the nearest parent."""
+    cwd = Path.cwd()
+    for directory in (cwd, *cwd.parents):
+        candidate = directory / CONFIG_STAGES_PATH
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     """The platform's stages, in the order the page shows them.
 
     This file is the row order, not a set of labels on a computed one. The
@@ -77,8 +88,25 @@ def load_stages(path: Path = STAGES_FILE) -> list[dict[str, Any]]:
 
     The trailing entry is the components no stage claims, named in the file's
     `unplaced` block so a new component cannot quietly sort last.
+
+    With no path, the file is looked for in the working directory and every
+    directory above it — the same walk `load_owner_colors` and `load_policy`
+    do, so building from a subdirectory of the checkout behaves the same way.
+    A missing file is an error rather than an empty list: `in_stage_order`
+    falls back to data-flow order, which is the ordering this file exists to
+    replace, so degrading quietly would publish the wrong page and say
+    nothing. An empty file is still allowed — that one is somebody's decision.
     """
-    loaded = _read_yaml(path) if path.exists() else None
+    found = path if path is not None else _find_stages()
+    if found is None:
+        raise click.ClickException(
+            f"No stage file at {CONFIG_STAGES_PATH}. It sets the row order, "
+            f"and without it the page falls back to data-flow order. Run from "
+            f"the repository root."
+        )
+    if not found.exists():
+        raise click.ClickException(f"Stage file not found: {found}")
+    loaded = _read_yaml(found)
     if not loaded:
         return []
     stages = [

@@ -260,8 +260,13 @@ question with one.
 A component no stage names lands in a trailing band, and
 `tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
 the same contract as `unknown.yaml`, so a new component file cannot quietly
-appear at the bottom looking deliberate. The file is optional: delete it and
-the page falls back to `in_flow_order` with no bands at all.
+appear at the bottom looking deliberate. The file is required: it is looked
+for in the working directory and every directory above it, the same walk
+`load_owner_colors` and `load_policy` do, and `build-dashboard` fails if it
+finds none. `in_stage_order` does still fall back to `in_flow_order` with no
+bands, and that fallback is exactly why the missing file is refused — a build
+run from outside a checkout would otherwise publish the derived order this
+file exists to replace, and look finished doing it.
 
 **Change owner node colours** → edit `config/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:
