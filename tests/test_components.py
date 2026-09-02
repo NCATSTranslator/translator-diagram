@@ -1,221 +1,290 @@
-"""The components/*.yaml files, and the schema they must satisfy.
+"""Parsing components/*.yaml into ComponentFile."""
 
-These files do not feed the generator yet — loading.py still reads the sheet
-CSV. The checks here are what stops them drifting into a second, wrong source
-of truth in the meantime.
-"""
-
-import csv
-import json
-from pathlib import Path
-
-import jsonschema
-import pytest
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
-COMPONENTS_DIR = ROOT / "components"
-SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
-UNKNOWN_PATH = ROOT / "unknown.yaml"
-UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+from translator_diagram.components import (
+    DEFAULT_ENDPOINT_PATHS,
+    ENVIRONMENTS,
+    Deployment,
+    derive_deployments,
+    endpoint_url_in,
+    github_repo,
+    index_by_id,
+    load_components,
+    merge_deployments,
+    parse_component,
+)
 
-# The `diagram:` flags and the values the schema already gives them.
-DIAGRAM_FLAG_DEFAULTS = {"ubiquitous": False, "hide": False}
-ENRICHED_EXAMPLE_PATH = ROOT / "docs" / "examples" / "name-lookup-enriched.yaml"
-
-COMPONENT_FILES = sorted(COMPONENTS_DIR.glob("*.yaml"))
-
-
-def _load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
-
-
-@pytest.fixture(scope="module")
-def schema() -> dict:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
+           "refactor_status": "New in Refactor"}
 
 
-@pytest.fixture(scope="module")
-def unknown() -> dict:
-    return _load(UNKNOWN_PATH)
+def _parse(**overrides):
+    return parse_component({**MINIMAL, **overrides})
 
 
-@pytest.fixture(scope="module")
-def components() -> dict[str, dict]:
-    return {path.stem: _load(path) for path in COMPONENT_FILES}
+class TestParsing:
+    def test_a_minimal_file(self):
+        component = _parse()
+        assert (component.id, component.name, component.owner) == (
+            "svc", "Service", "DOGSLED")
+        assert component.identifiers == {} and component.environments == {}
+
+    def test_name_falls_back_to_id(self):
+        assert parse_component({**MINIMAL, "name": None}).name == "svc"
+
+    def test_owner_falls_back_to_none(self):
+        # Matches loading.py, so both sides of the repo agree on the key that
+        # config/owner-colors.csv is looked up by.
+        assert parse_component({**MINIMAL, "owner": ""}).owner == "None"
+
+    def test_identifier_accessors(self):
+        component = _parse(identifiers={
+            "infores": "infores:x", "smartapi": "abc", "helm_chart": "chart",
+            "otel_services": ["A", "B"]})
+        assert component.infores == "infores:x"
+        assert component.smartapi_id == "abc"
+        assert component.helm_chart == "chart"
+        assert component.otel_services == ["A", "B"]
+
+    def test_missing_identifiers_are_none_not_errors(self):
+        component = _parse()
+        assert component.infores is None and component.otel_services == []
+
+    def test_repository_selects_by_role(self):
+        component = _parse(repositories=[
+            {"url": "https://chart", "role": "helm-chart"},
+            {"url": "https://src", "role": "source"},
+        ])
+        assert component.repository("source") == "https://src"
+        assert component.repository("helm-chart") == "https://chart"
+        assert component.repository("data") is None
 
 
-def test_there_are_components():
-    # A glob that quietly matches nothing would make every test below pass.
-    assert COMPONENT_FILES, f"no *.yaml under {COMPONENTS_DIR}"
+class TestEdges:
+    def test_both_edge_kinds_are_upstream(self):
+        component = _parse(
+            connections={"gets_results_from": ["a"], "calls": ["b"]})
+        assert set(component.upstream) == {"a", "b"}
+
+    def test_a_planned_edge_keeps_its_target(self):
+        component = _parse(connections={"calls": ["~a"]})
+        assert component.upstream == ["a"]
+
+    def test_externals_are_direction_and_name(self):
+        component = _parse(connections={"externals": [
+            {"direction": "in", "name": "Sources"}]})
+        assert component.externals == [("in", "Sources")]
+        assert component.fed_by_external
+
+    def test_an_outward_external_does_not_feed_in(self):
+        component = _parse(connections={"externals": [
+            {"direction": "out", "name": "User"}]})
+        assert not component.fed_by_external
 
 
-class TestSchema:
-    def test_schema_is_itself_valid(self, schema):
-        jsonschema.Draft202012Validator.check_schema(schema)
+class TestEndpointUrls:
+    def _deployment(self, **kwargs):
+        return Deployment(env="ci", url="https://svc.ci/", **kwargs)
 
-    @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
-    def test_file_validates(self, path, schema):
-        errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(_load(path)),
-            key=lambda e: list(e.path),
-        )
-        assert not errors, "\n".join(
-            f"{path.name}: {'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
-            for e in errors
-        )
+    def test_a_relative_path_joins_onto_the_base(self):
+        component = _parse(endpoints={"openapi": "webapp/openapi.json"})
+        assert endpoint_url_in(component, self._deployment(), "openapi") == (
+            "https://svc.ci/webapp/openapi.json")
 
+    def test_a_base_with_a_path_keeps_it(self):
+        # arax registers .../api/arax/v1.4 as its base. urljoin would discard
+        # everything after the last slash and fetch the wrong document.
+        component = _parse(endpoints={"openapi": "openapi.json"})
+        deployment = Deployment(env="ci", url="https://arax.ci/api/arax/v1.4")
+        assert endpoint_url_in(component, deployment, "openapi") == (
+            "https://arax.ci/api/arax/v1.4/openapi.json")
 
-class TestIdentity:
-    @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
-    def test_id_matches_filename(self, path):
-        # The filename is how a human finds the file and how every reference
-        # resolves; letting the two drift would give one component two names.
-        assert _load(path)["id"] == path.stem
+    def test_a_per_environment_override_wins(self):
+        # node-annotator's prod serves openapi.json where ci and test serve
+        # webapp/openapi.json.
+        component = _parse(endpoints={"openapi": "webapp/openapi.json"})
+        deployment = self._deployment(endpoints={"openapi": "openapi.json"})
+        assert endpoint_url_in(component, deployment, "openapi") == (
+            "https://svc.ci/openapi.json")
 
-    def test_ids_are_unique_case_insensitively(self, components):
-        # validation.validate matches references case-insensitively, and a
-        # case-insensitive filesystem cannot hold both spellings anyway.
-        seen: dict[str, str] = {}
-        for cid in components:
-            clash = seen.setdefault(cid.lower(), cid)
-            assert clash == cid, f"{cid} and {clash} differ only by case"
+    def test_an_absent_path_falls_through_to_the_default(self):
+        component = _parse()
+        assert endpoint_url_in(component, self._deployment(), "openapi") == (
+            "https://svc.ci/" + DEFAULT_ENDPOINT_PATHS["openapi"])
 
+    def test_an_explicit_null_beats_the_default(self):
+        # The distinction the whole format rests on: absent means nobody has
+        # looked, null means someone did and there is nothing there.
+        component = _parse(endpoints={"openapi": None})
+        assert endpoint_url_in(component, self._deployment(), "openapi") is None
 
-class TestReferences:
-    def test_every_reference_has_a_file(self, components):
-        # The file set must be closed: the generator hard-errors on an unknown
-        # id, and a referenced-but-filtered component still needs a file so it
-        # can be drawn as a ghost node.
-        known = set(components)
-        for cid, data in components.items():
-            connections = data.get("connections") or {}
-            refs = connections.get("gets_results_from", []) + connections.get(
-                "calls", []
-            )
-            for ref in refs:
-                target = ref.lstrip("~")
-                assert target in known, f"{cid} references unknown id {target!r}"
+    def test_a_per_environment_null_beats_a_component_path(self):
+        component = _parse(endpoints={"openapi": "openapi.json"})
+        deployment = self._deployment(endpoints={"openapi": None})
+        assert endpoint_url_in(component, deployment, "openapi") is None
 
-    def test_no_component_references_itself(self, components):
-        for cid, data in components.items():
-            connections = data.get("connections") or {}
-            refs = connections.get("gets_results_from", []) + connections.get(
-                "calls", []
-            )
-            assert cid not in {r.lstrip("~") for r in refs}
+    def test_status_has_no_default(self):
+        # Defaulting it would manufacture a 404 per environment and call it data.
+        assert "status" not in DEFAULT_ENDPOINT_PATHS
+        assert endpoint_url_in(_parse(), self._deployment(), "status") is None
+
+    def test_the_method_only_sees_recorded_environments(self):
+        component = _parse(endpoints={"openapi": "openapi.json"})
+        assert component.endpoint_url("ci", "openapi") is None
 
 
-class TestDiagram:
-    # `connections:` keeps its empty lists, because `gets_results_from: []`
-    # is a claim -- checked, there are none -- under the same absent-vs-null
-    # convention as the rest of the format. A `diagram:` flag at its default
-    # claims nothing the schema does not already say, so it should not be
-    # written at all. All 26 files carried `ubiquitous: false` and
-    # `hide: false` before that distinction was drawn.
+class TestMergeDeployments:
+    def test_recorded_beats_discovered(self):
+        # _parse goes through parse_component, so environments arrive in the
+        # raw YAML shape rather than as Deployment objects.
+        component = _parse(environments={"ci": {"url": "https://right/"}})
+        merged = merge_deployments(
+            component, {"ci": Deployment(env="ci", url="https://wrong/")})
+        assert merged["ci"].url == "https://right/"
 
-    def test_no_file_writes_a_flag_at_its_default(self, components):
-        for cid, data in components.items():
-            diagram = data.get("diagram") or {}
-            for flag, default in DIAGRAM_FLAG_DEFAULTS.items():
-                if flag not in diagram:
-                    continue
-                assert diagram[flag] != default, (
-                    f"{cid} writes diagram.{flag}: {default}, which is the "
-                    f"schema default -- omit it, and omit diagram: entirely "
-                    f"once it is empty"
-                )
+    def test_discovered_fills_the_gaps(self):
+        component = _parse()
+        merged = merge_deployments(
+            component, {"prod": Deployment(env="prod", url="https://p/")})
+        assert set(merged) == {"prod"}
 
-    def test_a_present_block_says_something(self, components):
-        for cid, data in components.items():
-            if "diagram" in data:
-                assert data["diagram"], f"{cid} has an empty diagram: block"
+    def test_the_result_is_in_ladder_order(self):
+        component = _parse()
+        merged = merge_deployments(component, {
+            env: Deployment(env=env, url=f"https://{env}/")
+            for env in reversed(ENVIRONMENTS)
+        })
+        assert list(merged) == list(ENVIRONMENTS)
 
-
-class TestOwners:
-    def test_every_owner_has_a_colour(self, components):
-        # A new owner arriving without a colour would silently take a fallback
-        # from the palette, and the legend would stop matching the sheet.
-        with (ROOT / "config" / "owner-colors.csv").open(encoding="utf-8-sig") as f:
-            known = {row["owner"] for row in csv.DictReader(f)}
-        for cid, data in components.items():
-            assert data["owner"] in known, (
-                f"{cid}: owner {data['owner']!r} is not in config/owner-colors.csv"
-            )
+    def test_an_unknown_environment_name_is_dropped(self):
+        component = _parse()
+        merged = merge_deployments(
+            component, {"staging": Deployment(env="staging", url="https://s/")})
+        assert merged == {}
 
 
-class TestEndpoints:
-    @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
-    def test_endpoint_paths_are_relative(self, path):
-        # `endpoints` are joined onto an environment's base URL. An absolute
-        # URL here would silently win over the base and pin every environment
-        # to whichever one it happened to name.
-        for kind, value in (_load(path).get("endpoints") or {}).items():
-            if value is None:
-                continue
-            assert not value.startswith(("http://", "https://", "/")), (
-                f"{path.name}: endpoints.{kind} must be relative, got {value!r}"
-            )
+class TestDeriveDeployments:
+    def test_the_other_maturities_follow_from_one(self):
+        # answer-appraiser registers only production, and is deployed to ci and
+        # test as well. Knowing one host is knowing where to look for the rest.
+        known = {"prod": Deployment(env="prod", url="https://answerappraiser.transltr.io")}
+        assert {e: d.url for e, d in derive_deployments(known).items()} == {
+            "ci": "https://answerappraiser.ci.transltr.io/",
+            "test": "https://answerappraiser.test.transltr.io/",
+        }
+
+    def test_a_path_on_the_base_survives(self):
+        # arax registers .../api/arax/v1.4; a sibling host without that path
+        # would 404 and be silently dropped.
+        known = {"ci": Deployment(env="ci", url="https://arax.ci.transltr.io/api/arax/v1.4")}
+        assert derive_deployments(known)["prod"].url == (
+            "https://arax.transltr.io/api/arax/v1.4/")
+
+    def test_known_environments_are_left_alone(self):
+        known = {
+            "ci": Deployment(env="ci", url="https://x.ci.transltr.io"),
+            "prod": Deployment(env="prod", url="https://x.transltr.io"),
+        }
+        assert set(derive_deployments(known)) == {"test"}
+
+    def test_dev_is_never_derived(self):
+        # Development deployments live at RENCI, at BioThings, and elsewhere.
+        # There is no convention, so there is nothing to derive.
+        known = {"prod": Deployment(env="prod", url="https://x.transltr.io")}
+        assert "dev" not in derive_deployments(known)
+
+    def test_the_commonest_stem_wins_when_hosts_disagree(self):
+        # Three known hosts under one namespace, one stem used twice: the odd
+        # one out is not the shape to derive the missing environment from,
+        # however early on the ladder it sits.
+        known = {
+            "dev": Deployment(env="dev", url="https://renamed.transltr.io/"),
+            "ci": Deployment(env="ci", url="https://svc.ci.transltr.io/"),
+            "test": Deployment(env="test", url="https://svc.test.transltr.io/"),
+        }
+        assert derive_deployments(known)["prod"].url == "https://svc.transltr.io/"
+
+    def test_a_tie_is_broken_by_the_ladder_not_the_alphabet(self):
+        # One each. Sorting the stems and taking the first made the choice by
+        # spelling; the environment nearer the start of the ladder is at least
+        # a property of the deployments.
+        known = {
+            "ci": Deployment(env="ci", url="https://zulu.ci.transltr.io/"),
+            "test": Deployment(env="test", url="https://alpha.test.transltr.io/"),
+        }
+        assert derive_deployments(known)["prod"].url == "https://zulu.transltr.io/"
+
+    def test_a_non_itrb_host_yields_nothing(self):
+        known = {"dev": Deployment(env="dev", url="https://x.renci.org/")}
+        assert derive_deployments(known) == {}
+
+    def test_nothing_known_derives_nothing(self):
+        assert derive_deployments({}) == {}
 
 
-class TestUnknown:
-    """unknown.yaml — the holding pen for identifiers no component claims."""
+class TestGithubRepo:
+    def test_a_plain_repository_url(self):
+        assert github_repo("https://github.com/RTXteam/RTX") == "RTXteam/RTX"
 
-    def test_validates(self, unknown):
-        schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
-        jsonschema.Draft202012Validator.check_schema(schema)
-        errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(unknown),
-            key=lambda e: list(e.path),
-        )
-        assert not errors, "\n".join(
-            f"unknown.yaml: {'/'.join(str(p) for p in e.path)}: {e.message}"
-            for e in errors
-        )
+    def test_a_trailing_slash_or_dot_git(self):
+        assert github_repo("https://github.com/a/b/") == "a/b"
+        assert github_repo("https://github.com/a/b.git") == "a/b"
 
-    def test_otel_names_are_claimed_once(self, components, unknown):
-        # An identifier claimed in two places is worse than one claimed
-        # nowhere: the second claim is invisible, and whichever consumer reads
-        # first wins.
-        owners: dict[str, str] = {}
-        for cid, data in components.items():
-            for name in (data.get("identifiers") or {}).get("otel_services") or []:
-                assert name not in owners, (
-                    f"OTel service {name!r} claimed by both {owners[name]} and {cid}"
-                )
-                owners[name] = cid
-        for entry in unknown.get("otel_services") or []:
-            name = entry["name"]
-            assert name not in owners, (
-                f"OTel service {name!r} is in unknown.yaml but is already "
-                f"claimed by components/{owners[name]}.yaml — promote it by "
-                f"deleting the unknown.yaml entry"
-            )
-            owners[name] = "unknown.yaml"
+    def test_a_path_into_a_repository_is_not_one(self):
+        # Every helm-chart entry looks like this. Its releases belong to the
+        # devops repository, not to the component, so it must not match.
+        assert github_repo(
+            "https://github.com/helxplatform/translator-devops"
+            "/tree/develop/helm/shepherd"
+        ) is None
 
-    def test_not_recorded_entries_really_have_no_file(self, components, unknown):
-        # `not-recorded` means "a component we know of that has no file yet".
-        # Once the file exists the entry is stale and should have been
-        # promoted, so this fails rather than letting it rot.
-        for entry in unknown.get("otel_services") or []:
-            if entry["status"] != "not-recorded":
-                continue
-            assert entry["component"] not in components, (
-                f"unknown.yaml: {entry['name']!r} is marked not-recorded but "
-                f"components/{entry['component']}.yaml exists — move the name "
-                f"into that file's identifiers.otel_services"
-            )
+    def test_a_non_github_url_or_none(self):
+        assert github_repo("https://gitlab.com/a/b") is None
+        assert github_repo(None) is None
+        assert github_repo("") is None
 
 
-class TestEnrichedExample:
-    def test_recorded_block_matches_the_component_file(self):
-        # The example's whole argument is that `pulled:` comes from `recorded:`
-        # and nothing else. If the two drift, it argues for a file that does
-        # not exist — which is how it went wrong once already, when
-        # name-lookup gained otel_services and the example did not.
-        example = _load(ENRICHED_EXAMPLE_PATH)["recorded"]
-        component = _load(COMPONENTS_DIR / "name-lookup.yaml")
-        assert example == component, (
-            "docs/examples/name-lookup-enriched.yaml's `recorded:` block is no "
-            "longer components/name-lookup.yaml verbatim"
-        )
+class TestLoading:
+    def test_files_load_sorted_case_insensitively(self, tmp_path):
+        for cid in ("Zebra", "apple"):
+            (tmp_path / f"{cid}.yaml").write_text(
+                yaml.safe_dump({**MINIMAL, "id": cid}))
+        assert [c.id for c in load_components(tmp_path)] == ["apple", "Zebra"]
+
+    def test_an_empty_directory_loads_nothing(self, tmp_path):
+        assert load_components(tmp_path) == []
+
+    def test_index_is_case_insensitive(self):
+        assert "svc" in index_by_id([_parse(id="SVC")])
+
+
+def test_the_real_files_all_parse():
+    # The fixtures above are small on purpose; this is the check that the
+    # actual repository data still fits the parser.
+    from pathlib import Path
+
+    components = load_components(Path(__file__).resolve().parent.parent / "components")
+    assert components
+    assert all(c.id and c.name and c.owner for c in components)
+
+
+def test_the_real_files_fill_the_fields_the_dashboard_reads():
+    # Every accessor here reads a key through .get(), so a field that moves in
+    # the YAML does not raise -- it comes back empty, and a page of blank cells
+    # is a passing test suite. This is the check that noticed nothing when
+    # `diagram:` was split, so it now asserts on the data rather than the
+    # shape: each of these is recorded for at least half the components, and a
+    # zero means the parser and the files have stopped agreeing.
+    from pathlib import Path
+
+    components = load_components(Path(__file__).resolve().parent.parent / "components")
+    populated = {
+        "refactor_status": sum(1 for c in components if c.refactor_status),
+        "layer": sum(1 for c in components if c.layer),
+        "hosted_at": sum(1 for c in components if c.hosted_at),
+        "itrb_app": sum(1 for c in components if c.itrb_app),
+        "upstream": sum(1 for c in components if c.upstream),
+    }
+    half = len(components) // 2
+    assert all(n > half for n in populated.values()), populated

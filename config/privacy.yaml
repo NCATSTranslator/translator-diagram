@@ -1,0 +1,56 @@
+# What a published build of the dashboard withholds.
+#
+# `build-dashboard` reads this file and applies it by default; pass
+# --include-private to build the full page for local use. See privacy.py for
+# why redaction is the default, and for the important caveat: this is about
+# reach, not secrecy. This file is in a public repository and names what it
+# withholds. It keeps things off an indexed page; it does not hide them from
+# anyone who looks, and a fact that is genuinely too sensitive to publish has
+# to be fixed at the API that served it, not here.
+#
+# An entry that matches nothing is an error, not a no-op — a renamed component
+# must not silently stop being withheld. tests/test_privacy.py enforces it.
+
+# Whole rows, dropped from the table and from overview.json.
+components:
+  - id: jaeger
+    reason: >-
+      The OpenTelemetry tracing console. Its row links translator-otel.{ci,test,}
+      .transltr.io, which is an internal operations tool and the clearest
+      "internal system" on the page.
+  - id: test-harness
+    reason: >-
+      The internal test rig, down to where it runs. Nothing about it is useful
+      to someone integrating with Translator.
+
+# Row fields, emptied on every remaining row. Emptied rather than deleted:
+# overview.json's shape is a contract.
+fields:
+  - name: helm_images
+    reason: >-
+      Container image tags (solr:9.1, renci-python-image:latest, ...). Beside
+      the version grid they make a ready-made inventory to match against a CVE
+      feed, with nothing to probe. Nothing in dashboard.js renders this field,
+      so withholding it changes overview.json and not the page — do not go
+      looking for what moved.
+  - name: helm_version
+    reason: >-
+      The chart version those tags came from. Note this supplies the version
+      for 3 of ~49 deployments, so withholding it blanks those cells and moves
+      them from `helm` to `none` in the source tally. Drop this entry if the
+      published page reads too thin.
+
+# Per-environment cell fields. None today; `uptime`, `http_status` and
+# `status_url` are the candidates if the health signals turn out to be too
+# much — see the checklist on PR #21.
+environment_fields: []
+
+# Considered and deliberately not withheld:
+#
+#   otel_services      Internal service naming, but the page's OTel counts are
+#                      a finding about registration discipline, and the names
+#                      are already in components/*.yaml and unknown.yaml.
+#   environments.*.url The deployment hosts. Every one on the page today is
+#                      either recorded in this repo or listed in the public
+#                      SmartAPI registry, and they are what makes a version
+#                      claim checkable by the reader.

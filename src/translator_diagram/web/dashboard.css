@@ -1,0 +1,323 @@
+/*
+  The dashboard's entire stylesheet. Inlined into the generated page, so there
+  is no stylesheet request and the file works from file://.
+
+  Every colour is a custom property defined once on :root and redefined once
+  under [data-theme="dark"], so dark mode needs no other rules. Do not
+  introduce a hardcoded colour: it will be invisible in one of the two themes.
+
+  The visual hierarchy is one idea — a tinted page with untinted cards sitting
+  on it. Borrowed from babel-validation's dashboard, along with the rule that
+  only bad states are saturated: a screen where everything is coloured teaches
+  the reader to ignore colour.
+*/
+
+:root {
+  color-scheme: light;
+  --page: #f1f3f5;
+  --card: #ffffff;
+  --text: #1a1d20;
+  --muted: #6c757d;
+  --border: #dee2e6;
+  --border-strong: #ced4da;
+  --accent: #0b5ed7;
+
+  --ok-bg: #d1e7dd;      --ok-fg: #0a3622;
+  --warn-bg: #fff3cd;    --warn-fg: #664d03;
+  --bad-bg: #dc3545;     --bad-fg: #ffffff;
+  --quiet-bg: #e9ecef;   --quiet-fg: #495057;
+  --drift-bg: #fff8e1;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 1px 3px rgb(0 0 0 / 4%);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #16191c;
+  --card: #1f2326;
+  --text: #e9ecef;
+  --muted: #9aa4ad;
+  --border: #343a40;
+  --border-strong: #495057;
+  --accent: #6ea8fe;
+
+  --ok-bg: #0f5132;      --ok-fg: #d1e7dd;
+  --warn-bg: #664d03;    --warn-fg: #ffecb5;
+  --bad-bg: #b02a37;     --bad-fg: #ffffff;
+  --quiet-bg: #2b3035;   --quiet-fg: #ced4da;
+  --drift-bg: #3d3218;
+
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* A deep link to a component must not land under the sticky filter bar. */
+  scroll-padding-top: 8rem;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.wrap { max-width: 1800px; margin: 0 auto; padding: 24px 20px 64px; }
+
+/* --- Header ------------------------------------------------------------- */
+
+header { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+header h1 { font-size: 1.4rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+header .grow { flex: 1 1 320px; }
+.subtitle { color: var(--muted); font-size: 0.875rem; margin: 0; }
+
+.finding {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+.finding h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;
+              color: var(--muted); margin: 0 0 6px; }
+.finding p { margin: 0; }
+
+.tiles { display: grid; gap: 12px; margin: 16px 0;
+         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.tile {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow);
+}
+.tile .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase;
+               letter-spacing: 0.04em; }
+.tile .value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .note { color: var(--muted); font-size: 0.8rem; }
+
+/* --- Controls ----------------------------------------------------------- */
+
+.filters {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--page);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+
+input[type="search"], select, button {
+  font: inherit; font-size: 0.875rem;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--card); color: var(--text);
+}
+input[type="search"] { min-width: 220px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button[aria-pressed="true"] { background: var(--quiet-bg); border-color: var(--accent); }
+
+/* The theme control is the one icon-only button on the page: its state is the
+   icon, so it carries its name in `title` and `aria-label` instead. */
+button.icon { padding: 5px 7px; line-height: 0; color: var(--muted); }
+button.icon:hover { color: var(--text); }
+
+/* Reset and Copy link *do* something when clicked; Drift only and Details
+   describe a state the table is already in. A tint of the accent separates the
+   two kinds — enough to find them in the bar, not enough to compete with the
+   table, which is where the colour is supposed to mean something. */
+button.action {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-strong));
+  color: var(--accent);
+}
+button.action:hover { background: color-mix(in srgb, var(--accent) 20%, var(--card)); }
+
+.spacer { flex: 1 1 auto; }
+.count { color: var(--muted); font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+
+/* --- Table -------------------------------------------------------------- */
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow); margin-top: 12px;
+  /* No overflow here: it would break the sticky header below. Columns are
+     dropped at narrow widths instead. */
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+
+thead th {
+  position: sticky; top: var(--filters-height, 3.1rem); z-index: 2;
+  /* A sticky th needs its own background: cells are transparent, so rows
+     would scroll through it. */
+  background: var(--card);
+  text-align: left; font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--border-strong);
+  white-space: nowrap;
+}
+thead th.env { text-align: center; }
+thead th { padding: 0; }
+thead th.env .sortcol { justify-content: center; }
+
+/* The header is the sort control. A real button, so it is reachable by tab and
+   Enter works for free; the styling keys off aria-sort so what a screen reader
+   announces and what the eye sees cannot disagree. */
+.sortcol {
+  display: flex; align-items: center; gap: 4px; width: 100%;
+  font: inherit; font-weight: 600; color: inherit; text-align: inherit;
+  background: none; border: 0; border-radius: 0; padding: 8px 10px;
+  cursor: pointer;
+}
+.sortcol:hover { color: var(--accent); border-color: transparent; }
+/* Invisible until it means something, but shown faintly on hover: otherwise
+   nothing tells a reader the header is a control at all. */
+.sortcol .caret { opacity: 0; flex: none; }
+.sortcol:hover .caret { opacity: 0.45; }
+/* The glyph points up for ascending, which is the convention every table
+   reader already has. */
+thead th[aria-sort="ascending"] .caret { opacity: 1; }
+thead th[aria-sort="descending"] .caret { opacity: 1; transform: rotate(180deg); }
+thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
+
+/* Order and count wrap as one unit: they are one sentence about what the
+   table is showing, and splitting them across lines reads as two. */
+.status { display: flex; align-items: center; gap: 10px; }
+.order { color: var(--muted); font-size: 0.875rem; }
+.order #unsort {
+  padding: 0 5px; margin-left: 4px; font-size: 0.8rem;
+  color: var(--muted); background: none;
+}
+
+/* A band names the group the rows under it share — the flow step, or whatever
+   column the table is sorted by. Tinted with the page colour rather than a new
+   one, and not hoverable: it is not a row you can act on. */
+tbody tr.band td {
+  background: var(--page); padding: 3px 10px;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+}
+tbody tr.band:hover td { background: var(--page); }
+tbody tr.band .band-title { color: var(--text); }
+/* The description is the one thing in a band that is a sentence, so it drops
+   the small-caps treatment — and drops out at the same width as Layer and
+   Repository, where it would otherwise wrap and turn a one-line spine into a
+   two-line heading. */
+tbody tr.band .band-note {
+  margin-left: 10px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; font-size: 0.76rem;
+}
+tbody tr.band .note {
+  margin-left: 10px; font-weight: 400; letter-spacing: 0;
+  text-transform: none; opacity: 0.75; white-space: nowrap;
+}
+
+.updated .age { font-variant-numeric: tabular-nums; }
+
+tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+
+.component { font-weight: 600; }
+.cid { color: var(--muted); font-weight: 400; font-family: ui-monospace, SFMono-Regular,
+       Menlo, monospace; font-size: 0.8rem; display: block; }
+.meta { color: var(--muted); font-size: 0.8rem; }
+
+.owner {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+  background: var(--quiet-bg); color: var(--quiet-fg);
+}
+
+.chip {
+  display: inline-block; padding: 0 6px; border-radius: 4px;
+  background: var(--quiet-bg); color: var(--quiet-fg);
+  font-size: 0.72rem; white-space: nowrap;
+}
+
+/* Release tags under a repository link. Quiet by default: on most rows these
+   are context, and three tags per row across 26 rows would shout if each were
+   coloured. The filled one is the exception worth the ink — that release is
+   running in one of the environment columns to the right. */
+.releases { display: block; margin-top: 3px; }
+.rel {
+  display: inline-block; margin: 2px 4px 0 0; padding: 0 5px;
+  border: 1px solid var(--border-strong); border-radius: 4px;
+  font-size: 0.7rem; font-variant-numeric: tabular-nums;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+}
+.rel:hover { border-color: var(--accent); color: var(--accent); }
+.rel.deployed {
+  background: var(--ok-bg); color: var(--ok-fg);
+  border-color: transparent; font-weight: 600;
+}
+.rel.pre { border-style: dashed; }
+
+/* --- Environment cells --------------------------------------------------- */
+
+td.env { text-align: center; min-width: 116px; }
+td.env.drift { background: var(--drift-bg); }
+td.env.absent { color: var(--muted); }
+/* Deployed, but absent from a SmartAPI record that lists other environments.
+   Marked, not coloured: the deployment was confirmed live, so it is no less
+   trustworthy than a registered one. The dotted rule is a fact about the
+   registration, not about the service. */
+td.env.unregistered { border-bottom: 1px dotted var(--border-strong); }
+
+.version {
+  display: inline-block; min-width: 3.5rem;
+  font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.sub { display: block; color: var(--muted); font-size: 0.72rem;
+       font-variant-numeric: tabular-nums; }
+
+.src {
+  display: inline-block; margin-left: 4px; padding: 0 5px;
+  border-radius: 4px; font-size: 0.68rem; font-weight: 600;
+  vertical-align: 1px;
+  background: var(--quiet-bg); color: var(--quiet-fg);
+}
+/* Only the sources that are *not* the running service are called out. A
+   version read live from the deployment is the expected case and gets the
+   quiet default; 27 of 45 cells are that case, and colouring them would make
+   the table a wall of green and teach the reader to ignore the colour. Amber
+   means "this number does not come from the thing that is running". */
+.src[data-src="smartapi"] { background: var(--warn-bg); color: var(--warn-fg); }
+.src[data-src="helm"] { background: var(--warn-bg); color: var(--warn-fg); }
+
+.dash { color: var(--muted); }
+
+.state { display: inline-block; min-width: 3.2rem; padding: 0 6px; border-radius: 4px;
+         font-size: 0.72rem; font-weight: 600; }
+.state.up { background: var(--ok-bg); color: var(--ok-fg); }
+.state.down { background: var(--bad-bg); color: var(--bad-fg); }
+.state.unknown { background: var(--quiet-bg); color: var(--quiet-fg); }
+
+tr.isolated td:first-child { border-left: 3px solid var(--warn-bg); }
+
+.empty { padding: 32px; text-align: center; color: var(--muted); }
+
+footer { color: var(--muted); font-size: 0.8rem; margin-top: 20px; }
+
+/* Narrow windows drop the columns that are context rather than content, then
+   let the table scroll. Dropping alone is not enough: with four environment
+   columns the last two fall off the edge and become unreachable, which is a
+   worse failure than losing a sticky header.
+
+   The header has to stop being sticky at the same breakpoint, because an
+   ancestor with `overflow: auto` silently breaks `position: sticky` — better
+   to turn it off deliberately than to ship one that quietly does nothing. */
+@media (max-width: 1100px) {
+  .drop-md { display: none; }
+  .card { overflow-x: auto; }
+  thead th { position: static; }
+  /* The per-cell detail line is what makes the columns wide. */
+  td.env .sub { display: none; }
+  td.env { min-width: 82px; }
+}
+@media (max-width: 800px) {
+  .drop-sm { display: none; }
+  .wrap { padding: 16px 12px 48px; }
+}

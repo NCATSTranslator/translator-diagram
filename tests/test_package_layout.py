@@ -32,7 +32,23 @@ ALLOWED = {
         "colors", "export", "legend", "loading",
         "model", "naming", "render", "validation",
     },
+    # The dashboard side. It shares colors with the diagram — owners are one
+    # palette across both — but nothing else: components.py parses the YAML
+    # files, model.py parses the sheet, and neither knows about the other.
+    "components": set(),
+    "flow": {"components"},
+    "sync": {"components"},
+    # privacy is a leaf: it filters plain dictionaries, so it needs to know
+    # nothing about where they came from, and dashboard can apply it without
+    # anything in the graph moving.
+    "privacy": set(),
+    "dashboard": {"colors", "components", "flow", "privacy"},
+    "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
 }
+
+# Neither entry point may be imported: a module that pulls in a CLI drags
+# click's option parsing into a library import path.
+ENTRY_POINTS = {"cli", "dashboard_cli"}
 
 
 def _package_imports(module: str) -> set[str]:
@@ -82,9 +98,14 @@ def test_the_layering_is_acyclic():
     assert not cyclic, f"these modules can reach themselves: {cyclic}"
 
 
-def test_nothing_imports_the_cli():
-    # cli.py is the top of the graph: it wires the others together, and
-    # importing it from below would drag click's command object into a library
-    # module.
-    importers = [m for m in ALLOWED if "cli" in _package_imports(m)]
-    assert not importers, f"{importers} import cli, which sits on top"
+def test_nothing_imports_an_entry_point():
+    # The CLIs sit on top: they wire the others together, and importing one
+    # from below would drag click's command object into a library module.
+    # Both are checked, not just cli.py — an exemption for the second would
+    # make the rule advice rather than a guarantee.
+    offenders = {
+        module: sorted(_package_imports(module) & ENTRY_POINTS)
+        for module in ALLOWED
+        if _package_imports(module) & ENTRY_POINTS
+    }
+    assert not offenders, f"{offenders} import an entry point, which sits on top"

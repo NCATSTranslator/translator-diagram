@@ -7,20 +7,21 @@ dependencies = [
     "click>=8.0",
     "graphviz>=0.20",
     "python-dotenv>=1.0",
+    # The dashboard reads components/*.yaml at runtime. jsonschema stays in the
+    # dev group: nothing but the tests validates those files.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
 generate-diagram = "translator_diagram.cli:main"
+sync-components = "translator_diagram.dashboard_cli:sync_main"
+build-dashboard = "translator_diagram.dashboard_cli:build_main"
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "ruff>=0.16.5",
     "rumdl>=0.2.62",
-    # Only the components/*.yaml checks need these. Nothing at runtime reads
-    # YAML yet — the generator still parses the sheet CSV — so they stay out
-    # of [project.dependencies] until loading.py actually switches over.
-    "pyyaml>=6.0",
     "jsonschema>=4.0",
 ]
 
@@ -29,10 +30,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# The package carries its own copy of owner-colors.csv in data/, so an
-# installed copy has colours without a checkout to read them from. Naming the
-# package directory keeps .git/, data/, tests/ and .venv/ out of the build.
+# Naming the package directory keeps .git/, data/, tests/ and .venv/ out of the
+# build. The dashboard's CSS and JS live inside the package because they are
+# code; owner-colors.csv does not, because it is a thing people edit.
 packages = ["src/translator_diagram"]
+
+# owner-colors.csv exists once, at config/owner-colors.csv, beside the other
+# files people edit without opening a module. The wheel still needs it -- an
+# installed generate-diagram with no checkout to read falls back to the
+# packaged copy -- so the build maps the one file into the package rather than
+# the repository carrying a second copy that has to be kept in step by hand.
+[tool.hatch.build.targets.wheel.force-include]
+"config/owner-colors.csv" = "translator_diagram/owner-colors.csv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

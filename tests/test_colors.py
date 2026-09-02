@@ -6,7 +6,9 @@ import click
 import pytest
 
 from translator_diagram.colors import (
+    CONFIG_OWNER_COLORS_PATH,
     FALLBACK_COLORS,
+    PACKAGED_OWNER_COLORS,
     ColorAssigner,
     load_owner_colors,
     text_color_for,
@@ -67,6 +69,39 @@ class TestTextColorFor:
         assert text_color_for("FFFFFF") == "black"
 
 
+def _contrast(bg_hex, fg):
+    """WCAG 2.1 contrast ratio between a hex background and black or white."""
+    channels = [int(bg_hex.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+              for c in channels]
+    bg = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    text = 0.0 if fg == "black" else 1.0
+    lighter, darker = max(bg, text), min(bg, text)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+class TestOwnerChipsAreReadable:
+    # Owner colours are chip backgrounds and `text_color_for` picks black or
+    # white over them, so a colour chosen for its hue can land on a pair that
+    # nobody can read. The chip text is 0.75rem bold, which is not WCAG "large
+    # text", so the bar is 4.5:1 and not 3:1. Two colours sat below it for as
+    # long as the palette existed, and the way that was found was somebody
+    # looking rather than anything failing.
+    def test_every_owner_colour_clears_wcag_aa(self):
+        root = Path(__file__).resolve().parent.parent
+        failures = {
+            owner: round(_contrast(color, text_color_for(color)), 2)
+            for owner, color in load_owner_colors(
+                root / "config" / "owner-colors.csv"
+            ).items()
+            if _contrast(color, text_color_for(color)) < 4.5
+        }
+        assert not failures, (
+            f"owner chips below WCAG AA (4.5:1) against the text colour "
+            f"text_color_for picks for them: {failures}"
+        )
+
+
 class TestLoadOwnerColors:
     def test_parses_owner_color_csv(self, tmp_path):
         path = tmp_path / "owner-colors.csv"
@@ -121,20 +156,6 @@ class TestLoadOwnerColors:
         assert "NCATS" in result
         assert result["NCATS"].startswith("#")
 
-    def test_the_packaged_copy_matches_the_one_in_config(self):
-        # config/owner-colors.csv is the file people edit; the copy inside the
-        # package is what an installed generate-diagram falls back to when
-        # there is no checkout to read. If they drift, the same command
-        # produces different colours depending on where it was run, with
-        # nothing to say why — so this is a gate, not a convention.
-        root = Path(__file__).resolve().parent.parent
-        config = root / "config" / "owner-colors.csv"
-        packaged = root / "src" / "translator_diagram" / "data" / "owner-colors.csv"
-        assert config.read_bytes() == packaged.read_bytes(), (
-            "config/owner-colors.csv and the packaged copy have diverged; "
-            "copy the edited one over the other"
-        )
-
     def test_the_checkouts_config_copy_wins(self, tmp_path, monkeypatch):
         config = tmp_path / "config"
         config.mkdir()
@@ -162,12 +183,25 @@ class TestLoadOwnerColors:
         monkeypatch.chdir(scratch)
         assert load_owner_colors() == {"OnlyHere": "#123456"}
 
-    def test_falls_back_to_the_packaged_copy(self, tmp_path, monkeypatch):
-        # An installed generate-diagram run from anywhere has no config/ to
-        # read, and resolving the packaged copy via __file__ would not survive
-        # a non-editable install.
-        monkeypatch.chdir(tmp_path)
-        assert "NCATS" in load_owner_colors()
+    def test_the_build_ships_the_file_the_fallback_reads(self):
+        # There is one owner-colors.csv, at config/owner-colors.csv, and the
+        # build maps it into the wheel so an installed generate-diagram with no
+        # config/ to read still finds it. Nothing checks that at import time --
+        # in a source checkout the packaged path genuinely is not there -- so
+        # this asserts the packaging instead: the force-include has to name the
+        # same member `load_owner_colors` asks importlib.resources for, or the
+        # fallback resolves to a file the wheel does not contain.
+        import tomllib
+
+        root = Path(__file__).resolve().parent.parent
+        with (root / "pyproject.toml").open("rb") as f:
+            include = tomllib.load(f)["tool"]["hatch"]["build"]["targets"][
+                "wheel"
+            ]["force-include"]
+        package, member = PACKAGED_OWNER_COLORS
+        source, = [s for s, d in include.items() if d == f"{package}/{member}"]
+        assert Path(source) == CONFIG_OWNER_COLORS_PATH
+        assert (root / source).is_file(), f"{source} is what the build ships"
 
     def test_an_explicit_path_beats_both(self, tmp_path, monkeypatch):
         config = tmp_path / "config"

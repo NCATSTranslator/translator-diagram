@@ -118,6 +118,72 @@ The mapping is not one-to-one in either direction: `ui` is `ui-fe` **and**
 `ui-be`; `shepherd-arax`, `shepherd-aragorn` and `shepherd-bte` are all one
 repo, `BioPack-team/shepherd`.
 
+### Releases
+
+```bash
+curl -s 'https://api.github.com/repos/TranslatorSRI/answer-appraiser/releases?per_page=100'
+```
+
+`tag_name`, `name`, `html_url`, `published_at`, `prerelease`, `draft`. The
+dashboard's Repository column is built from this, matching a tag to a running
+version on the `v` prefix alone — `v1.5.2` is what NameResolution tags and
+`1.5.2` is what it reports.
+
+**Half of what is running is not a release.** The 21 components with a source
+repository point at 19 repositories; 7 of those publish releases at all, and
+10 of the 20 distinct running versions match one. The misses are not all the
+same kind of miss:
+
+- **No releases published**, in 12 of the 19: the four `biothings`
+  repositories, `Relay`, `ui-fe`, `retriever`, `kgx-storage`,
+  `Translator_sdk`, `Translator_component_toolkit`, `smartAPI` and
+  `DogPark-Ranger`. Nothing can be matched for them.
+- **Tags that are not versions.** `RTXteam/RTX` publishes releases, but they
+  mark deployments (`itrb-test-premerge-2026-08-04`, `tier0-20260408`) rather
+  than the `1.6.2` ARAX reports. The tags and the version are different
+  vocabularies, and no normalisation joins them.
+- **Running ahead of the repository.** PloverDB reports `2.10.2` while its
+  newest release *and* newest tag are both `v2.1.0` — that version is not
+  tagged anywhere, so falling back from `/releases` to `/tags` would not find
+  it either.
+
+Note also that `published_at` is not the order `/releases` returns: it sorts
+by when the release was created, and NameResolution's `v1.5.2` was published
+after `v1.6.2`.
+
+Rate limit: 60 requests an hour per address unauthenticated, 5000 with a
+token. Nineteen repositories is one sync, so this only bites when re-syncing
+with `--force`; `sync.py` sends `GITHUB_TOKEN` when the environment has one.
+
+### Dates
+
+The registry is one of only two places that dates anything, and the useful
+field is not the obvious one:
+
+| Field | What it means | Usable? |
+|---|---|---|
+| `_meta.last_updated` | when the registered document last changed | **Yes** — 11 of our 26 |
+| `_meta.date_created` | when it was first registered | As history only |
+| `_status.refresh_ts` | when SmartAPI last re-fetched the registration | No |
+| `_status.uptime_ts` | when SmartAPI last probed the API | No |
+
+The two `_status` stamps look like what you want and are not: across all 127
+records they span two minutes of the same morning, because they record
+SmartAPI's own polling rather than any change to a component. `_meta` has to be
+asked for by name in the `fields=` list — `meta=1` is a different parameter,
+and what it does is make `_id` appear.
+
+`_meta.last_updated` is worth reading carefully too. Its **date** is real — the
+day the registered document changed — but its **time** is the crawler's: of our
+eleven registered components, six land in a 07:00–07:03 window on their various
+days, which is when SmartAPI's refresh runs. And five of them share
+`2026-05-24T15:47`, nineteen seconds apart, which is a bulk re-registration
+rather than five people editing five documents that afternoon. So it dates
+registry events as well as component ones, and a registry event can look newer
+than a real release. Rank accordingly if that ever matters.
+
+Nothing in any source dates a *deployment*. See [`../FUTURE.md`](../FUTURE.md).
+
 ## Status endpoints
 
 ```bash
@@ -207,6 +273,63 @@ Two cautions before treating the graph as truth: async work shows up with
 surprising parentage (`retriever` appears as a parent of `shepherd-server`),
 and a trace only shows the edges that were exercised, so absence proves
 nothing.
+
+### A deployment you find in the wild identifies itself
+
+Before writing a new component file for a URL someone hands you, fetch its
+OpenAPI document and read `info.x-translator.infores` and `servers[]`. The
+infores names the component, and `x-maturity` / `x-location` name the
+environment and the site — so `https://gandalf.renci.org` resolves to
+`infores:dogpark-tier0`, maturity `development`, location `RENCI`, which is
+the *dev deployment of a component we already had*, not a 27th component. The
+name on the tin (`GANDALF`) matched a component whose file is called
+`dogpark-tier-0`, so the title alone would have sent you the wrong way.
+
+The source repository is findable the same way when nothing records it: the
+document a deployment serves is generated from a file in its repository —
+`gandalf/openapi-config.yaml` in `ranking-agent/gandalf` — so an identical
+contact block and description is a match rather than a guess. Worth the two
+minutes, because a `source` repository is what fills the Repository column and
+the `Last updated` date.
+
+## The ITRB hostname convention
+
+Deployments follow a fixed pattern, so knowing one environment's host says
+where to look for the others:
+
+| Environment | Hostname |
+|---|---|
+| ci | `<stem>.ci.transltr.io` |
+| test | `<stem>.test.transltr.io` |
+| prod | `<stem>.transltr.io` |
+
+This matters because SmartAPI registration is manual and routinely
+incomplete. `answer-appraiser` registers only production, and is deployed to
+ci and test as well — where it runs two minor versions and a TRAPI version
+ahead of the prod its registration describes.
+
+`sync-components` derives the missing hosts and probes them. **Deriving is not
+guessing, and the confirmation step is the difference**: a candidate is
+believed only if the document it returns reports the same `infores` the
+component records. Where a component records no infores there is nothing to
+check against and the candidate is dropped. A host that answers 200 with
+something else has its body deleted rather than cached — several Translator
+hosts answer 200 with an HTML error page, and a later run would read one as
+real.
+
+`dev` is not derivable. Development deployments live at RENCI, at BioThings
+and elsewhere, with no convention to follow.
+
+### What the convention does not buy
+
+Guessing a hostname from a component's **id** or its **ITRB app name**, rather
+than deriving it from a host already known, finds nothing. Tried across the
+ten components with no known deployment at all — `dingo-ingest`, the three
+`dogpark-*`, `test-harness`, `translator-sdk`,
+`translator-component-toolkit`, `smartapi`, `docmetadata-api`,
+`ars-test-server` — it produced 42 candidates and 42 DNS failures. Those
+components have no transltr.io deployment to find, and this is worth not
+retrying: it is the obvious next idea.
 
 ## Helm charts
 

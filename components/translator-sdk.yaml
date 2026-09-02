@@ -10,7 +10,7 @@
 
 id: translator-sdk
 name: Translator SDK
-owner: Core Components WG
+owner: CoCoWG
 refactor_status: New in Refactor
 layer: TSDK/TCT
 hosted_at: Local

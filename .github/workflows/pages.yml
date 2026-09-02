@@ -1,0 +1,103 @@
+# Build the dashboard, and publish it from main.
+#
+# Two jobs, because a repository has exactly one GitHub Pages deployment. A
+# pull request builds the page and uploads it as an artifact you can download
+# and open; main, the schedule and an explicit manual run deploy. Deploying
+# from a PR would overwrite the live site with that branch's build, would fail
+# outright for a fork (no Pages permission on a `pull_request` run), and would
+# leave the published site reporting whichever PR happened to build last —
+# this page reads live versions, so its content depends on when it ran as much
+# as on what it was built from.
+#
+# A manual run *can* deploy a branch, deliberately: that is how a page gets
+# reviewed at its real URL before its PR merges. It overwrites the live site
+# until the next deploy from main, so it is a thing to do on purpose and say
+# out loud, not a thing to reach for absent-mindedly.
+#
+# Neither job passes --include-private, so both apply config/privacy.yaml. That
+# is the point of redacting by default: this file cannot be edited into
+# publishing a full build by leaving a flag out.
+name: Dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily. The data changes when someone deploys, not when we push.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Deploys serialise and are never cancelled half-way: the artifact a cancelled
+# run leaves behind is the one the next deploy would publish. Pull requests are
+# the opposite case — they only produce an artifact to download, and a build of
+# a commit you have already pushed past is worth nothing — so they get a group
+# per branch and cancel freely. One shared group would have made every PR build
+# queue behind every other, on a workflow that runs on every push.
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - run: uv sync --locked
+
+      - name: Fetch what the component files point at
+        env:
+          # Sent to api.github.com only, by _headers in sync.py. Raises the
+          # release-list budget from 60 calls an hour to 5000; one sync spends
+          # about 20.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # A service being down is data, not an error — sync exits non-zero only
+        # if it could not fetch anything at all. Read the step's output rather
+        # than its exit code: Translator's ci and test hosts may not be
+        # reachable from a runner, and that shows up as a quieter page.
+        run: uv run sync-components
+
+      - name: Build the page
+        # No --include-private: config/privacy.yaml applies, and build-dashboard
+        # verifies its own output before writing.
+        run: uv run build-dashboard
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: data/dashboard/
+          if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        with:
+          path: data/dashboard/
+
+  deploy:
+    needs: build
+    # Two ways in, and no third. A push to main or the schedule (which also
+    # runs on main) publishes what main says. A manual run publishes whatever
+    # ref it was dispatched with, which is the point of it -- reviewing a
+    # branch's page at a URL before merging it. `event_name != pull_request`
+    # was the old spelling and let any future trigger deploy by default; this
+    # one has to be edited to add a third way.
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

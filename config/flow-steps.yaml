@@ -1,0 +1,82 @@
+# The stages of the platform, in the order the dashboard shows them, and what
+# each one is for. Edit this file rather than any Python: it is prose about the
+# platform and the order it is read in, and the people who know both should not
+# have to open a module. Same rule as config/owner-colors.csv.
+#
+# **This file is the row order.** It used to be a set of labels on an order
+# computed from the recorded `gets_results_from` / `calls` edges, and that
+# order was wrong in ways the edges cannot fix: Name Lookup came out near the
+# top because nothing records the UI calling it, and Answer Appraiser came out
+# above everything because nothing records the ARS calling it. The recorded
+# graph is too sparse to order 26 components, and hand-writing the order is
+# more honest than deriving a plausible-looking one from data that is missing.
+#
+# Components within a stage are shown in the order listed here. Anything not
+# listed anywhere lands in a trailing band, and tests/test_flow_steps.py fails
+# until it is either placed in a stage or named under `unplaced` — so a new
+# component file cannot quietly disappear into the bottom of the page.
+
+stages:
+  - title: Data ingest
+    description: >-
+      Pulls external sources in and turns them into KGX, against the
+      identifiers everything else joins on.
+    components: [dingo-ingest, nodenorm-es]
+
+  - title: KGX storage
+    description: Lands ingested KGX where the query tiers can read it.
+    components: [kgx-storage-pipeline]
+
+  - title: DogPark
+    description: >-
+      The stored graph and what marshals it — Tier 0 holds the full KGX, Tier 1
+      splits it out by data source.
+    components: [dogpark-ranger, dogpark-tier-0, dogpark-tier-1]
+
+  - title: Retriever
+    description: The query API over DogPark, and what the reasoners call.
+    components: [retriever]
+
+  - title: Shepherd
+    description: >-
+      The ARAs: they plan a query, gather results and hand them back. Three run
+      as Shepherd workers; RTX/ARAX is the reasoner the ARAX worker drives, and
+      is here because that is where it sits in a query rather than because it
+      runs under Shepherd too.
+    components: [shepherd-aragorn, shepherd-arax, arax, shepherd-bte]
+
+  - title: ARS
+    description: >-
+      Fans one query out across the ARAs, merges what comes back, and scores it
+      before anyone sees it.
+    components: [ars, ars-test-server, answer-appraiser]
+
+  - title: User interface
+    description: >-
+      Where a question is asked and an answer is read, with the lookup services
+      the interface leans on to turn what someone typed into identifiers.
+    components:
+      [ui, smartapi, node-annotator, name-lookup, pending-api, nameres-es,
+       docmetadata-api]
+
+  - title: Super users
+    description: >-
+      For people driving Translator directly rather than through the interface:
+      the SDK they build against and the toolkit of components on top of it.
+    components: [translator-sdk, translator-component-toolkit]
+
+  - title: Engineering
+    description: >-
+      Not on the path of a query: how the platform is watched and checked —
+      tracing from every service, and the harness that exercises them.
+    components: [jaeger, test-harness]
+
+# Components that belong to no stage yet. Listed explicitly, the way
+# unknown.yaml lists unattributed identifiers: an entry leaves this list by
+# being placed in a stage above, and a component that is in neither fails the
+# tests rather than silently sorting last.
+unplaced:
+  description: >-
+    Recorded, but not yet placed in a stage. PloverDB is the RTX-era query
+    engine, and where it belongs depends on what still calls it.
+  components: [ploverdb]

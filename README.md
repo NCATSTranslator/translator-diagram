@@ -1,49 +1,76 @@
 # translator-diagram
 
-Diagrams describing the overall architecture of the
-[NCATS Biomedical Data Translator](https://ncats.nih.gov/research/research-activities/translator).
+Two views of the
+[NCATS Biomedical Data Translator](https://ncats.nih.gov/research/research-activities/translator)
+platform, built from the same set of components:
 
-A Python CLI tool reads a spreadsheet of Translator platform components,
-validates their dependency declarations, and produces Graphviz diagrams showing
-how data flows through the system and which services call each other.
+- **The dashboard** — a single self-contained HTML page with one row per
+  component, showing which version each environment is running, where that
+  version was read from, and where the environments disagree.
+- **The diagram** — Graphviz pictures of how data flows between components and
+  which services call each other.
 
-## Purpose
+They are two commands over two sources that are converging: the dashboard reads
+`components/*.yaml`, which are committed here; the diagram still reads a Google
+Sheet. Merging them is
+[issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
 
-The Translator platform comprises many components maintained by different teams.
-This tool makes the overall architecture visible by turning a human-maintained
-Google Sheet into a shareable diagram. The default view filters to components
-that are active in the current refactor ("Continues into Refactor" and
-"New in Refactor"), so the diagram stays focused on what is currently relevant.
+The platform comprises many components maintained by different teams, and both
+views exist to make the whole thing visible at once — to people inside the
+project who need to see how the pieces fit together, to performance work that
+needs a map of where the bottlenecks might be (usefully combined with our
+OpenTelemetry data), and to people outside the project trying to understand how
+Translator works.
 
-It is meant to serve three audiences at once: everyone inside the project who
-needs to see how the pieces fit together, performance work that needs a map of
-where the bottlenecks might be (usefully combined with our OpenTelemetry data),
-and people outside the project trying to understand how Translator works.
+## Start here
 
-## Quick start
-
-Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/).
-The [Graphviz](https://graphviz.org/) system package must also be installed
-(`brew install graphviz` on macOS, `apt-get install graphviz` on Debian/Ubuntu).
+Requires Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/) — and for the
+dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 
 ```bash
-uv sync                          # first-time setup; creates .venv/
+uv sync                    # first-time setup; creates .venv/
+uv run sync-components     # follow what components/*.yaml points at -> data/sync/
+uv run build-dashboard     # compile that into a page      -> data/dashboard/
+open data/dashboard/index.html
+```
 
-# Download latest data from the Google Sheet and regenerate
-uv run generate-diagram --google-sheet
+That takes about ten seconds of network time and reaches only public services.
+Everything it fetches is cached under `data/`, which is gitignored, so nothing
+you run can dirty the repository.
 
-# Use a locally cached CSV instead
-uv run generate-diagram
+### The diagram needs two more things
 
-# Include all components, not just the refactor-active ones
-uv run generate-diagram --all
+The [Graphviz](https://graphviz.org/) system package (`brew install graphviz`,
+or `apt-get install graphviz`), and read access to the Google Sheet the
+component list still lives in — copy [`env.default`](env.default) to `.env` and
+fill in `GOOGLE_SHEET_ID`.
 
-# Also produce a PDF (useful for presentations)
+```bash
+uv run generate-diagram --google-sheet          # download the sheet, then render
+uv run generate-diagram                         # use the cached data/components.csv
+uv run generate-diagram --all                   # include non-refactor components
 uv run generate-diagram --google-sheet --format pdf
-
-# One sub-figure per tier, plus the main diagram
 uv run generate-diagram --google-sheet --layer-column Tier
 ```
+
+The default view filters to components active in the current refactor
+("Continues into Refactor" and "New in Refactor"), so the picture stays focused
+on what is currently relevant.
+
+## Where things live
+
+| If you want to | Look at |
+|---|---|
+| change what a component records | `components/<id>.yaml`, and [`schema/component.schema.json`](schema/component.schema.json) for the field reference |
+| change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
+| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
+| change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
+| change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
+| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code — particularly *Things that look wrong but aren't* |
+| see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
+
+The first four are data files, editable by anyone who knows the platform
+without opening a Python module. That is deliberate, and worth keeping.
 
 ## Input data
 
@@ -138,28 +165,136 @@ embeds them in the main diagram instead.
 fold to the same stem (`Tier 1` and `Tier-1`) would overwrite each other, so
 the second gets a `_2` suffix and a warning.
 
-## Component metadata files (proposal)
+## Component metadata files
 
 `components/<id>.yaml` records one file per component: what it is (owner,
 refactor status, layer, where it runs), its identifier in each of the naming
 spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
 ITRB's own `app` and `group`, links to its repositories and documentation, and
-the `connections:` edges the diagram is built from.
-`schema/component.schema.json` is the field reference, and
-`tests/test_components.py` checks every file against it.
+the `connections:` edges between components.
+[`schema/component.schema.json`](schema/component.schema.json) is the field
+reference; `tests/test_component_files.py` validates every file against it, and
+`tests/test_components.py` covers the parser.
+
+These files are the dashboard's only input, and they are committed — which is
+why the dashboard needs no credentials to run.
 
 [`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
 platform that no component file claims yet — currently the OpenTelemetry
 service names that could not be attributed. Entries leave it by being promoted
 into a component file or confirmed out of use.
 
-**Nothing reads these files yet** — the generator still loads the sheet CSV.
-They are a proposal, and the case for them is in
+**The dashboard reads these files; the diagram does not.**
+`build-dashboard` follows their pointers, but `generate-diagram` still loads
+the sheet CSV — switching it over is
+[issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
+The case for the format is in
 [`docs/component-metadata.md`](docs/component-metadata.md); the survey of what
 each upstream source actually offers is in
 [`docs/metadata-sources.md`](docs/metadata-sources.md), and
 [`docs/examples/name-lookup-enriched.yaml`](docs/examples/name-lookup-enriched.yaml)
-shows what a fetcher would build from one of them.
+shows what a fetcher builds from one of them.
+
+## The overview dashboard
+
+A single self-contained HTML page with one row per component, in stages — data
+coming in at the top, the people who use it at the bottom — and a column per
+environment showing the deployed URL and the version running there.
+
+```bash
+uv run sync-components     # follow the pointers, cache into data/sync/
+uv run build-dashboard     # compile           into data/dashboard/
+open data/dashboard/index.html
+
+# Everything, including what a published build withholds. Local use only.
+uv run build-dashboard --include-private
+```
+
+The two steps are split because fetching is slow and rendering is iterated on:
+one sync serves any number of rebuilds. `sync-components` re-fetches only what
+is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
+A service being down is recorded rather than fatal, so the run still succeeds
+and the page shows what was reachable.
+
+It exists to test whether the metadata in `components/` is worth keeping. Two
+things it reports are the answer:
+
+- **Where each version came from.** A version is read from the live OpenAPI
+  document where possible, then `/status`, then the registered SmartAPI copy,
+  then the Helm chart — and each cell says which, so "is OpenAPI a good enough
+  source?" has a number rather than an opinion. Both live sources come before
+  the registry, because a registration is a copy somebody filed by hand.
+- **Which environments disagree.** A version in the minority for its component
+  is tinted, so drift between dev, ci, test and prod is visible without reading
+  every cell.
+- **Which release each environment is running.** The Repository column lists a
+  component's newest GitHub releases, plus any older release an environment is
+  still on, each tag linking to its notes. A filled tag is deployed somewhere
+  on that row, so the number in the `prod` column has its changelog one click
+  away.
+
+### What a published build leaves out
+
+`build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
+names — today the tracing console, the internal test rig, and the container
+image tags that would turn the version grid into a CVE-matching inventory. The
+page says so in its footer, and `--include-private` builds the full picture for
+local use.
+
+Redaction is the default so that a forgotten flag costs information rather than
+publishing it, and the file is data rather than code so that the people who
+know which systems are sensitive can edit it without opening a Python module.
+An entry that matches nothing is an error: withholding *nothing* is the failure
+worth guarding against, so renaming a component without updating the policy
+stops the build.
+
+This is about reach rather than secrecy. Everything the page shows is read from
+public services and this repository is public, so the policy hides nothing from
+someone who looks — it keeps a few things off an indexed page. See
+[issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
+the public/private split this anticipates.
+
+Release lists come from the GitHub API, which allows 60 calls an hour to an
+unauthenticated address. That covers a sync of this repository twice over, but
+if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
+a higher limit. It is sent to `api.github.com` and to nothing else, and a
+throttled fetch costs some release tags, not the run.
+
+**Every column sorts.** Click a header to sort by it, click again to reverse,
+and a third click returns to stage order — which is also what the ✕ beside
+the order name in the filter bar does, and the only way back when a narrow
+window has hidden the column you sorted on. The order is always named there,
+and it travels in the URL with the filters. In stage order the rows are banded by
+stage — each band naming what that stage is for — and sorting by owner bands
+them by owner instead.
+
+The stages, their order, and the components in each are
+[`config/flow-steps.yaml`](config/flow-steps.yaml), edited by hand. The
+recorded dependency edges are too sparse to order twenty-six components: with
+nothing recording that the UI calls Name Lookup, a computed order put Name
+Lookup up beside the data sources. A written order is more honest than a
+plausible-looking one derived from data that is missing.
+
+**`Last updated`** is the newer of a component's latest GitHub release and its
+SmartAPI registration, badged with which one it was. Thirteen of the
+twenty-six components have neither and show a dash: they publish no releases
+and are in no registry. Nothing here dates a *deployment* — see
+[`FUTURE.md`](FUTURE.md) for the closest available proxy. The environment
+columns sort by the age of the release running in that environment, which is
+the sharpest version of the same question: prod is on `0.6.1`, released
+2024-10-04.
+
+**The page opens on every component.** The dropdown beside the owner filter
+narrows it: `Environments disagree` (seven of twenty-four today, and the rows
+with the most to say), `Any version known`, and `No version known` — which is
+the list of gaps in the metadata, and worth reading as a to-do list. The count
+beside the filters always says how many of the total are showing.
+
+Filters live in the URL, so a filtered view can be pasted to someone else and
+arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
+which inlines its own data and so works straight from disk, and
+`overview.json`, the same payload as a file for anything that wants to consume
+it.
 
 ## Diagram conventions
 
@@ -170,9 +305,11 @@ Owner-to-colour mappings live in
 `color`). Edit that file to add a new owner, re-order the legend, or change a
 colour — no Python edit required.
 
-The tool looks for that file in the working directory, and falls back to the
-copy shipped inside the package, so an installed `generate-diagram` has colours
-wherever it runs. `--owner-colors PATH` overrides both.
+The tool looks for that file in the working directory or any directory above
+it, and falls back to the copy the wheel carries, so an installed
+`generate-diagram` has colours wherever it runs. That copy is the same file:
+the build maps it in, rather than the repository holding a second one.
+`--owner-colors PATH` overrides both.
 
 New owners not listed there receive fallback colours automatically.
 
@@ -271,45 +408,61 @@ uv run generate-diagram [OPTIONS]
 
 ```text
 translator-diagram/
-├── src/translator_diagram/   # The tool
-│   ├── model.py          # Component, index_by_id
-│   ├── naming.py         # SVG ids and output filename stems
+├── src/translator_diagram/
+│   │                     # shared by both stacks
 │   ├── colors.py         # Owner colours and the palette
+│   ├── components.py     # Reads components/<id>.yaml
+│   ├── privacy.py        # What a published dashboard withholds
+│   │                     # the diagram
+│   ├── model.py          # Component, index_by_id (one sheet row)
+│   ├── naming.py         # SVG ids and output filename stems
 │   ├── loading.py        # CSV parsing and the Google Sheet download
 │   ├── validation.py     # Reference and id checks
 │   ├── render.py         # The diagram and the per-layer sub-figures
 │   ├── legend.py         # The two legends
 │   ├── export.py         # components.json
-│   ├── cli.py            # The command line
-│   └── data/             # owner-colors.csv, shipped with the package
-├── components/           # One YAML file per component (proposal; nothing
-│                         # reads these yet — see docs/component-metadata.md)
+│   ├── cli.py            # generate-diagram
+│   │                     # the dashboard
+│   ├── sync.py           # Fetches what the component files point at
+│   ├── flow.py           # Data-flow depths, and the stage-order check
+│   ├── dashboard.py      # Version-source chain, drift, the rendered page
+│   ├── dashboard_cli.py  # sync-components and build-dashboard
+│   ├── web/              # dashboard.css and dashboard.js, inlined into the page
+│   └── CLAUDE.md         # The module map and the non-obvious decisions
+├── components/           # One YAML file per component — see docs/
+│   └── CLAUDE.md         # What a component file must contain
 ├── unknown.yaml          # Identifiers no component file claims yet
-├── schema/
-│   ├── component.schema.json  # JSON Schema for a components/*.yaml file
-│   └── unknown.schema.json    # JSON Schema for unknown.yaml
-├── docs/                 # The component-metadata proposal and its research
-├── config/
-│   └── owner-colors.csv  # Owner → fill colour mapping (edit me)
+├── config/               # The data files, edited by hand
+│   ├── owner-colors.csv  # Owner → fill colour
+│   ├── flow-steps.yaml   # The dashboard's stages, in page order
+│   └── privacy.yaml      # What a published build leaves out
+├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
+├── docs/                 # The metadata case, its research, owner colours
 ├── tests/                # One test file per module
+├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml        # uv/hatchling project metadata and dependencies
 ├── uv.lock               # Pinned dependency versions
-├── env.default           # Template for .env
-├── .env                  # GOOGLE_SHEET_ID — gitignored, fill in locally
-├── AGENTS.md             # Orientation for coding agents
-├── README.md             # This file
-└── data/                 # Gitignored — all inputs and outputs go here
-    ├── components.csv    # Downloaded from Google Sheet
-    ├── components.json   # Parsed component data (all statuses, minus hidden rows)
-    ├── diagram.dot       # Graphviz source
-    └── diagram.png       # Rendered diagram
+├── env.default           # Template for .env (diagram only)
+├── FUTURE.md             # Ideas with their costs worked out
+├── AGENTS.md             # Working agreements, and where the rest is
+└── data/                 # Gitignored — every input and output goes here
+    ├── sync/             # Cached upstream responses + manifest.json
+    ├── dashboard/        # index.html and overview.json
+    ├── components.csv    # Downloaded from the Google Sheet
+    └── diagram.png       # Rendered diagram (plus .dot, .json, .svg, .pdf)
 ```
 
 ## Status and next steps
 
-This is a work in progress. The tool itself works; what is not yet built is the
-public-facing view — a single static page over the generated SVG and
-`components.json`, deployed from a scheduled GitHub Actions run. That is
+Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
+runs the tests, lints and a build on every pull request, and
+`.github/workflows/pages.yml` builds the page on every pull request as a
+downloadable artifact while deploying only from `main`, a nightly schedule, or
+an explicit manual run. A published build applies
+[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+
+What is *not* built is the interactive view of the **diagram** — a static page
+over the generated SVG and `components.json`. That is
 [issue #10](https://github.com/NCATSTranslator/translator-diagram/issues/10),
 and it waits on
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7):
@@ -343,18 +496,24 @@ is the live list. Ideas that started here:
 ## Contributing
 
 ```bash
-uv sync            # first-time setup
-uv run pytest      # the test suite
-uv run ruff check  # Python lint
-uv run rumdl check # Markdown lint
+uv sync              # first-time setup
+uv run pytest        # the test suite
+uv run ruff check    # Python lint
+uv run rumdl check . # Markdown lint
 ```
 
-All four run in CI on every pull request. The source is one module per subject
-under `src/translator_diagram/`, and `tests/` has one file per module — a
-change to `loading.py` belongs in `tests/test_loading.py`.
-[AGENTS.md](AGENTS.md) has the module map, the rule about which module may
-import which, and the non-obvious decisions worth knowing before changing
-rendering.
+All four run in CI on every pull request, along with a dashboard build. The
+source is one module per subject under `src/translator_diagram/`, and `tests/`
+has one file per module — a change to `loading.py` belongs in
+`tests/test_loading.py`.
+
+Two things are worth reading before a first change. [AGENTS.md](AGENTS.md) has
+the module map, the rule about which module may import which (enforced by
+`tests/test_package_layout.py`), and a *Things that look wrong but aren't*
+section that exists because most of them were arrived at the hard way. And if
+you change the dashboard, render it and look at it: the page has passed a full
+test suite while visibly broken more than once, and AGENTS.md carries the
+headless-Firefox recipe for checking it at several widths and in both themes.
 
 ## Licence
 

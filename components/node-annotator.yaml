@@ -10,7 +10,7 @@
 
 id: node-annotator
 name: Node Annotator
-owner: Core Components WG
+owner: CoCoWG
 component_type: Utility
 refactor_status: Continues into Refactor
 layer: Shared services

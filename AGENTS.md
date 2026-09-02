@@ -1,8 +1,28 @@
 # translator-diagram
 
-Generates Graphviz dependency diagrams for Translator platform components from
-a Google Sheet CSV. The tool is the `translator_diagram` package under `src/`.
-See [README.md](README.md) for user-facing documentation.
+Two commands over the Translator platform's components, in one package under
+`src/translator_diagram/`: `generate-diagram` renders Graphviz pictures from a
+Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
+`components/*.yaml`. [README.md](README.md) is the user-facing documentation and
+the faster way in.
+
+This file is what applies to every session. The detail that only matters once
+you are in a particular directory lives beside that directory, so it is read
+when it is relevant rather than every time:
+
+| Where | What is in it |
+|---|---|
+| [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) | The module map, the import rules, the data model, "I want to change X → open this", and two sections of decisions that look wrong and aren't. **Read it before changing any module.** |
+| [`components/CLAUDE.md`](components/CLAUDE.md) | What a `components/<id>.yaml` must contain and which rules the tests enforce on it |
+| [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
+| [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
+| [`docs/owner-colours.md`](docs/owner-colours.md) | The four constraints on a new team colour |
+| [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
+
+**Read first:** *Working agreements* below. Then, before simplifying anything in
+the code, *Things that look wrong but aren't* in
+[`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) — most
+entries are there because someone already tried the obvious thing.
 
 ## Working agreements
 
@@ -12,6 +32,43 @@ See [README.md](README.md) for user-facing documentation.
   whether the picture *reads* well: crossing edges, cramped clusters, a legend
   in an awkward place. That is the operator's call, so report what changed and
   let them look rather than declaring the result good.
+- **Look at the dashboard before saying it is fine.** Structural checks do not
+  catch visual bugs: this page once passed 301 tests, `node --check` and a
+  self-containment assertion while shipping a badge on 27 of 45 cells that
+  drowned the table, a tile that counted 74 things where there were 41, and two
+  environment columns unreachable at narrow widths. Render it and look —
+  headless Firefox needs no extra tooling, and its own profile because yours is
+  probably already running:
+
+  ```bash
+  uv run build-dashboard
+  MOZ_NO_REMOTE=1 /Applications/Firefox.app/Contents/MacOS/firefox \
+    --headless --new-instance --profile /tmp/ffprofile \
+    --screenshot /tmp/dash.png --window-size=1700,1400 \
+    "file://$PWD/data/dashboard/index.html"
+  ```
+
+  Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
+  breakpoints — the table is wider than the window between about 1100 and
+  1500px, which is where the sticky header and the band descriptions go wrong.
+  Whether the result *reads* well is still the operator's call: report what you
+  saw and let them look.
+
+  A headless profile follows the system theme, so on a dark machine every
+  screenshot is dark and half the palette goes unchecked. A second profile with
+  one pref shoots the other theme (use `1` for dark on a light machine):
+
+  ```bash
+  mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
+  ```
+
+- **JS with judgement in it can be tested, even with no JS harness here.** Slice
+  the block out of `web/dashboard.js`, stub `document`/`localStorage`/
+  `matchMedia`, and run it under `node` from the scratchpad — that is how the
+  theme cycle was checked against both system preferences, and how the sort
+  comparators were driven over the real `overview.json` to prove undated rows
+  stay last in *both* directions. Throwaway scripts, not fixtures: nothing in
+  CI runs JS beyond `node --check`.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`
@@ -36,256 +93,28 @@ uv run pytest                                        # after every change
 uv run ruff check                                    # Python lint, gated in CI
 uv run rumdl check .                                 # Markdown lint, gated in CI
 
-# These must stay easy for a human to run; run them yourself when it helps.
-# --google-sheet reaches the real sheet, so prefer a local CSV for testing.
+uv run sync-components                               # -> data/sync/
+uv run build-dashboard                               # -> data/dashboard/
+uv run build-dashboard --include-private             # ignore config/privacy.yaml
+
 uv run generate-diagram --google-sheet               # most common
 uv run generate-diagram --input data/components.csv  # from a local CSV
-uv run generate-diagram --google-sheet --all         # no refactor-status filter
-uv run generate-diagram --google-sheet --layer-column Tier
 ```
 
-## Package layout (`src/translator_diagram/`)
+`sync-components` and `build-dashboard` are split because fetching is slow and
+rate-limited while rendering is iterated on — one sync serves a hundred
+rebuilds. `--google-sheet` reaches the real sheet, so prefer a local CSV when
+testing. Both commands must stay easy for a human to run: run them yourself when
+it helps. The README has the full flag list.
 
-One module per subject, and one test file per module. No line numbers here on
-purpose — they rot within a commit or two.
+## The four config files are data, not code
 
-| Module | What's there |
-|---|---|
-| `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
-| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
-| `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
-| `loading.py` | `_parse_bool`, `parse_id_list`, `parse_externals`, `_valid_url`, `load_components`, and `download_sheet_csv` for `--google-sheet` |
-| `validation.py` | `validate` — duplicate IDs, unknown references, SVG id collisions |
-| `render.py` | `build_graph`, `build_layer_subgraph`, and the `_compute_*` / `_emit_*` / `_add_*` helpers below |
-| `legend.py` | The owner and edge-style legends, embedded (`--no-split-legends`) or standalone |
-| `export.py` | `write_json` — every non-hidden component, into `components.json` |
-| `cli.py` | The `click` command: one `@click.option` per flag, then the run sequence |
-
-**Imports run one way**, and a new one must not break it:
-
-```text
-model → naming → {validation, export, render}
-colors → {render, legend}
-legend → render
-cli → everything
-```
-
-Nothing imports `cli`. The palette constants live in `colors.py` rather than
-`render.py` for exactly this reason: `render` and `legend` both need
-`EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
-other.
-
-`tests/test_package_layout.py` enforces it, so a wrong-direction import fails
-CI rather than sitting there working. Widening its `ALLOWED` map to silence a
-failure will not help: a separate assertion checks the map itself is acyclic.
-Move the shared code down the graph instead, the way the palette constants
-went.
-
-**`build_graph` and `build_layer_subgraph` share `render.py` on purpose.** They
-duplicate the edge-suppression rules, drift between them has already caused a
-real bug (see the two suppression sets, below), and a file boundary would make
-the next drift easier to miss. Deduplicating them is worth doing; splitting
-them without deduplicating them is not.
-
-### Inside render.py
-
-| Function | Purpose |
-|---|---|
-| `_compute_active_set` | IDs to render, per the refactor-status filter |
-| `_compute_ghost_ids` | Excluded-but-referenced IDs, rendered dimmed |
-| `_node_tooltip` | SVG hover text (owner, status, notes) |
-| `_emit_component_node` | Renders one component node — used for both primary nodes and ubiquitous clones |
-| `_compute_groups` | Groups node IDs by their `Part of` label |
-| `_add_active_nodes` | Emits all non-grouped, non-ubiquitous active nodes |
-| `_add_ghost_nodes` | Emits dimmed nodes for excluded-but-referenced components |
-| `_add_group_clusters` | Wraps `Part of` groups in labelled dotted-border subgraphs |
-| `_add_edges` | Emits all dependency edges; also emits ubiquitous clones via its inner `edge_target` |
-| `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
-| `build_graph` | Top-level assembler — calls all the above in order |
-| `build_layer_subgraph` | One per-layer sub-figure (`--layer-column`) |
-
-## Data model
-
-CSV column → `Component` field:
-
-| CSV column | Field | Notes |
-|---|---|---|
-| `id` | `id` | Unique identifier; references to it are case-insensitive |
-| `Name` | `name` | Display name; falls back to `id` if blank |
-| `Owner` | `owner` | Defaults to `"None"` if blank |
-| `URL` | `url` | Becomes the graphviz `URL` node attribute — a real link in SVG output. `_valid_url` drops anything that isn't `http(s)` |
-| `Component in ITRB` | `itrb` | Informational only; not currently rendered |
-| `Refactor status` | `refactor_status` | Drives active-set filtering |
-| `Gets results from` | `depends_on` / `depends_on_planned` | Comma-separated IDs; `~` prefix = planned |
-| `Calls` | `uses` / `uses_planned` | Comma-separated IDs; `~` prefix = planned |
-| `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip |
-| `Ubiquitous` | `ubiquitous` | TRUE/yes/y/1 → render as per-caller clones |
-| `Hide` | `hide` | TRUE/yes/y/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
-| `Part of` | `part_of` | Groups the node into a named cluster subgraph |
-| `Hosted at` | `hosted_at` | `ITRB` is the default and shows nothing; others get a third label line, e.g. `Hosted at: RENCI 🌐` |
-| `Externals` | `externals` | `<Source` = data in, `>Sink` = data out |
-| *(`--layer-column`)* | `layer` | Whichever column that flag names. In the current sheet it is `Tier`, not `Layer`. |
-
-Every column but `id` is optional at parse time — `load_components` uses
-`row.get(...)` throughout, so an older sheet export missing a column yields
-empty values rather than a `KeyError`. Keep it that way. `id` is the one
-exception: without that column every row parses as id-less, and the run used
-to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
-produces. A missing `id` column, and a file whose rows are all id-less, are
-`ClickException`s.
-
-## components/ — the metadata proposal
-
-`components/<id>.yaml` holds one file per component, validated by
-`schema/component.schema.json` and `tests/test_components.py`. **Nothing in
-`src/` reads them**: `loading.py` still parses the sheet CSV, and the import
-graph above is unchanged. They exist to be argued about — the rationale is in
-`docs/component-metadata.md` and the upstream survey in
-`docs/metadata-sources.md`.
-
-Rules the tests enforce, so a change that breaks one fails CI rather than
-sitting there wrong: the filename stem equals `id`; ids are unique
-case-insensitively; every id in `connections.gets_results_from`/`calls` has a
-file (which is why `docmetadata-api` has one — `ui` calls it); every `owner`
-appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
-never URLs; and no file writes a `diagram:` flag at its default, which is what
-keeps that block absent rather than 26 copies of `ubiquitous: false`.
-
-`unknown.yaml` collects identifiers observed in the platform that no
-component file claims — today, the OpenTelemetry service names that could not
-be attributed. Do not delete an entry to make a test pass: an entry is removed
-only when its identifier moves into a component file. The tests enforce that
-no identifier is claimed twice, and that a `not-recorded` entry whose
-component now has a file fails until it is promoted.
-
-Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
-`datetime.date`, which is not a JSON Schema string, and the failure message
-points at the schema rather than the quoting.
-
-`pyyaml` and `jsonschema` are **dev-only** dependencies on purpose. Moving
-them to `[project.dependencies]` is the signal that `loading.py` has actually
-switched over — don't do it before then.
-
-## Common change patterns
-
-**Change owner node colours** → edit `config/owner-colors.csv`. No code
-change. Row order is legend order. Keeping this a data file is deliberate:
-project managers change colours without touching Python. Don't move it into a
-constant. `src/translator_diagram/data/owner-colors.csv` is the copy shipped
-with the package for installs that have no checkout to read; a test fails if
-the two diverge, so edit `config/` and copy it across. See `load_owner_colors`
-for the resolution order.
-
-Generating the packaged copy from `config/` at build time is the obvious way to
-drop one of them, and it does not work: hatchling's `force-include` reaches the
-wheel but not an editable install, so `uv sync` would leave every developer
-without the fallback that wheel users have — and CI, which installs editable,
-would never exercise it. Two files and a test is the cheaper trade.
-
-**Change ghost or external node colours** → the `GHOST_*` /
-`EXTERNAL_FILL_COLOR` constants in `colors.py`.
-
-**Change which statuses count as active** → `DEFAULT_STATUSES` in `cli.py`.
-
-**Change node label format** → `_emit_component_node`. Labels are
-`display_name\nid`, plus a third line for non-ITRB hosts; the emoji map is
-`HOSTED_AT_EMOJI`.
-
-**Change node shape or border style** → `_emit_component_node` for active
-nodes, `_add_ghost_nodes` for ghosts. The bold "New in Refactor" border is the
-`penwidth` argument in `_emit_component_node`.
-
-**Change edge styles** → `_add_edges`. Each of the four dependency lists
-(`depends_on`, `depends_on_planned`, `uses`, `uses_planned`) has its own
-`dot.edge(...)` call.
-
-**Change graph layout** (dpi, ranksep, splines) → the `graph_attr` dict in
-`build_graph`.
-
-**Add a new CSV column** → five places: the `Component` dataclass in
-`model.py`, `load_components` in `loading.py`, `write_json` in `export.py`, the
-data-model table below, and the CSV-format table in the README.
-
-**Add a new CLI flag** → an `@click.option` above `main` in `cli.py`, plus the
-matching parameter in the `main` signature, plus the options block in the
-README (it is a hand-maintained paraphrase of `--help`, not generated).
-
-**Add anything that lands in the SVG with an id** → route it through
-`naming.py`: give it an id shape that cannot collide (see below), and claim it
-in `validate` so a collision is caught at parse time rather than in a
-browser.
-
-## Things that look wrong but aren't
-
-**`--concentrate` defaults to off.** It merges partially-parallel edges, which
-looks tidier but can visually blend a solid edge with a dashed one between
-nearby nodes, losing the distinction the diagram exists to show.
-
-**Dashed edges are suppressed where a solid edge already exists** between the
-same two nodes in the same direction, for the same reason.
-
-**`newrank="true"`** in `build_graph` is required for `rank=same` to work
-across cluster boundaries — the legend clusters rely on it.
-
-**`utf-8-sig`** when reading CSVs strips the BOM an Excel resave prepends.
-Without it the first header parses as `"﻿id"` and everything downstream
-KeyErrors.
-
-**The Google Sheet download checks `Content-Type: text/csv`.** A private or
-missing sheet returns a *200* with an HTML login page, which would otherwise be
-saved as `components.csv` and fail confusingly much later.
-
-**Components are sorted by lowercase `id`** in `load_components` so the `.dot`
-and `.json` output is stable when someone reorders rows in the sheet.
-
-**Planned edges are red**, hardcoded as `color="red"` at two sites in
-`_add_edges` and two more in `build_layer_subgraph`, both in `render.py`. An earlier
-`PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
-and has been deleted — red is what ships and what the README documents.
-
-**There are two suppression sets, and they are not interchangeable.**
-`solid_edges` suppresses a dashed edge that duplicates a solid one in the same
-direction; `dashed_edges` suppresses a planned (red) "Calls" edge when an
-implemented one already covers the pair, mirroring how `depends_on` outranks
-`depends_on_planned`. Recording a dashed edge in `solid_edges` drops the wrong
-edge — a real bug `build_layer_subgraph` used to have. `_add_edges` and
-`build_layer_subgraph` must stay in step on both.
-
-## Special features
-
-**Ubiquitous components** (telemetry, logging, name resolution): set
-`Ubiquitous=TRUE`. Instead of one central node with long converging edges, a
-clone is emitted next to each caller with a synthetic id from `_clone_svg_id`.
-No central node exists, so these are skipped by `_add_active_nodes` and
-`_compute_ghost_ids`; the logic is in `edge_target()` inside `_add_edges`. A
-ubiquitous component therefore has *no* node bearing its own id, which is why
-`components.json` gives every row a `node_ids` list rather than one id.
-
-**The SVG id namespace has four families**, and no two members of it may
-claim the same id — a duplicate XML id makes `getElementById` return whichever
-graphviz emitted first. The families are component nodes (`_svg_id`), the
-per-caller clones of ubiquitous components (`_clone_svg_id`), external
-entities (`external_svg_ids`) — all in `naming.py` — and the `a_`-prefixed
-`<g>` graphviz wraps around every node carrying a tooltip or a URL, which here
-is all of them.
-Clone and external ids use a `__` joiner, which `_svg_id` can never produce
-because it collapses runs of punctuation to a single `_`; that keeps them off
-component ids by construction. `validate` then folds all four families into
-one dict and hard-errors on any remaining collision, so `Foo` plus `A Foo`
-(whose id is `Foo`'s wrapper id) fails the run rather than silently rebinding
-a node.
-
-**Ghost nodes**: an active component referencing a filtered-out one makes that
-component appear dimmed and labelled `(excluded)`, so cross-boundary edges stay
-visible. See `_compute_ghost_ids`.
-
-**SVG attributes**: `_emit_component_node` sets `id` (stable per-node handle),
-`tooltip`, and `URL`/`target` when the row has a URL. Graphviz turns `URL` into
-an `<a xlink:href>` wrapper in SVG output. These are inert in PNG. They exist
-for the planned GitHub Pages view ([#10](https://github.com/NCATSTranslator/translator-diagram/issues/10))
-— a static page over the generated SVG and `components.json`, no build step.
-Don't port this tool to JavaScript to serve that view; the browser needs the
-generated DOT, not the generator.
+`config/owner-colors.csv`, `config/flow-steps.yaml`, `config/privacy.yaml` and
+`components/*.yaml` are edited by people who know the platform and do not want
+to open a Python module. That is deliberate and worth protecting: when a change
+could be made either in one of those files or in code, it belongs in the file.
+Each is validated — by a schema, a test, or a hard error at build time — so a
+wrong edit fails loudly rather than silently doing nothing.
 
 ## What is not committed
 
