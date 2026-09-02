@@ -346,8 +346,13 @@ The payload keys are independent of the YAML keys they happen to be spelled
 like: `layer` and `refactor_status` moved out of `diagram:` in the component
 files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
-breaks `data/dashboard.js`, and `layer` is the worst case -- a payload key, a
-query-string parameter and a `COLUMNS` entry.
+breaks `data/dashboard.js`.
+
+`type` and `layer` are the exception in the other direction: the page no
+longer shows either — neither told a reader anything the stage bands and the
+owner chip do not — so both are payload keys with no column, no filter and no
+query-string parameter. They stay in `overview.json` because it is a contract
+and dropping a key from it is the change that breaks a consumer.
 
 **Change what the published page withholds** → `config/privacy.yaml`. No code
 change: it lists whole components to drop and row or per-environment fields to
@@ -459,7 +464,7 @@ in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
 **The dashboard opens filtered**, on `Environments disagree`, so it shows 7 of
-26 rows rather than everything. The count beside the filters says so, and
+24 rows rather than everything. The count beside the filters says so, and
 `All components` is one selection away. It replaced a "Drift only" toggle
 rather than joining it: two controls that select the same rows cannot be told
 apart by a reader, and the four views (`differ`, `known`, `none`, `all`) live

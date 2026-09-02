@@ -17,8 +17,6 @@ const ENVS = DATA.environments;
 const state = {
   q: "",
   owner: "",
-  layer: "",
-  type: "",
   versions: "differ",
   details: true,
   sort: "",   // empty means the payload's own order, which is by stage
@@ -45,8 +43,6 @@ function readUrl() {
   const p = new URLSearchParams(location.search);
   state.q = (p.get("q") ?? "").slice(0, 200);
   state.owner = (p.get("owner") ?? "").slice(0, 100);
-  state.layer = (p.get("layer") ?? "").slice(0, 100);
-  state.type = (p.get("type") ?? "").slice(0, 40);
   const view = p.get("versions") ?? "";
   state.versions = Object.hasOwn(VERSION_VIEWS, view) ? view : DEFAULT_VIEW;
   // A pasted URL can name anything; only a real sortable column counts.
@@ -63,8 +59,6 @@ function writeUrl() {
   const p = new URLSearchParams();
   if (state.q.trim()) p.set("q", state.q.trim());
   if (state.owner) p.set("owner", state.owner);
-  if (state.layer) p.set("layer", state.layer);
-  if (state.type) p.set("type", state.type);
   if (state.versions !== DEFAULT_VIEW) p.set("versions", state.versions);
   // Both, always: the first click's direction differs per column, so "asc" is
   // not a default a reader of the URL could infer.
@@ -107,13 +101,11 @@ function visibleRows() {
   const needle = state.q.trim().toLowerCase();
   return DATA.rows
     .filter((row) => !state.owner || row.owner === state.owner)
-    .filter((row) => !state.layer || (row.layer ?? "") === state.layer)
-    .filter((row) => !state.type || (row.type ?? "") === state.type)
     .filter(VERSION_VIEWS[state.versions]?.test ?? VERSION_VIEWS[DEFAULT_VIEW].test)
     .filter((row) => {
       if (!needle) return true;
       const haystack = [
-        row.id, row.name, row.owner, row.layer, row.type, row.infores,
+        row.id, row.name, row.owner, row.infores,
         row.helm_chart, row.last_updated?.date, ...(row.otel_services ?? []),
         ...(row.releases ?? []).map((r) => r.tag),
         ...ENVS.map((env) => row.environments[env]?.version),
@@ -329,16 +321,6 @@ const COLUMNS = [
       `<td><span class="owner" data-owner="${esc(row.owner)}">${esc(row.owner)}</span></td>`,
   },
   {
-    key: "type", label: "Type", drop: "drop-sm",
-    value: (row) => row.type ?? "", band: (row) => row.type || "No type recorded",
-    cell: (row) => `<td class="meta drop-sm">${or(row.type, esc(row.type))}</td>`,
-  },
-  {
-    key: "layer", label: "Layer", drop: "drop-md",
-    value: (row) => row.layer ?? "", band: (row) => row.layer || "No layer recorded",
-    cell: (row) => `<td class="meta drop-md">${or(row.layer, esc(row.layer))}</td>`,
-  },
-  {
     key: "repo", label: "Repository", drop: "drop-md",
     value: (row) => (row.repository ?? "").replace("https://github.com/", ""),
     cell: (row) => `<td class="meta drop-md">${repoCell(row)}</td>`,
@@ -476,7 +458,7 @@ function orderHtml() {
 
 /* The sticky header sits directly under the sticky filter bar, and the bar's
    height is not a constant: it wraps to two lines at the widths where the
-   order label and the four filters no longer fit on one. Measured rather than
+   order label and the filters no longer fit on one. Measured rather than
    guessed, because a wrong offset hides the first row under the bar. */
 function measureFilters() {
   const bar = document.querySelector(".filters");
@@ -546,8 +528,6 @@ function withheldNote() {
 
 function shell() {
   const owners = unique(DATA.rows.map((r) => r.owner));
-  const layers = unique(DATA.rows.map((r) => r.layer));
-  const types = unique(DATA.rows.map((r) => r.type));
   const option = (value, selected) =>
     `<option value="${esc(value)}"${value === selected ? " selected" : ""}>${esc(value)}</option>`;
   const counts = DATA.sync_counts ?? {};
@@ -594,12 +574,6 @@ function shell() {
       <select data-bind="owner" aria-label="Owner">
         <option value="">All owners</option>${owners.map((o) => option(o, state.owner)).join("")}
       </select>
-      <select data-bind="layer" aria-label="Layer">
-        <option value="">All layers</option>${layers.map((l) => option(l, state.layer)).join("")}
-      </select>
-      <select data-bind="type" aria-label="Type">
-        <option value="">All types</option>${types.map((t) => option(t, state.type)).join("")}
-      </select>
       <select data-bind="versions" aria-label="Which components to show">
         ${Object.entries(VERSION_VIEWS)
           .map(([key, view]) => `<option value="${esc(key)}"${
@@ -624,8 +598,9 @@ function shell() {
     </div>
 
     <footer>
-      A tinted cell is the odd one out for that component across environments, and a
-      badge on a value says where it was read from. A left bar marks a component whose
+      A tinted cell disagrees with the rest of its row — the odd one out, or every
+      one of them when there is no odd one out — and a badge on a value says where
+      it was read from. A left bar marks a component whose
       dependencies nothing records. In Repository, each tag links to that release's
       notes, and a filled tag is running in one of the environments on its row. Ages
       are counted from your clock to the exact date in the tooltip, and they date a
@@ -658,7 +633,7 @@ function wire() {
 
   document.getElementById("reset").addEventListener("click", () => {
     Object.assign(state, {
-      q: "", owner: "", layer: "", type: "", versions: DEFAULT_VIEW,
+      q: "", owner: "", versions: DEFAULT_VIEW,
       sort: "", dir: "asc",
     });
     writeUrl();

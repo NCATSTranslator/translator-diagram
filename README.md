@@ -233,8 +233,8 @@ and a third click returns to stage order — which is also what the ✕ beside
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
 and it travels in the URL with the filters. In stage order the rows are banded by
-stage — each band naming what that stage is for — and sorting by owner, type
-or layer bands them by that instead.
+stage — each band naming what that stage is for — and sorting by owner bands
+them by owner instead.
 
 The stages, their order, and the components in each are
 [`config/flow-steps.yaml`](config/flow-steps.yaml), edited by hand. The
@@ -253,8 +253,8 @@ the sharpest version of the same question: prod is on `0.6.1`, released
 2024-10-04.
 
 **The page opens filtered**, on the components whose environments disagree —
-seven of twenty-six today, and the only rows with anything to say. The
-dropdown beside the type filter holds the rest: `Any version known`, `No
+seven of twenty-four today, and the only rows with anything to say. The
+dropdown beside the owner filter holds the rest: `Any version known`, `No
 version known` (which is the list of gaps in the metadata, and worth reading
 as a to-do list), and `All components`. The count beside the filters always
 says how many of the total are showing.
