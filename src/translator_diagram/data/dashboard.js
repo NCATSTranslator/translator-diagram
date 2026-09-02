@@ -294,11 +294,29 @@ function withheldChip(count, what, glyph) {
     >${glyph} ${count} withheld</span>`;
 }
 
+/* An empty `gets_results_from` and an empty `calls` are a claim: the file
+   format requires both keys, so writing them empty says somebody checked and
+   there is nothing. Saying nothing here would lose that — and it matters most
+   on a row that has inbound chips, where "checked, nothing" and "nobody has
+   looked" would otherwise be the same blank.
+
+   There is deliberately no matching chip for an empty `used_by`. That list is
+   computed by inverting the other twenty-five files, so its emptiness is a
+   fact about them, not a claim this component's author made. */
+function noneChip() {
+  const title = "Checked: this component's file records nothing it gets "
+    + "results from and nothing it calls";
+  return `<span class="chip none" title="${esc(title)}">◀ none recorded</span>`;
+}
+
 function linkChips(row) {
   const links = row.connections;
   if (!links) return "";
   const held = links.withheld ?? {};
+  const nothingOut = !links.gets_results_from.length && !links.calls.length
+    && !held.gets_results_from && !held.calls;
   const chips = [
+    ...(nothingOut ? [noneChip()] : []),
     ...links.gets_results_from.map((e) =>
       linkChip(e, "◀", "from", `Gets results from ${e.name}`)),
     ...(held.gets_results_from

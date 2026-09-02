@@ -262,6 +262,8 @@ a.chip.link:hover { border-color: var(--accent); color: var(--accent); }
 .chip.gone { opacity: 0.55; }
 .chip.withheld { background: none; border-style: dashed; border-color: var(--border);
                  color: var(--muted); font-style: italic; }
+/* "Checked, and there is nothing" — a claim, not an absence. */
+.chip.none { background: none; color: var(--muted); font-style: italic; }
 
 /* Room for two chips side by side. Without a floor the auto table layout
    gives the first column just enough for the longest id and every chip takes
