@@ -339,6 +339,41 @@ class TestConfirmDerived:
             "https://svc.ci.transltr.io/openapi.json": (200, b"<html>nope</html>")})
         assert _confirm_derived(component, candidate, fetcher, tmp_path, 0) is None
 
+    def test_json_of_an_unexpected_shape_is_rejected_not_raised(self, tmp_path):
+        # Copilot: a guessed hostname answers with whatever it likes. All three
+        # of these are valid JSON with no infores in them, and chaining `.get`
+        # through any of them used to raise AttributeError and end the sync.
+        component = _comp("svc", identifiers={"infores": "infores:svc"})
+        candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
+        for body in (b"[]", b'{"info": null}', b'{"info": {"x-translator": 3}}'):
+            fetcher = FakeFetcher({
+                "https://svc.ci.transltr.io/openapi.json": (200, body)})
+            assert _confirm_derived(
+                component, candidate, fetcher, tmp_path, 0) is None
+
+
+class TestAMalformedRegistry:
+    """The registry is whatever came back, and the run has to survive it."""
+
+    def _smartapi(self, hits):
+        return json.dumps({"hits": hits}).encode()
+
+    def test_an_html_error_page_does_not_end_the_run(self, tmp_path):
+        # Copilot: parsing this in the open ended the sync after the registries,
+        # the charts and the release lists had all already succeeded.
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, b"<html>bad gateway</html>")})
+        report = sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
+        assert (tmp_path / "manifest.json").exists()
+        assert report.finished_at
+
+    def test_a_registry_of_the_wrong_shape_is_ignored(self, tmp_path):
+        for n, body in enumerate((b"[]", b'{"hits": "nope"}', b'{"hits": [1, 2]}')):
+            root = tmp_path / f"run{n}"
+            root.mkdir()
+            fetcher = FakeFetcher({SMARTAPI_QUERY: (200, body)})
+            sync([_comp("svc")], root, fetcher=fetcher, max_age=0)
+            assert (root / "manifest.json").exists()
+
 
 class TestNegativeCaching:
     """Most derived hostnames do not resolve. Do not keep asking."""
@@ -406,6 +441,25 @@ class TestNegativeCaching:
         sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
         after = json.loads((tmp_path / "derived.json").read_text())
         assert after["confirmed"]["svc"]["ci"]["url"] == "https://svc.ci.transltr.io/"
+
+    def test_a_rejection_this_run_beats_an_older_confirmation(self, tmp_path):
+        # Copilot (suppressed): the carry-forward reinstated a confirmation the
+        # same run had just probed and rejected, so a derived deployment stayed
+        # published for good once it had been confirmed a single time.
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {"svc": {"ci": {"url": "https://svc.ci.transltr.io/"}}},
+            "rejected": {},
+        }))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi([]))})
+        component = _comp(
+            "svc",
+            identifiers={"infores": "infores:svc"},
+            environments={"prod": Deployment(env="prod", url="https://svc.transltr.io/")},
+        )
+        sync([component], tmp_path, fetcher=fetcher, max_age=0)
+        after = json.loads((tmp_path / "derived.json").read_text())
+        assert "ci" not in after["confirmed"].get("svc", {})
+        assert "ci" in after["rejected"]["svc"]
 
     def test_an_unreadable_derived_file_does_not_stop_the_run(self, tmp_path):
         (tmp_path / "derived.json").write_text("{not json")
