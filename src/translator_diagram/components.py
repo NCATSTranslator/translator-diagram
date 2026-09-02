@@ -12,6 +12,7 @@ the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -257,24 +258,37 @@ def derive_deployments(known: dict[str, Deployment]) -> dict[str, Deployment]:
 
     The stem and any path are taken from an environment we already know, so
     arax's `/api/arax/v1.4` survives into its siblings.
+
+    One stem is chosen even when the known hosts disagree, because a
+    conventional hostname has one shape and probing several would race two
+    fetches for the same cache file. It is the commonest stem, and the
+    earliest on the ladder among equals — a rule the deployments decide,
+    rather than the alphabetical accident of sorting the stems and taking the
+    first, which is what this did while reading as though it tried each.
     """
-    stems: dict[str, str] = {}
-    for deployment in known.values():
+    stems: list[tuple[str, str]] = []
+    for env in ENVIRONMENTS:
+        deployment = known.get(env)
+        if deployment is None:
+            continue
         parts = urlsplit(deployment.url)
         match = TRANSLTR_HOST.match(parts.hostname or "")
         if match:
-            stems.setdefault(match.group("stem"), parts.path.rstrip("/"))
-    candidates: dict[str, Deployment] = {}
-    for env, template in DERIVABLE_HOSTS.items():
-        if env in known:
-            continue
-        for stem, path in sorted(stems.items()):
-            host = template.format(stem=stem)
-            candidates[env] = Deployment(
-                env=env, url=f"https://{host}{path}/", location="ITRB"
-            )
-            break
-    return candidates
+            stems.append((match.group("stem"), parts.path.rstrip("/")))
+    if not stems:
+        return {}
+    seen = Counter(stem for stem, _ in stems)
+    # max() keeps the first of equals, and `stems` is in ladder order.
+    stem, path = max(stems, key=lambda pair: seen[pair[0]])
+    return {
+        env: Deployment(
+            env=env,
+            url=f"https://{template.format(stem=stem)}{path}/",
+            location="ITRB",
+        )
+        for env, template in DERIVABLE_HOSTS.items()
+        if env not in known
+    }
 
 
 def merge_deployments(

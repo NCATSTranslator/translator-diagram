@@ -194,6 +194,27 @@ class TestDeriveDeployments:
         known = {"prod": Deployment(env="prod", url="https://x.transltr.io")}
         assert "dev" not in derive_deployments(known)
 
+    def test_the_commonest_stem_wins_when_hosts_disagree(self):
+        # Three known hosts under one namespace, one stem used twice: the odd
+        # one out is not the shape to derive the missing environment from,
+        # however early on the ladder it sits.
+        known = {
+            "dev": Deployment(env="dev", url="https://renamed.transltr.io/"),
+            "ci": Deployment(env="ci", url="https://svc.ci.transltr.io/"),
+            "test": Deployment(env="test", url="https://svc.test.transltr.io/"),
+        }
+        assert derive_deployments(known)["prod"].url == "https://svc.transltr.io/"
+
+    def test_a_tie_is_broken_by_the_ladder_not_the_alphabet(self):
+        # One each. Sorting the stems and taking the first made the choice by
+        # spelling; the environment nearer the start of the ladder is at least
+        # a property of the deployments.
+        known = {
+            "ci": Deployment(env="ci", url="https://zulu.ci.transltr.io/"),
+            "test": Deployment(env="test", url="https://alpha.test.transltr.io/"),
+        }
+        assert derive_deployments(known)["prod"].url == "https://zulu.transltr.io/"
+
     def test_a_non_itrb_host_yields_nothing(self):
         known = {"dev": Deployment(env="dev", url="https://x.renci.org/")}
         assert derive_deployments(known) == {}
