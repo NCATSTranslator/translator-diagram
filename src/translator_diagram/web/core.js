@@ -42,7 +42,7 @@
 
   /* Ages are measured against the reader's clock, not against the sync: a page
      opened in December is telling the truth when it says a release is four
-     months old. The exact date is one hover away, and the footer says so. */
+     months old. The exact date is one hover away. */
   let ageFormat = null;
   const relative = () => {
     if (!ageFormat) ageFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "always" });

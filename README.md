@@ -265,8 +265,7 @@ things it reports are the answer:
 
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
 names — today the tracing console, the internal test rig, and the container
-image tags that would turn the version grid into a CVE-matching inventory. The
-page says so in a one-line footer when anything was withheld, and
+image tags that would turn the version grid into a CVE-matching inventory.
 `--include-private` builds the full picture for local use. Helm chart
 `appVersion` and other chart metadata stay in the published build; only image
 tags are redacted.

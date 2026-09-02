@@ -10,8 +10,7 @@
      vertically. Making the wrapper scroll on both axes is what lets the
      header and the first column both stick, at every width, and it is also
      what stops the table pushing the page wider than the window between 1100
-     and 1500px (issue #31). Its height is measured, not guessed:
-     `--table-h` is set by app.js from the wrapper's own top edge.
+     and 1500px (issue #31). Its height comes from the flex column above it.
   2. Every column's header, cell, drop class and sort behaviour come from one
      COLUMNS entry in table.js. Four things have to agree about a column, and
      three of them used to be written out twice.
@@ -36,10 +35,10 @@
 */
 
 .tablewrap {
-  overflow: auto;
-  max-height: var(--table-h, 62vh);
+  flex: 1;
   min-height: 240px;
-  overscroll-behavior-x: contain;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 table.grid {

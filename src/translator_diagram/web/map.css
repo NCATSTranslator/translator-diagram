@@ -13,10 +13,10 @@
 
 .mp {
   position: relative;
+  flex: 1;
+  min-height: 420px;
   overflow: hidden;
   border-bottom: 1px solid var(--hairline);
-  /* Set from JS: the window minus whatever sits above the view. */
-  height: var(--map-h, 640px);
   touch-action: none;
 }
 

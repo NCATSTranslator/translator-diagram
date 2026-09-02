@@ -95,12 +95,10 @@
 
     const drift = (cell.drift || []).length ? " drift" : "";
     const unregistered = cell.unregistered ? " unregistered" : "";
-    // The tint carries the signal on screen; this carries it to a reader who
-    // is not looking at one. A visible glyph on top of the tint said the same
-    // thing twice in a cell that already holds four things.
-    const neq = drift
-      ? '<span class="sr-only">disagrees with the row</span>'
-      : "";
+    // The tint carries the signal on screen; aria-label carries it to a reader
+    // who is not looking at one. A child span would extend the document: abs
+    // positioning inside a table cell does not stay inside the scrollport.
+    const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
     const dot = typeof cell.reachable === "boolean"
       ? `<span class="dot ${cell.reachable ? "up" : "down"}" aria-label="${
           cell.reachable ? "reachable" : "not reachable"}"></span>`
@@ -119,8 +117,8 @@
       const up = cell.reachable === true
         ? '<span class="dot up" aria-label="reachable"></span>'
         : "";
-      return `<td class="env absent${drift}" ${tip}><span class="envline">${
-        neq}${up}${why}</span>${inferred}</td>`;
+      return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
+        up}${why}</span>${inferred}</td>`;
     }
 
     const version = `<span class="version">${esc(cell.version)}</span>`;
@@ -129,8 +127,8 @@
            >${esc(sourceLabel(cell.version_source))}</span>`
       : "";
 
-    return `<td class="env${drift}${unregistered}" ${tip}><span class="envline">${
-      neq}${version}${dot}</span>${source}${inferred}</td>`;
+    return `<td class="env${drift}${unregistered}"${driftLabel} ${tip}><span class="envline">${
+      version}${dot}</span>${source}${inferred}</td>`;
   }
 
   /* The repository, then its latest releases — plus any older release an

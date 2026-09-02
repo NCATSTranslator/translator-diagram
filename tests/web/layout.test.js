@@ -232,6 +232,15 @@ test("the routes are the ones the ranks call for", () => {
   assert.equal(routes.get("Source->a1"), "down");
 });
 
+test("an adjacent same-row edge is not folded into the gap between its nodes", () => {
+  const edge = compute().edges.find((item) => item.from === "b3" && item.to === "b2");
+  assert.ok(edge, "the same-row fixture edge is drawn");
+  assert.equal(edge.route, "same");
+  assert.equal(edge.path, `M ${edge.fromPort.x} ${edge.fromPort.y}`
+    + ` L ${edge.toPort.x} ${edge.toPort.y}`);
+  assert.doesNotMatch(edge.path, / Q /, "an adjacent edge has no zero-width U-turn");
+});
+
 test("every path starts with a move, and every port is on its own box", () => {
   const scene = compute();
   const found = byId(scene);

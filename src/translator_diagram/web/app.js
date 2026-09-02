@@ -150,30 +150,6 @@
     return `${drifting.length} disagree across environments: ${names.join(", ")}.`;
   }
 
-  /* Says that something is missing, without listing it. A page that quietly
-     drops rows is worse than one that shows fewer: a reader counting
-     components against the repository should find the difference explained
-     here rather than assume the table is everything.
-
-     It is the whole footer now. The reference paragraph that used to sit
-     beside it described marks the table makes plain, and cost every reader a
-     screenful to say so; this one line cannot be dropped, because a policy
-     that hides rows without saying it did is not a policy. */
-  function footerHtml() {
-    const held = DATA.redacted;
-    if (!held) return "";
-    const parts = [];
-    if (held.components) parts.push(TD.fmt.plural(held.components, "component"));
-    const fields = [...(held.fields || []), ...(held.environment_fields || [])];
-    if (fields.length) {
-      parts.push(`the ${fields.map(esc).join(" and ")} ${
-        fields.length === 1 ? "field" : "fields"}`);
-    }
-    if (!parts.length) return "";
-    return `<footer>This build withholds ${parts.join(" and ")} ·
-      <code>config/privacy.yaml</code></footer>`;
-  }
-
   function statsHtml() {
     const counts = DATA.sync_counts || {};
     const deployments = (DATA.rows || []).reduce(
@@ -224,7 +200,6 @@
         </div>
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
-        ${footerHtml()}
       </main>`;
   }
 
@@ -334,21 +309,6 @@
     if (bar) {
       root.style.setProperty("--filters-height",
         `${Math.round(bar.getBoundingClientRect().height)}px`);
-    }
-    // The table is the page's scrollport (see table.css), so its height is the
-    // window minus whatever sits above it and the one line that sits below.
-    // Measured, not reserved by guess: the footer is a single line when the
-    // policy withheld something and no element at all when it did not, and a
-    // constant here is a blank band under the table in the second case.
-    // Floored, so a short window leaves a usable table rather than a two-row
-    // slot.
-    const wrap = $(".tablewrap");
-    if (wrap) {
-      const top = wrap.getBoundingClientRect().top + scrollY;
-      const note = $("footer");
-      const below = note ? Math.ceil(note.getBoundingClientRect().height) : 0;
-      root.style.setProperty(
-        "--table-h", `${Math.max(240, Math.round(innerHeight - top - below))}px`);
     }
     if (viewSwitch) viewSwitch.measure();
   }

@@ -403,15 +403,15 @@
     }
 
     const drift = list(cell.drift);
-    // No glyph: the tint carries it, the sentence is one hover away, and the
-    // sr-only span is what a screen reader gets — the same three parts the
+    // No glyph: the tint carries it, the sentence is one hover away, and
+    // aria-label is what a screen reader gets — the same three parts the
     // table's cells use, so the two surfaces make one claim.
     const driftSays = drift.length
       ? `disagrees with the rest of this row: ${drift.join(", ")}` : "";
     const version = cell.version
       ? `<span class="dw-ver${drift.length ? " dw-drift" : ""}"${drift.length
-        ? ` data-tip="say" data-full="${esc(driftSays)}"` : ""}>${esc(cell.version)}${
-        drift.length ? '<span class="sr-only">disagrees with the row</span>' : ""}</span>`
+        ? ` data-tip="say" data-full="${esc(driftSays)}" aria-label="${esc(driftSays)}"` : ""}>${
+        esc(cell.version)}</span>`
       : DASH;
     const source = cell.version_source
       ? ` <span class="src" data-src="${esc(cell.version_source)}">${

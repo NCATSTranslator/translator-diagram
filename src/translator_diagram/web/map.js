@@ -752,9 +752,7 @@
   }
 
   function size() {
-    if (!box) return;
-    const top = box.getBoundingClientRect().top + scrollY;
-    box.style.setProperty("--map-h", `${Math.max(420, Math.round(innerHeight - top - 24))}px`);
+    /* Height comes from the flex column; nothing to measure here. */
   }
 
   /* --- Interaction ---------------------------------------------------------- */

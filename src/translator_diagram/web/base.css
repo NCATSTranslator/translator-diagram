@@ -1,5 +1,5 @@
 /*
-  The shell: reset, top bar, finding, stats line, filter strip, footer, focus.
+  The shell: reset, top bar, finding, stats line, filter strip, focus.
 
   There is not a card on this page. Every group is a hairline and some
   whitespace, which is why nothing here sets a border-radius on a region or a
@@ -10,10 +10,16 @@
 *::before,
 *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
   background: var(--page);
   color: var(--text);
   font: var(--fs-body) / 1.5 var(--font);
@@ -109,7 +115,20 @@ code {
 /* No bottom padding: the table is the page's scrollport and it is measured to
    end at the window's bottom edge, so anything reserved here is a blank band
    under it. */
-.page { padding: var(--sp-5) var(--sp-5) 0; }
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--sp-5) var(--sp-5) 0;
+}
 
 /* The finding is prose, not a panel: one accent rule on the left, the same
    3px the map nodes use for an owner rail, and no box. */
@@ -194,7 +213,12 @@ code {
 /* --- Views ---------------------------------------------------------------- */
 
 .view { display: none; }
-.view.on { display: block; }
+.view.on {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 /* Crossfade with an 8px rise. The rise is what makes the switch read as one
    surface replacing another rather than two things blinking. */
 .view.enter {
@@ -209,18 +233,6 @@ code {
   padding: var(--sp-6) 0;
   color: var(--muted);
   font-size: var(--fs-body);
-}
-
-/* One line, and only when there is something to say: what this build left
-   out. There is no empty <footer> to style — app.js renders the element only
-   when the policy withheld something — because an empty one still cost twelve
-   pixels of white under the table and the table is measured against it. */
-footer {
-  margin: 0;
-  padding: var(--sp-3) 0;
-  color: var(--muted);
-  font-size: var(--fs-meta);
-  max-width: 100ch;
 }
 
 /* --- Responsive ----------------------------------------------------------- */

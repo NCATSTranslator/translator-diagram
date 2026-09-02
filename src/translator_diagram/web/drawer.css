@@ -575,6 +575,8 @@ html[data-drawer="open"] .page { padding-right: 440px; }
      just clicked. 30vh is what fits above a 70vh sheet. */
   html[data-drawer="open"] .tablewrap { max-height: 30vh; }
   html[data-drawer="open"] .page { padding-right: 0; padding-bottom: 70vh; }
+  html[data-drawer="open"],
+  html[data-drawer="open"] body { overflow: auto; }
 
   .dw-head { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
   .dw-tabs .tabs { padding: 0 calc(var(--sp-4) - 10px); }

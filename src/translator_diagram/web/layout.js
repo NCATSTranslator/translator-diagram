@@ -906,22 +906,32 @@
         points.push(to);
         path = elbow(points, opt.corner);
       } else if (item.route === "same") {
-        // Out into the 28px gap beside each node, up to at least `arcClear`
-        // above the row, across, and back down: a neighbour is never crossed
-        // because no leg of the trip is at node height inside the row.
-        const dir = entry.sideA === "right" ? 1 : -1;
-        const n = arcUse.get(item.a) || 0;
-        arcUse.set(item.a, n + 1);
-        const arcY = rowY(item.a) - opt.arcClear - (n % 3) * 10;
-        const step = Math.min(14, opt.colGap / 2);
-        path = elbow([
-          from,
-          { x: from.x + dir * step, y: from.y },
-          { x: from.x + dir * step, y: arcY },
-          { x: to.x - dir * step, y: arcY },
-          { x: to.x - dir * step, y: to.y },
-          to,
-        ], Math.min(opt.corner, step));
+        const gap = entry.sideA === "right" ? to.x - from.x : from.x - to.x;
+        if (gap > 0 && gap <= opt.colGap + 0.01) {
+          // Adjacent nodes already have a clear corridor between their facing
+          // sides. Sending that short edge up and back used half the 28px gap
+          // for each bend, so both legs met at one x and drew a zero-width
+          // U-turn — the arrow looked crushed between the boxes.
+          path = elbow([from, to], 0);
+        } else {
+          // Out into the gap beside each node, up to at least `arcClear` above
+          // the row, across, and back down: an intervening neighbour is never
+          // crossed because no leg of the trip is at node height inside the
+          // row.
+          const dir = entry.sideA === "right" ? 1 : -1;
+          const n = arcUse.get(item.a) || 0;
+          arcUse.set(item.a, n + 1);
+          const arcY = rowY(item.a) - opt.arcClear - (n % 3) * 10;
+          const step = Math.min(14, opt.colGap / 2);
+          path = elbow([
+            from,
+            { x: from.x + dir * step, y: from.y },
+            { x: from.x + dir * step, y: arcY },
+            { x: to.x - dir * step, y: arcY },
+            { x: to.x - dir * step, y: to.y },
+            to,
+          ], Math.min(opt.corner, step));
+        }
       } else if (item.route === "up" && item.a - item.b === 1) {
         const gutter = gutterY(item.b) + track(item.b);
         path = elbow([from, { x: from.x, y: gutter }, { x: to.x, y: gutter }, to], opt.corner);
