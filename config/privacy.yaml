@@ -30,19 +30,29 @@ fields:
     reason: >-
       Container image tags (solr:9.1, renci-python-image:latest, ...). Beside
       the version grid they make a ready-made inventory to match against a CVE
-      feed, with nothing to probe. Nothing in dashboard.js renders this field,
-      so withholding it changes overview.json and not the page — do not go
-      looking for what moved.
-  - name: helm_version
-    reason: >-
-      The chart version those tags came from. Note this supplies the version
-      for 3 of ~49 deployments, so withholding it blanks those cells and moves
-      them from `helm` to `none` in the source tally. Drop this entry if the
-      published page reads too thin.
+      feed, with nothing to probe. The drawer does render Helm now, but out of
+      the public `helm_charts` block, which carries capacity — replicas,
+      requests, limits, storage — and never an image repository or tag;
+      tests/test_payload_details.py scans every cached chart's real output to
+      keep it that way.
 
-# Per-environment cell fields. None today; `uptime`, `http_status` and
-# `status_url` are the candidates if the health signals turn out to be too
-# much — see the checklist on PR #21.
+# `helm_version` was withheld here until the drawer was built, and is not any
+# more. The chart's appVersion is a claim about what *should* be deployed, it
+# is public in helxplatform/translator-devops, and it is not where the image
+# tags come from — so withholding it emptied that field on the six published
+# rows that record a chart while protecting nothing, and would have blanked any
+# cell whose version came from one. privacy.FIELD_VERSION_SOURCES narrowed at
+# the same time: only a field a cell actually read its version from belongs in
+# that map, which `helm_images` never was.
+
+# Per-environment cell fields. None today. The candidates if the health
+# signals turn out to be too much are `uptime`, `http_status` and `status_url`
+# — see the checklist on PR #21 — and now six more that arrived with the
+# drawer: `openapi_title`, `trapi_operations`, `asyncquery`, `paths_count`,
+# `status_message` and `recent_queries`. All six are read from the endpoint's
+# own public document, and `recent_queries` is the only one that says anything
+# about usage rather than shape: a count and two latencies, no per-query
+# detail. Withhold that one first if any of them ever needs withholding.
 environment_fields: []
 
 # Considered and deliberately not withheld:
@@ -54,3 +64,26 @@ environment_fields: []
 #                      either recorded in this repo or listed in the public
 #                      SmartAPI registry, and they are what makes a version
 #                      claim checkable by the reader.
+#   helm_charts        What each chart asks Kubernetes for. Read from
+#                      helxplatform/translator-devops, which is public, and it
+#                      is capacity rather than inventory: how many replicas and
+#                      how much memory, with no image to match a CVE against.
+#   helm_charts[].ingress_hosts
+#                      Chart *defaults*, not what ITRB deploys with, and
+#                      labelled as such wherever they are shown. The
+#                      placeholders charts write here (`fillthisin`,
+#                      `ingress_HOST`) are dropped rather than published as
+#                      hostnames.
+#   smartapi_record.contact
+#                      A name and an email, already public in the SmartAPI
+#                      registry entry this repo links to by id. Worth noting
+#                      that `fields:` could not empty it if we wanted to: it
+#                      names a whole row field, and reaching one key inside a
+#                      block would need nested-path support in
+#                      privacy._redactions.
+#   edges, stages, connections
+#                      Which component calls which, computed from the
+#                      `connections:` blocks in this public repository. A
+#                      withheld component is still absent from all three: they
+#                      are built from the rows the policy left behind, and
+#                      `connections` is pruned of withheld ids in privacy.apply.

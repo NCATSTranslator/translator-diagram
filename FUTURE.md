@@ -47,6 +47,26 @@ changed", and it would outrank the release date on nearly every row and make
 the `release` badge vanish. If it is added, it should rank *below* a release
 rather than by recency.
 
+## Sample OpenTelemetry traces per environment
+
+The dashboard already counts OTel services per environment from the Jaeger
+query API. Showing individual trace samples — latency, error rate, last seen —
+would need a separate sampled job with its own cache and TTL, because the
+query endpoint is not cheap enough to hit on every `sync-components` run and
+the answer is not stable enough to treat as a version fact. If built, it belongs
+in its own tile or drawer section, labelled as sampled telemetry rather than
+deployment truth.
+
+## Rendered Helm manifests per environment
+
+`helm template` against each chart and environment would show the intended
+Kubernetes objects — image, resources, env vars — beyond the `appVersion` the
+page already reads from the chart file. The cost is one Helm invocation per
+(chart, environment) pair, a Helm binary in CI (which `pages.yml` deliberately
+does not install today), and a trust boundary: rendered YAML is intent, not
+what is running. Chart metadata stays in the published build; only image tags
+are withheld today.
+
 ## Watch the GitHub budget
 
 Both ideas above spend from the same allowance: **60 requests an hour** for an

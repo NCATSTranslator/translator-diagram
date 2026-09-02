@@ -19,6 +19,7 @@ hosted_at: ITRB
 
 identifiers:
   infores: infores:dogpark-tier0
+  helm_chart: gandalf
   otel_services:
     - gandalf
 
@@ -34,6 +35,9 @@ connections:
 repositories:
   - url: https://github.com/ranking-agent/gandalf
     role: source
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/gandalf
+    role: helm-chart
     visibility: public
 
 endpoints:

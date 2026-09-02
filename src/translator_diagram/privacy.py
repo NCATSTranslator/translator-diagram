@@ -46,7 +46,7 @@ SECTIONS = {"components", "fields", "environment_fields"}
 """Every top-level key the policy file may have. Anything else is a typo."""
 
 
-FIELD_VERSION_SOURCES = {"helm_version": "helm", "helm_images": "helm"}
+FIELD_VERSION_SOURCES = {"helm_version": "helm"}
 """Row fields that are also the origin of a value shown in the table.
 
 Emptying `helm_version` on the row is not enough on its own: a cell whose
@@ -57,7 +57,20 @@ names a withheld origin therefore loses its version too.
 
 Both together, never one: a version with no provenance is precisely what this
 dashboard exists not to show.
+
+`helm_images` used to be here as well, and that was wrong. No cell ever reads
+its version from the image list — the chart's `appVersion` is what the `helm`
+tier supplies, and that is `helm_version` — so this entry meant withholding the
+images would blank a version they had nothing to do with. It cost nothing on
+today's data only because the three helm-sourced cells all sit on jaeger's row,
+which is withheld whole; the first time a published component takes its version
+from a chart, it would have blanked that cell for no reason anyone could find
+in the policy. Only a field a cell actually read its value from belongs here.
 """
+
+
+SCRUBBED = "…"
+"""What a withheld id becomes where it is mentioned in somebody else's prose."""
 
 
 @dataclass(frozen=True)
@@ -99,9 +112,16 @@ class Report:
     components: tuple[str, ...] = ()
     fields: tuple[str, ...] = ()
     environment_fields: tuple[str, ...] = ()
+    mentions: int = 0
+    """How many times a withheld id was found in free text and replaced."""
 
     def __bool__(self) -> bool:
-        return bool(self.components or self.fields or self.environment_fields)
+        return bool(
+            self.components
+            or self.fields
+            or self.environment_fields
+            or self.mentions
+        )
 
     def summary(self) -> str:
         """One line for the build log."""
@@ -118,6 +138,11 @@ class Report:
                 f"{len(self.environment_fields)} environment fields "
                 f"({', '.join(self.environment_fields)})"
             )
+        if self.mentions:
+            parts.append(
+                f"{self.mentions} mention{'' if self.mentions == 1 else 's'} "
+                f"in free text"
+            )
         return "Withheld " + ", and ".join(parts) + "."
 
     def for_payload(self) -> dict[str, Any]:
@@ -133,6 +158,9 @@ class Report:
             "components": len(self.components),
             "fields": list(self.fields),
             "environment_fields": list(self.environment_fields),
+            # A count, for the same reason as components: the page can say "3
+            # mentions withheld" without the sentence naming what it withheld.
+            "mentions": self.mentions,
         }
 
 
@@ -214,18 +242,43 @@ def apply(
     `overview.json` is a contract a consumer may already read — a key that
     disappears breaks it, where a null one reads as "not available", which is
     exactly what it is.
+
+    A kept row can still *point at* a withheld one. Nine component files record
+    `calls: [jaeger]`, so `connections` is pruned here as well: an id the policy
+    withholds is removed from every list under it, planned references included.
+
+    And a kept row can still *mention* one. Notes, a registry description, a
+    release title — third-party prose we did not write and cannot edit at the
+    source. A withheld id appearing there as a word is not a leak worth
+    stopping a nightly publish over, so it is replaced with an ellipsis and
+    counted, and the count reaches the page. `verify` stays exactly as strict:
+    it reads the finished payload back and refuses anything that got past this.
+
+    What this does *not* touch is `edges`, `stages`, `externals`,
+    `catalog_edges` and `smartapi_suggestions`. They are built in
+    `build_payload` after this runs, out of the rows it returns, so they cannot
+    carry an id that is not in a kept row. A second pass over them here would be
+    dead code that looks load-bearing. `unclaimed_charts` needs no pass either,
+    for the opposite reason: it is matched against every component, so a chart a
+    withheld component claims is never listed, and an entry names a chart and a
+    description rather than a component.
     """
     _check_known(rows, policy)
     withheld_ids = set(policy.component_ids)
+    folded = {name.lower() for name in withheld_ids}
+    patterns = tuple(_word(name) for name in withheld_ids)
     withheld_sources = {
         FIELD_VERSION_SOURCES[name]
         for name in policy.field_names
         if name in FIELD_VERSION_SOURCES
     }
     kept = [row for row in rows if row.get("id") not in withheld_ids]
+    mentions = 0
     for row in kept:
         for name in policy.field_names:
             row[name] = _emptied(row.get(name))
+        _prune_ids(row, folded)
+        mentions += _scrub_row(row, patterns)
         for cell in row.get("environments", {}).values():
             for name in policy.environment_field_names:
                 if name in cell:
@@ -237,8 +290,100 @@ def apply(
         ),
         fields=policy.field_names,
         environment_fields=policy.environment_field_names,
+        mentions=mentions,
     )
     return kept, report
+
+
+def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
+    """Drop withheld components from a kept row's recorded connections.
+
+    The tilde is a marker on the reference and not part of the id, so
+    `~jaeger` is the same component as `jaeger` and goes for the same reason —
+    a planned edge to a withheld component names it just as plainly as an
+    implemented one does. Matching is case-insensitive because that is how
+    references resolve everywhere else here.
+
+    Every list under `connections` is walked rather than the four keys being
+    named, so a fifth edge kind added later is pruned without anyone
+    remembering to come back to this function.
+    """
+    connections = row.get("connections")
+    if not isinstance(connections, dict):
+        return
+    for key, refs in connections.items():
+        if not isinstance(refs, list):
+            continue
+        connections[key] = [
+            ref
+            for ref in refs
+            if not (isinstance(ref, str) and ref.lstrip("~").lower() in withheld)
+        ]
+
+
+def _word(name: str) -> re.Pattern[str]:
+    """One withheld id as a whole-word pattern, bounded by non-alphanumerics.
+
+    The same boundary `verify` uses, and for the same reason: as a substring
+    this would eat the `ars` inside `parsers`. The two must agree, or `apply`
+    scrubs what `verify` does not look for, or misses what it does.
+    """
+    return re.compile(
+        rf"(?<![0-9A-Za-z]){re.escape(name)}(?![0-9A-Za-z])", re.IGNORECASE
+    )
+
+
+def _scrubbed(value: Any, patterns: tuple[re.Pattern[str], ...]) -> tuple[Any, int]:
+    """One string with every withheld id replaced, and how many were found."""
+    if not isinstance(value, str) or not value:
+        return value, 0
+    found = 0
+    for pattern in patterns:
+        value, hits = pattern.subn(SCRUBBED, value)
+        found += hits
+    return value, found
+
+
+def _scrub_row(row: dict[str, Any], patterns: tuple[re.Pattern[str], ...]) -> int:
+    """Replace withheld ids in the free text a kept row carries.
+
+    Every field here is prose from somewhere else: a note somebody wrote about
+    this component, the description and tags in its registry entry, the titles
+    and excerpts of its releases. We cannot ask GitHub to reword a release, so
+    the choice is between scrubbing the word and failing every publish on the
+    day one of them says "jaeger". Structured fields are not in this list —
+    those are pruned, not rewritten, because an id in a list of ids is a
+    reference and half of one is worse than none.
+    """
+    if not patterns:
+        return 0
+    found = 0
+    for key in ("notes",):
+        if key in row:
+            row[key], hits = _scrubbed(row.get(key), patterns)
+            found += hits
+    record = row.get("smartapi_record")
+    if isinstance(record, dict):
+        for key in ("description_text", "title"):
+            if key in record:
+                record[key], hits = _scrubbed(record.get(key), patterns)
+                found += hits
+        tags = record.get("tags")
+        if isinstance(tags, list):
+            cleaned = []
+            for tag in tags:
+                tag, hits = _scrubbed(tag, patterns)
+                found += hits
+                cleaned.append(tag)
+            record["tags"] = cleaned
+    for entry in row.get("releases_detail") or []:
+        if not isinstance(entry, dict):
+            continue
+        for key in ("name", "body_excerpt"):
+            if key in entry:
+                entry[key], hits = _scrubbed(entry.get(key), patterns)
+                found += hits
+    return found
 
 
 def verify(payload: dict[str, Any], policy: Policy) -> None:
@@ -296,9 +441,12 @@ def _mentions(blob: str, name: str) -> bool:
     stray reference actually takes — but not inside a longer word. The id may
     contain hyphens of its own, which is why the boundary is written out
     rather than left to `\b`.
+
+    One definition, shared with the scrubber in `apply`: if the two spelled the
+    boundary differently, one of them would be looking for something the other
+    does not remove.
     """
-    pattern = rf"(?<![0-9A-Za-z]){re.escape(name)}(?![0-9A-Za-z])"
-    return re.search(pattern, blob, re.IGNORECASE) is not None
+    return _word(name).search(blob) is not None
 
 
 def _drop_withheld_versions(cell: dict[str, Any], sources: set[str]) -> None:

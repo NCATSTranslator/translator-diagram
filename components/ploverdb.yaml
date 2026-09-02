@@ -24,6 +24,12 @@ itrb:
   app: Ploverdb
   group: TeamExpander
 
+# Kept off the map: the RTX-era query engine is recorded here for the table,
+# but nothing records what calls it, and an unconnected box in the unplaced
+# lane says less than its row does.
+diagram:
+  hide: true
+
 connections:
   gets_results_from: []
   calls: []
