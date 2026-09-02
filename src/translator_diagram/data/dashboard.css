@@ -52,13 +52,16 @@
 
 * { box-sizing: border-box; }
 
+/* A deep link to a component must not land under the sticky filter bar. On
+   `body` this did nothing: the document's scrolling box is the root element,
+   so that is where the padding has to be. */
+html { scroll-padding-top: 8rem; }
+
 body {
   margin: 0;
   background: var(--page);
   color: var(--text);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* A deep link to a component must not land under the sticky filter bar. */
-  scroll-padding-top: 8rem;
 }
 
 a { color: var(--accent); text-decoration: none; }
