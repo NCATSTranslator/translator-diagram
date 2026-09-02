@@ -498,13 +498,18 @@ def _release_chips(
         entries, key=lambda entry: entry.get("published_at") or "", reverse=True
     )
     chips = []
-    for index, entry in enumerate(ordered):
+    shown = 0
+    for entry in ordered:
         tag = entry.get("tag_name")
         if not tag or entry.get("draft"):
             continue
         running = any(_same_version(tag, version) for version in deployed)
-        if index >= RELEASES_SHOWN and not running:
+        # Counted after the skips, not from the enumeration: a repository
+        # whose two newest entries are drafts showed one chip where it should
+        # show three, because the drafts spent two of the three places.
+        if shown >= RELEASES_SHOWN and not running:
             continue
+        shown += 1
         chips.append(
             {
                 "tag": tag,

@@ -486,6 +486,30 @@ class TestReleaseChips:
         )
         assert [c["tag"] for c in chips] == ["v1.0.0"]
 
+    def test_drafts_do_not_use_up_the_three_places(self):
+        # The two newest entries are drafts, so the three chips worth showing
+        # are the three published releases below them.
+        entries = [
+            _release("v9.0.0", draft=True, published_at="2026-08-09T00:00:00Z"),
+            _release("v8.0.0", draft=True, published_at="2026-08-08T00:00:00Z"),
+            _release("v7.0.0", published_at="2026-08-07T00:00:00Z"),
+            _release("v6.0.0", published_at="2026-08-06T00:00:00Z"),
+            _release("v5.0.0", published_at="2026-08-05T00:00:00Z"),
+            _release("v4.0.0", published_at="2026-08-04T00:00:00Z"),
+        ]
+        assert [c["tag"] for c in _release_chips(entries, set())] == [
+            "v7.0.0", "v6.0.0", "v5.0.0"]
+
+    def test_a_tagless_entry_does_not_either(self):
+        entries = [
+            {"html_url": "https://x/", "published_at": "2026-08-09T00:00:00Z"},
+            _release("v7.0.0", published_at="2026-08-07T00:00:00Z"),
+            _release("v6.0.0", published_at="2026-08-06T00:00:00Z"),
+            _release("v5.0.0", published_at="2026-08-05T00:00:00Z"),
+        ]
+        assert [c["tag"] for c in _release_chips(entries, set())] == [
+            "v7.0.0", "v6.0.0", "v5.0.0"]
+
     def test_the_fields_the_page_renders(self):
         chip = _release_chips([_release("v1.0.0", prerelease=True)], set())[0]
         assert chip["url"] == "https://github.com/a/b/releases/tag/v1.0.0"
