@@ -337,6 +337,34 @@
         "string",
         "null"
       ]
+    },
+    "private": {
+      "description": "Facts for people with repository access only: who to contact, hosts that are not public, operational notes. Never reaches overview.json or the published page -- components.py does not parse this key, so the dashboard stack cannot see it, and build-content is its only reader. Absent means nothing has been recorded, like every other field.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contacts": {
+          "description": "Who to ask about this component: names, handles or addresses.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "internal_hosts": {
+          "description": "Hosts that serve this component and are not listed anywhere public.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "description": "Free text that should not leave the repository.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
     }
   },
   "$defs": {

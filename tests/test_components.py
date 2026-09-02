@@ -38,6 +38,17 @@ class TestParsing:
         # config/owner-colors.csv is looked up by.
         assert parse_component({**MINIMAL, "owner": ""}).owner == "None"
 
+    def test_the_private_block_is_not_parsed(self):
+        # The guarantee that nothing under `private:` reaches overview.json is
+        # structural: the dashboard stack reads ComponentFile, and ComponentFile
+        # has no such field. content.py re-reads the YAML for it instead. Adding
+        # the field here would make the guarantee a matter of nobody copying
+        # it, which is a weaker one.
+        component = parse_component(
+            {**MINIMAL, "private": {"contacts": ["PRIVATE"], "notes": "x"}}
+        )
+        assert "private" not in vars(component)
+
     def test_identifier_accessors(self):
         component = _parse(identifiers={
             "infores": "infores:x", "smartapi": "abc", "helm_chart": "chart",
