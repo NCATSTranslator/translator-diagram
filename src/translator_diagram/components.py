@@ -159,7 +159,17 @@ class ComponentFile:
             recorded = [recorded]
         elif not isinstance(recorded, list):
             recorded = []
-        return [name.strip() for name in recorded if isinstance(name, str) and name.strip()]
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for name in recorded:
+            if not isinstance(name, str):
+                continue
+            cleaned = name.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                names.append(cleaned)
+        return names
 
     @property
     def helm_chart(self) -> str | None:
