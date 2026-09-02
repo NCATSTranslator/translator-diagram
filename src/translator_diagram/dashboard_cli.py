@@ -18,7 +18,7 @@ import click
 
 from .components import load_components
 from .content import read_private, write_content
-from .dashboard import SyncedData, build_payload, write_dashboard
+from .dashboard import DEFAULT_CONTENT_URL, SyncedData, build_payload, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -109,7 +109,10 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
 @click.option("--include-private", is_flag=True,
               help="Skip config/privacy.yaml and build the full page. For "
                    "local use: the result is not safe to publish.")
-def build_main(components_dir, sync_dir, output_dir, include_private):
+@click.option("--content-url", default=DEFAULT_CONTENT_URL, show_default=True,
+              help="Where the page links for the unredacted content/ tree. "
+                   "An empty string drops the link.")
+def build_main(components_dir, sync_dir, output_dir, include_private, content_url):
     """Compile the synced responses into a single self-contained page.
 
     Withholds what config/privacy.yaml names unless --include-private is
@@ -120,7 +123,7 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     components = _load(components_dir)
     synced = _synced(sync_dir)
     policy = None if include_private else load_policy()
-    payload = build_payload(components, synced, policy)
+    payload = build_payload(components, synced, policy, content_url or None)
     if policy is not None:
         # Read back what is about to be written, rather than trusting that the
         # step which removed it covered every place it could appear.

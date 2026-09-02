@@ -330,6 +330,13 @@ class TestPayload:
         assert payload["generated_at"] == "2026-08-31T00:01:00+00:00"
         assert payload["sync_counts"]["failed"] == 1
 
+    def test_the_content_link_is_in_the_payload_unless_dropped(self, component, synced):
+        # The page links the unredacted content/ tree by default; passing None
+        # leaves the key out entirely, so the page says nothing rather than
+        # rendering a link to nowhere.
+        assert build_payload([component], synced)["content_url"].startswith("https://")
+        assert "content_url" not in build_payload([component], synced, content_url=None)
+
     def test_both_badge_vocabularies_reach_the_page(self, component, synced):
         # The page renders a badge by looking its key up in these; a key the
         # payload does not carry renders as the raw key, which is how "openapi"

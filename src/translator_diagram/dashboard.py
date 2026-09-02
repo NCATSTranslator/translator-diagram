@@ -74,6 +74,13 @@ UPDATED_LABELS = {"release": "release", "registry": "registry"}
 
 CONFIG_STAGES_PATH = Path("config/flow-steps.yaml")
 
+# Where the page sends a reader for the rest: the generated content/ tree,
+# which needs repository access to open. That is the point of linking it from
+# a public page — the link is the border, drawn where a reader can see it.
+DEFAULT_CONTENT_URL = (
+    "https://github.com/NCATSTranslator/translator-diagram/tree/main/content"
+)
+
 UNPLACED_TITLE = "Not yet placed"
 
 
@@ -686,8 +693,12 @@ def build_payload(
     components: list[ComponentFile],
     synced: SyncedData,
     policy: Policy | None = None,
+    content_url: str | None = DEFAULT_CONTENT_URL,
 ) -> dict[str, Any]:
     """Everything the page needs, with `policy` withheld from it.
+
+    `content_url` is where the page points for the unredacted files; None
+    leaves the key out and the page says nothing.
 
     The policy is applied here, between building the rows and counting them,
     and the position is the whole design. `source_tally` and
@@ -733,6 +744,7 @@ def build_payload(
         # Absent when nothing was withheld, so the page says nothing rather
         # than announcing an empty redaction on a full build.
         **({"redacted": report.for_payload()} if report else {}),
+        **({"content_url": content_url} if content_url else {}),
         "rows": rows,
     }
 

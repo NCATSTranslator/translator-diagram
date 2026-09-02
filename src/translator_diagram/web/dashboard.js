@@ -517,6 +517,21 @@ function driftSentence() {
   return `${drifting.length} disagree across environments: ${names.join(", ")}.`;
 }
 
+/* Where the rest is. The generated content/ tree in the repository carries
+   every field of every cell with nothing withheld, and opening it needs
+   repository access — which is the whole public/private split of issue #7,
+   stated on the page as one link rather than left for a reader to infer. */
+function contentSentence() {
+  const url = DATA.content_url;
+  if (!url) return "";
+  const scope = DATA.redacted
+    ? "including what this page withholds,"
+    : "as files,";
+  return `The full inventory, ${scope} is in the repository under
+    <a href="${esc(url)}">content/</a> — <a href="${esc(url)}/deployments.csv">deployments.csv</a>
+    has every field of every cell. Repository access required.`;
+}
+
 /* Says that something is missing, without listing it. A page that quietly
    drops rows is worse than one that shows fewer: a reader counting components
    against the repository should find the difference explained here rather than
@@ -556,6 +571,7 @@ function shell() {
       <h2>Where the version numbers came from</h2>
       <p>${findingSentence()}</p>
       <p style="margin-top:6px">${driftSentence()}</p>
+      ${contentSentence() ? `<p style="margin-top:6px">${contentSentence()}</p>` : ""}
     </div>
 
     <div class="tiles">
