@@ -31,7 +31,7 @@ from .components import (
     github_repo,
     merge_deployments,
 )
-from .flow import flow_depths, in_flow_order, isolated
+from .flow import Neighbours, flow_depths, in_flow_order, isolated, neighbours
 from .privacy import Policy, Report
 from .privacy import apply as apply_policy
 
@@ -579,12 +579,43 @@ def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
             cell.setdefault("drift", []).append(key)
 
 
+def _connections(edges: Neighbours, names: dict[str, str]) -> dict[str, Any]:
+    """One component's neighbours, as the page needs to draw them.
+
+    Display names travel with the ids rather than being looked up in the
+    browser: a lookup would return nothing for a neighbour whose row the
+    privacy policy withheld, and a blank label is the one outcome worse than
+    no chip. It also forces the policy's hand in the right direction — an
+    entry can only be dropped whole, never blanked, because the name would
+    give the id away to `privacy.verify` on its own.
+
+    `planned` is present only when true, matching the way a cell carries
+    `released` only when a release matched.
+    """
+
+    def entry(edge: Any, **extra: Any) -> dict[str, Any]:
+        out = {"id": edge.id, "name": names.get(edge.id, edge.id), **extra}
+        if edge.planned:
+            out["planned"] = True
+        return out
+
+    return {
+        "gets_results_from": [entry(e) for e in edges.gets_results_from],
+        "calls": [entry(e) for e in edges.calls],
+        "used_by": [entry(i, kind=i.kind) for i in edges.used_by],
+    }
+
+
 def build_rows(
     components: list[ComponentFile], synced: SyncedData
 ) -> list[dict[str, Any]]:
     """One dictionary per component, in the stage order the config file sets."""
     depths = flow_depths(components)
     stranded = set(isolated(components))
+    # Once, not per row: `neighbours` walks every component's edges, and the
+    # answer for one row is a slice of the same traversal that answers the rest.
+    links = neighbours(components)
+    names = {component.id: component.name for component in components}
     rows = []
     for component, step, stage in in_stage_order(components, load_stages()):
         record = synced.smartapi.get(component.smartapi_id or "", {})
@@ -635,6 +666,7 @@ def build_rows(
                 "layer": component.layer,
                 "depth": depths[component.id],
                 "isolated": component.id in stranded,
+                "connections": _connections(links[component.id], names),
                 "refactor_status": component.refactor_status,
                 "infores": component.infores,
                 "smartapi": component.smartapi_id,

@@ -28,6 +28,12 @@ def workspace(tmp_path):
             "  ci:\n"
             "    url: https://example.invalid/\n"
             "refactor_status: New in Refactor\n"
+            # keeper calls secret, so a published build has a withheld
+            # component to strip out of a kept row's connections.
+            "connections:\n"
+            "  gets_results_from: []\n"
+            f"  calls: [{'secret' if cid == 'keeper' else ''}]\n"
+            "  externals: []\n"
         )
     sync = tmp_path / "sync"
     sync.mkdir()
@@ -100,6 +106,15 @@ class TestTheFlagDefaultsToWithholding:
         """The only warning a local operator gets before emailing the file on."""
         result, _ = _run(workspace, "--include-private")
         assert "Do not publish" in result.output
+
+    def test_a_withheld_component_survives_in_no_ones_connections(self, workspace):
+        # End to end through the real command, verify included: the build
+        # aborts rather than publishing if this regresses.
+        result, payload = _run(workspace)
+        assert result.exit_code == 0, result.output
+        block = payload["rows"][0]["connections"]
+        assert block["calls"] == []
+        assert block["withheld"] == {"calls": 1}
 
     def test_a_withholding_build_names_what_it_withheld(self, workspace):
         result, _ = _run(workspace)
