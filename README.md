@@ -189,9 +189,10 @@ It exists to test whether the metadata in `components/` is worth keeping. Two
 things it reports are the answer:
 
 - **Where each version came from.** A version is read from the live OpenAPI
-  document where possible, then the registered SmartAPI copy, then `/status`,
+  document where possible, then `/status`, then the registered SmartAPI copy,
   then the Helm chart — and each cell says which, so "is OpenAPI a good enough
-  source?" has a number rather than an opinion.
+  source?" has a number rather than an opinion. Both live sources come before
+  the registry, because a registration is a copy somebody filed by hand.
 - **Which environments disagree.** A version in the minority for its component
   is tinted, so drift between dev, ci, test and prod is visible without reading
   every cell.
