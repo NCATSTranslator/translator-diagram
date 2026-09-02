@@ -16,6 +16,7 @@ dependencies = [
 generate-diagram = "translator_diagram.cli:main"
 sync-components = "translator_diagram.dashboard_cli:sync_main"
 build-dashboard = "translator_diagram.dashboard_cli:build_main"
+build-content = "translator_diagram.dashboard_cli:content_main"
 
 [dependency-groups]
 dev = [
