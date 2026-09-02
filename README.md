@@ -252,12 +252,11 @@ columns sort by the age of the release running in that environment, which is
 the sharpest version of the same question: prod is on `0.6.1`, released
 2024-10-04.
 
-**The page opens filtered**, on the components whose environments disagree —
-seven of twenty-four today, and the only rows with anything to say. The
-dropdown beside the owner filter holds the rest: `Any version known`, `No
-version known` (which is the list of gaps in the metadata, and worth reading
-as a to-do list), and `All components`. The count beside the filters always
-says how many of the total are showing.
+**The page opens on every component.** The dropdown beside the owner filter
+narrows it: `Environments disagree` (seven of twenty-four today, and the rows
+with the most to say), `Any version known`, and `No version known` — which is
+the list of gaps in the metadata, and worth reading as a to-do list. The count
+beside the filters always says how many of the total are showing.
 
 Filters live in the URL, so a filtered view can be pasted to someone else and
 arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,

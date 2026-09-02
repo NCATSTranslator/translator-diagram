@@ -463,15 +463,18 @@ than showing as an empty header. Step numbers come from the stage's position
 in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
-**The dashboard opens filtered**, on `Environments disagree`, so it shows 7 of
-24 rows rather than everything. The count beside the filters says so, and
-`All components` is one selection away. It replaced a "Drift only" toggle
-rather than joining it: two controls that select the same rows cannot be told
-apart by a reader, and the four views (`differ`, `known`, `none`, `all`) live
-in `VERSION_VIEWS` in `data/dashboard.js` with the default in `DEFAULT_VIEW`.
-`differ` means any of the three tinted axes, not versions alone — a component
-whose TRAPI version drifts while its software version does not is exactly as
-interesting.
+**The dashboard opens on every component.** It used to open on `Environments
+disagree`, which showed 7 rows of 24 and hid the platform to make a point
+about drift: someone who came to look up one component found it missing from a
+page that never said it was filtered. The drift is still the first thing the
+page says, in the finding above the table, and `Environments disagree` is
+still one selection away. The four views (`all`, `differ`, `known`, `none`)
+live in `VERSION_VIEWS` in `data/dashboard.js` with the default in
+`DEFAULT_VIEW`, and the dropdown lists them in that order, so the default
+reads first. `differ` means any of the three tinted axes, not versions alone —
+a component whose TRAPI version drifts while its software version does not is
+exactly as interesting. It replaced a "Drift only" toggle rather than joining
+it: two controls that select the same rows cannot be told apart by a reader.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`

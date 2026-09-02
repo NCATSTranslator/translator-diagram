@@ -17,7 +17,7 @@ const ENVS = DATA.environments;
 const state = {
   q: "",
   owner: "",
-  versions: "differ",
+  versions: "all",
   details: true,
   sort: "",   // empty means the payload's own order, which is by stage
   dir: "asc",
@@ -80,22 +80,26 @@ function knownVersions(row) {
 
 /* One control rather than a "drift only" toggle beside a version filter: the
    two would have said the same thing about the same rows, and a reader cannot
-   tell overlapping filters apart. The default hides the rows where every
-   environment agrees, because a table of 26 rows that agree is a table nobody
-   reads — but the count beside the filters always says how many are hidden,
-   and "All components" is one click away.
+   tell overlapping filters apart.
+
+   The page opens on all of them. It used to open on "Environments disagree",
+   which showed seven rows of twenty-four and hid the platform to make a point
+   about drift — a reader who came to look up one component found it missing
+   from a page that had not said it was filtered. The drift is still the first
+   thing said, in the finding above the table, and still one selection away
+   here.
 
    "Environments disagree" is any of the three tinted axes, not versions
    alone: a component whose version matches everywhere while its TRAPI version
    does not is exactly as interesting, and hiding it would be a lie of
    omission. */
 const VERSION_VIEWS = {
+  all: { label: "All components", test: () => true },
   differ: { label: "Environments disagree", test: hasDrift },
   known: { label: "Any version known", test: (row) => knownVersions(row).size > 0 },
   none: { label: "No version known", test: (row) => knownVersions(row).size === 0 },
-  all: { label: "All components", test: () => true },
 };
-const DEFAULT_VIEW = "differ";
+const DEFAULT_VIEW = "all";
 
 function visibleRows() {
   const needle = state.q.trim().toLowerCase();
