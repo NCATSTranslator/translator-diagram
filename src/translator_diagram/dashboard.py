@@ -35,7 +35,7 @@ from .flow import flow_depths, in_flow_order, isolated
 from .privacy import Policy, Report
 from .privacy import apply as apply_policy
 
-PACKAGED_ASSETS = ("translator_diagram.data", ("dashboard.css", "dashboard.js"))
+PACKAGED_ASSETS = ("translator_diagram.web", ("dashboard.css", "dashboard.js"))
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
 # endpoints, then a registration someone filed by hand, then a chart that

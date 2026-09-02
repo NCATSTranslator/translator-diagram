@@ -43,7 +43,7 @@ See [README.md](README.md) for user-facing documentation.
   ```
 
 - **JS with judgement in it can be tested, even with no JS harness here.** Slice
-  the block out of `data/dashboard.js`, stub `document`/`localStorage`/
+  the block out of `web/dashboard.js`, stub `document`/`localStorage`/
   `matchMedia`, and run it under `node` from the scratchpad — that is how the
   theme cycle was checked against both system preferences, and how the sort
   comparators were driven over the real `overview.json` to prove undated rows
@@ -114,7 +114,15 @@ The dashboard is a second, parallel stack over the same components:
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `data/dashboard.css`, `data/dashboard.js` | Inlined into the generated page |
+| `web/dashboard.css`, `web/dashboard.js` | The browser half of the dashboard, inlined into the generated page |
+
+`web/` holds what the browser gets and nothing else. It was `data/` until the
+name collided with `/data/`, the gitignored scratch space at the root, in a
+repository where every other reference to "data" means that — and where the
+only thing keeping the package's own CSS and JS tracked by git was the leading
+slash in the ignore rule. The packaged fallback copy of `owner-colors.csv`
+sits at the package root instead, because a colour table the diagram generator
+reads is not a web file either.
 
 **Imports run one way**, and a new one must not break it:
 
@@ -272,7 +280,7 @@ file exists to replace, and look finished doing it.
 change. Row order is legend order. Keeping this a data file is deliberate:
 project managers change colours without touching Python. Don't move it into a
 constant. There is one copy: the wheel build maps this file to
-`translator_diagram/data/owner-colors.csv`, which is where an install with no
+`translator_diagram/owner-colors.csv`, which is where an install with no
 checkout to read falls back to, so nothing has to be kept in step by hand. In
 a source checkout that packaged path does not exist and nothing needs it,
 because `config/` is right there. See `load_owner_colors` for the resolution
@@ -336,7 +344,7 @@ README (it is a hand-maintained paraphrase of `--help`, not generated).
 
 **Add a column to the dashboard** → `build_cell` or `build_rows` in
 `dashboard.py` for the value, then **one entry in the `COLUMNS` table** in
-`data/dashboard.js`, and `data/dashboard.css` if it needs a style. That entry
+`web/dashboard.js`, and `web/dashboard.css` if it needs a style. That entry
 owns the header, the body cell, the `drop-*` class that hides both at narrow
 widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
@@ -346,7 +354,7 @@ The payload keys are independent of the YAML keys they happen to be spelled
 like: `layer` and `refactor_status` moved out of `diagram:` in the component
 files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
-breaks `data/dashboard.js`.
+breaks `web/dashboard.js`.
 
 `type` and `layer` are the exception in the other direction: the page no
 longer shows either — neither told a reader anything the stage bands and the
@@ -469,7 +477,7 @@ about drift: someone who came to look up one component found it missing from a
 page that never said it was filtered. The drift is still the first thing the
 page says, in the finding above the table, and `Environments disagree` is
 still one selection away. The four views (`all`, `differ`, `known`, `none`)
-live in `VERSION_VIEWS` in `data/dashboard.js` with the default in
+live in `VERSION_VIEWS` in `web/dashboard.js` with the default in
 `DEFAULT_VIEW`, and the dropdown lists them in that order, so the default
 reads first. `differ` means any of the three tinted axes, not versions alone —
 a component whose TRAPI version drifts while its software version does not is
