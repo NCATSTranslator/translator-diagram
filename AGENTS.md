@@ -18,6 +18,7 @@ because someone already tried the obvious thing.
 | [Data model](#data-model) | CSV column → `Component` field |
 | [components/](#components--the-component-metadata-files) | The YAML files, and the rules the tests enforce on them |
 | [Common change patterns](#common-change-patterns) | "I want to change X" → the file to open |
+| [What the dashboard refuses to claim](#what-the-dashboard-refuses-to-claim) | Correctness rules that were each a bug first |
 | [Things that look wrong but aren't](#things-that-look-wrong-but-arent) | Decisions with a reason that is not visible locally |
 | [Special features](#special-features) | Ubiquitous clones, the SVG id namespace, ghost nodes |
 
@@ -415,6 +416,53 @@ showing none.
 `naming.py`: give it an id shape that cannot collide (see below), and claim it
 in `validate` so a collision is caught at parse time rather than in a
 browser.
+
+## What the dashboard refuses to claim
+
+Each of these is a rule with a test behind it, and each was a bug first. They
+are collected because the failure mode they share is silence: the page keeps
+rendering, and says something that is not true.
+
+- **A version it did not fetch.** `sync` writes a body only on a 200 and leaves
+  the previous one where it is, so `SyncedData` reads an OpenAPI or `/status`
+  body only when this run's manifest entry for that path is a 200 with no
+  error. Otherwise a component whose prod had gone away kept reporting the
+  version it last served, with `reachable: true` beside its own 404. Release
+  lists and Helm charts are deliberately *not* gated: neither says anything
+  about what is running now, and dropping a cached release list because GitHub
+  rate-limited the run would lose real information.
+- **A data release as a software version.** `/status` has no Translator-wide
+  schema, so the version is the first `*_version` key — with `babel_version`,
+  `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a
+  body that lists Biolink first would have that badged as its software.
+- **An odd one out where there is none.** A tie in a version split marks *every*
+  reporting environment. `Counter.most_common` breaks ties by insertion order,
+  which here is column order, so two-against-two used to tint whichever pair sat
+  further right.
+- **A derived host it has not confirmed.** `_confirm_derived` believes a guessed
+  hostname only if the document it returns reports the component's own
+  `infores`; without a recorded infores the candidate is dropped, because an
+  unverifiable guess is worth less than a gap. A host that answers 200 with
+  something else has its body deleted rather than cached. A rejection this run
+  also outranks an older confirmation — otherwise one success published a
+  deployment for good.
+- **A hostname chosen by the alphabet.** Where a component's known URLs span two
+  `transltr.io` stems, the derived host uses the commonest stem, earliest on the
+  ladder among equals.
+- **Fewer release chips than it has.** The "newest three" cut counts chips kept,
+  not entries seen, or two draft releases spend two of the three places.
+- **Attempts it did not record.** Every probe reaches `report.fetches`,
+  including the ones that fail, which is why the Fetches tile counts more than
+  the endpoints — the manifest promises every attempt.
+- **A leak that is not one.** `privacy.verify` matches a withheld id bounded by
+  non-alphanumerics. As a substring it would abort every published build the day
+  someone withholds `ars` or `ui`, and a false alarm nobody can clear ends with
+  the check switched off.
+
+Two more of the same family live in the code because they are local: a
+malformed OpenTelemetry answer costs its tile rather than the run, and a
+registry or guessed host answering unexpected JSON is caught rather than
+raising through `sync`.
 
 ## Things that look wrong but aren't
 
