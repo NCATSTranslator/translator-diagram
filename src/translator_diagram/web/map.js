@@ -261,9 +261,17 @@
     }));
     group.append(clipped);
 
-    const name = svg("text", { class: "mp-name", x: 12, y: 22 }, row.name || node.id);
+    // The nested SVG is a hard boundary between the name and the category.
+    // `truncate` normally adds the ellipsis first, but some renderers report a
+    // zero text length while the map is being revealed. Without this viewport
+    // their unshortened name can still paint underneath the top-right type.
+    const nameBox = svg("svg", {
+      class: "mp-namebox", x: 12, y: 0, width: node.w - 22, height: 28, overflow: "hidden",
+    });
+    const name = svg("text", { class: "mp-name", x: 0, y: 22 }, row.name || node.id);
     name.dataset.full = row.name || node.id;
-    group.append(name);
+    nameBox.append(name);
+    group.append(nameBox);
 
     const type = row.type || row.component_type;
     if (type) {
@@ -299,13 +307,30 @@
   /* Truncation by measurement, not by a character count: "UI" and "Translator
      component toolkit" are both in this payload, and a fixed cut would either
      clip the short ones or overflow the long ones. */
+  function measuredTextWidth(text, fallbackPerCharacter) {
+    if (!text) return 0;
+    try {
+      const width = text.getComputedTextLength();
+      if (Number.isFinite(width) && width > 0) return width;
+    } catch { /* detached or hidden SVG: use the conservative fallback below */ }
+    return String(text.textContent || "").length * fallbackPerCharacter;
+  }
+
+  /* Node width minus the left inset, right inset, measured category and one
+     readable gap. Kept pure so the collision rule has a unit test without a
+     DOM; the name box enforces the same number as an SVG viewport. */
+  function nodeNameLimit(nodeWidth, typeWidth) {
+    const category = Math.max(0, Number(typeWidth) || 0);
+    return Math.max(24, nodeWidth - 12 - 10 - category - (category ? 8 : 0));
+  }
+
   function truncate(text, limit) {
     const full = text.dataset.full || text.textContent;
     text.dataset.full = full;
     text.textContent = full;
-    if (text.getComputedTextLength() <= limit) return;
+    if (measuredTextWidth(text, 7) <= limit) return;
     let cut = full.length;
-    while (cut > 1 && text.getComputedTextLength() > limit) {
+    while (cut > 1 && measuredTextWidth(text, 7) > limit) {
       cut -= 1;
       text.textContent = `${full.slice(0, cut)}…`;
     }
@@ -473,7 +498,14 @@
 
     nodeEls.forEach((group) => {
       const name = group.querySelector(".mp-name");
-      if (name) truncate(name, 122);
+      if (!name) return;
+      const nameBox = group.querySelector(".mp-namebox");
+      const type = group.querySelector(".mp-type");
+      const nodeBox = group.querySelector(".mp-box");
+      const nodeWidth = Number(nodeBox && nodeBox.getAttribute("width")) || 188;
+      const limit = nodeNameLimit(nodeWidth, measuredTextWidth(type, 6));
+      if (nameBox) nameBox.setAttribute("width", limit);
+      truncate(name, limit);
     });
     root.querySelectorAll(".mp-lane-title").forEach((text) => truncate(text, 148));
 
@@ -1282,4 +1314,5 @@
   map.exportPng = exportPng;
   map.exportText = () => exportText();
   map.KINDS = KINDS;
+  map.nodeNameLimit = nodeNameLimit;
 })();
