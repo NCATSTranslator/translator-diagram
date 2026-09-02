@@ -25,6 +25,7 @@ Two consequences follow, and both are deliberate:
 """
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -253,9 +254,17 @@ def verify(payload: dict[str, Any], policy: Policy) -> None:
     Called on every published build rather than only in CI, so the guarantee
     travels with the command instead of with the workflow that happens to run
     it.
+
+    The search is for the id as a whole word, not as a substring. A plain
+    substring test passes today only because `jaeger` and `test-harness`
+    happen to occur nowhere else; withholding a short id — `ars`, `ui` — would
+    abort every published build over a `ui` inside some unrelated word, and
+    the message would tell the operator to go and find a leak that is not
+    there. A false alarm that cannot be cleared is worse than no alarm,
+    because the way to clear it is to stop running the check.
     """
     blob = json.dumps(payload)
-    leaked = sorted(name for name in policy.component_ids if name in blob)
+    leaked = sorted(name for name in policy.component_ids if _mentions(blob, name))
     if leaked:
         raise click.ClickException(
             f"Withheld components still appear in the payload: "
@@ -277,6 +286,19 @@ def verify(payload: dict[str, Any], policy: Policy) -> None:
                         f"Withheld environment field `{name}` is still set on "
                         f"{row.get('id')!r} / {env}."
                     )
+
+
+def _mentions(blob: str, name: str) -> bool:
+    """Whether the serialised payload names one component.
+
+    A word here is bounded by anything that is not a letter or a digit, so an
+    id is found in a URL, a path segment, a tag or a sentence — every shape a
+    stray reference actually takes — but not inside a longer word. The id may
+    contain hyphens of its own, which is why the boundary is written out
+    rather than left to `\b`.
+    """
+    pattern = rf"(?<![0-9A-Za-z]){re.escape(name)}(?![0-9A-Za-z])"
+    return re.search(pattern, blob, re.IGNORECASE) is not None
 
 
 def _drop_withheld_versions(cell: dict[str, Any], sources: set[str]) -> None:

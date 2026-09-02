@@ -248,6 +248,27 @@ class TestVerify:
         with pytest.raises(click.ClickException, match="still appear"):
             verify(payload, _policy(components=["drop"]))
 
+    def test_a_short_id_inside_a_longer_word_is_not_a_leak(self):
+        """The false alarm that would make the check unrunnable: withholding
+        `ars` must not fail a build over the `ars` in `parsers`, and the only
+        way to clear a false alarm is to stop checking."""
+        payload = {"rows": [{"id": "keep", "notes": "Two parsers and a guide."}]}
+        verify(payload, _policy(components=["ars"]))
+        verify(payload, _policy(components=["ui"]))
+
+    def test_a_short_id_as_a_word_still_is(self):
+        """Every shape a stray reference actually takes: a hostname, a path
+        segment, a list entry, a sentence."""
+        for value in ("https://ars.transltr.io/", "/ars/status", "the ars is down"):
+            with pytest.raises(click.ClickException, match="still appear"):
+                verify({"rows": [{"id": "keep", "notes": value}]},
+                       _policy(components=["ars"]))
+
+    def test_a_hyphenated_id_is_found_whole(self):
+        payload = {"rows": [{"id": "keep", "referenced_by": ["test-harness"]}]}
+        with pytest.raises(click.ClickException, match="still appear"):
+            verify(payload, _policy(components=["test-harness"]))
+
     def test_a_field_that_survived_emptying_is_caught(self):
         payload = {"rows": [{"id": "keep", "helm_version": "0.1.0"}]}
         with pytest.raises(click.ClickException, match="still set on row"):

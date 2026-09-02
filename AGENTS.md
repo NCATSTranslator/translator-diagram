@@ -363,7 +363,11 @@ the policy stops the build instead of quietly publishing the row. For the same
 reason `build-dashboard` calls `privacy.verify` on the finished payload before
 writing it: `apply` removes, `verify` re-reads the serialised result and looks
 for what should be gone, which catches a field added later that carries a
-withheld id somewhere `apply` never looks.
+withheld id somewhere `apply` never looks. It looks for the id as a whole
+word, bounded by anything that is not a letter or a digit — a substring search
+would fail every published build the day someone withholds a component called
+`ars` or `ui`, naming a leak that is not there, and the only way to clear a
+false alarm is to stop running the check.
 
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
 version-source chain in `dashboard.build_cell`. Order that chain by how close
