@@ -226,7 +226,8 @@ open data/dashboard/index.html
 # Map export and other features some browsers block from file://:
 cd data/dashboard && python3 -m http.server 8765
 
-# Everything, including what a published build withholds. Local use only.
+# Everything, including what a published build withholds. Local use only;
+# written to data/dashboard-private/ so it cannot replace the public build.
 uv run build-dashboard --include-private
 ```
 
@@ -282,6 +283,9 @@ public services and this repository is public, so the policy hides nothing from
 someone who looks — it keeps a few things off an indexed page. See
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
 the public/private split this anticipates.
+
+[`docs/Security.md`](docs/Security.md) collects what the page publishes, what it
+withholds, and the security questions still open.
 
 Release lists come from the GitHub API, which allows 60 calls an hour to an
 unauthenticated address. That covers a sync of this repository twice over, but
