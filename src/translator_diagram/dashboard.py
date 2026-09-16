@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Any
 
 import click
-import yaml
 
 from .colors import load_owner_colors, owner_styles, text_color_for
 from .components import (
@@ -29,12 +28,15 @@ from .components import (
     ENVIRONMENTS,
     ComponentFile,
     Deployment,
-    chart_matches,
+    chart_dirs,
     deployments_from_smartapi,
     endpoint_url_in,
     github_repo,
     merge_deployments,
+    read_json,
+    read_yaml,
     smartapi_record_for,
+    unclaimed_charts,
 )
 from .flow import flow_depths, in_flow_order, isolated
 from .payload_details import (
@@ -206,7 +208,7 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
         )
     if not found.exists():
         raise click.ClickException(f"Stage file not found: {found}")
-    loaded = _read_yaml(found)
+    loaded = read_yaml(found)
     if not loaded:
         return []
     stages = [
@@ -257,17 +259,6 @@ def in_stage_order(
     return ordered
 
 
-def _read_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        # A body saved from a 200 that was not actually JSON. Real: several
-        # Translator endpoints answer 200 with an HTML error page.
-        return None
-
-
 def _read_json_list(path: Path) -> list[Any]:
     """A JSON array, or an empty list for anything else.
 
@@ -275,18 +266,8 @@ def _read_json_list(path: Path) -> list[Any]:
     message, and `sync` saves whatever came back, so the shape has to be
     checked rather than assumed.
     """
-    loaded = _read_json(path)
+    loaded = read_json(path)
     return loaded if isinstance(loaded, list) else []
-
-
-def _read_yaml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError:
-        return None
-    return loaded if isinstance(loaded, dict) else None
 
 
 def _service_names(document: dict[str, Any] | None) -> list[str]:
@@ -308,15 +289,15 @@ class SyncedData:
 
     def __init__(self, root: Path):
         self.root = root
-        self.manifest = _read_json(root / "manifest.json") or {}
-        payload = _read_json(root / "smartapi.json") or {}
+        self.manifest = read_json(root / "manifest.json") or {}
+        payload = read_json(root / "smartapi.json") or {}
         self.smartapi = {
             hit["_id"]: hit for hit in payload.get("hits", []) if hit.get("_id")
         }
         # One read, two answers. `sync` writes both halves of the same probe
         # into this file, and reading it twice would let a rebuild pick up a
         # confirmation from one moment and a rejection from another.
-        probes = _read_json(root / "derived.json") or {}
+        probes = read_json(root / "derived.json") or {}
         self.derived = {
             cid: {
                 env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
@@ -360,7 +341,7 @@ class SyncedData:
         self._repos: dict[str, dict[str, Any] | None] = {}
         self._catalog: dict[str, dict[str, Any]] | None = None
         self.otel = {
-            env: _service_names(_read_json(root / "otel" / f"{env}.json"))
+            env: _service_names(read_json(root / "otel" / f"{env}.json"))
             for env in ("ci", "test", "prod")
         }
         self.statuses = {
@@ -396,7 +377,7 @@ class SyncedData:
         relative = f"root/{component_id}/{env}.json"
         if relative not in self.statuses:
             return None
-        probe = _read_json(self.root / relative)
+        probe = read_json(self.root / relative)
         return probe if isinstance(probe, dict) else None
 
     def openapi_outcome(self, component_id: str, env: str) -> str | None:
@@ -421,7 +402,7 @@ class SyncedData:
         path = self.root / relative
         if not path.exists():
             return None
-        document = _read_json(path)
+        document = read_json(path)
         if not isinstance(document, dict):
             return "not-json"
         info = document.get("info")
@@ -450,7 +431,7 @@ class SyncedData:
         fetch = self.statuses.get(relative)
         if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
             return None
-        return _read_json(self.root / relative)
+        return read_json(self.root / relative)
 
     def releases(self, repo: str | None) -> list[dict[str, Any]]:
         """One repository's releases, newest first, as GitHub returned them."""
@@ -472,27 +453,12 @@ class SyncedData:
         """
         key = (chart, name)
         if key not in self._charts:
-            self._charts[key] = _read_yaml(self.root / "helm" / chart / name)
+            self._charts[key] = read_yaml(self.root / "helm" / chart / name)
         return self._charts[key]
 
     def chart_index(self) -> list[str]:
-        """Every chart directory translator-devops holds, sorted.
-
-        Directories only, and read defensively: `helm/` also holds loose files,
-        and a throttled contents call answers with an object carrying a message
-        rather than an array. An index we cannot read has to mean "we do not
-        know", never "the repository has no charts" — the second is a claim,
-        and it would publish forty-nine charts as unclaimed.
-        """
-        entries = _read_json_list(self.root / "helm" / "index.json")
-        return sorted(
-            entry["name"]
-            for entry in entries
-            if isinstance(entry, dict)
-            and entry.get("type") == "dir"
-            and isinstance(entry.get("name"), str)
-            and entry["name"]
-        )
+        """Every chart directory translator-devops holds, sorted."""
+        return chart_dirs(read_json(self.root / "helm" / "index.json"))
 
     def chart_meta(self, chart: str) -> dict[str, Any | None]:
         """One chart's three cached files, keyed the way the matcher reads them.
@@ -530,7 +496,7 @@ class SyncedData:
             return None
         key = f"{owner}/{name}"
         if key not in self._repos:
-            self._repos[key] = _read_json(self.root / "repos" / owner / f"{name}.json")
+            self._repos[key] = read_json(self.root / "repos" / owner / f"{name}.json")
         return self._repos[key]
 
     def catalog(self) -> dict[str, dict[str, Any]]:
@@ -542,7 +508,7 @@ class SyncedData:
         entry with no `id` is not addressable and is left out.
         """
         if self._catalog is None:
-            loaded = _read_yaml(self.root / "infores_catalog.yaml") or {}
+            loaded = read_yaml(self.root / "infores_catalog.yaml") or {}
             entries: list[Any] = next(
                 (value for value in loaded.values() if isinstance(value, list)), []
             )
@@ -1616,13 +1582,10 @@ def build_unclaimed_charts(
     something they recognise rather than a list in any meaningful order.
     """
     names = synced.chart_index()
-    matches = chart_matches(
-        names, {name: synced.chart_meta(name) for name in names}, components
-    )
     unclaimed = []
-    for name in sorted(names):
-        if matches[name]["confidence"] != "none":
-            continue
+    for name in unclaimed_charts(
+        names, {name: synced.chart_meta(name) for name in names}, components
+    ):
         meta = synced.chart_meta(name).get("chart") or {}
         description = meta.get("description")
         unclaimed.append(

@@ -13,10 +13,8 @@ from translator_diagram.sync import (
     _chart_totals,
     _confirm_derived,
     _headers,
-    _plan_catalog,
     _plan_chart_commits,
     _plan_chart_fetches,
-    _plan_chart_index,
     _plan_index_chart_fetches,
     _plan_release_fetches,
     _plan_repo_meta,
@@ -463,13 +461,6 @@ class TestChartIndex:
         (root / "helm").mkdir(parents=True, exist_ok=True)
         (root / "helm" / "index.json").write_text(json.dumps(entries))
 
-    def test_it_is_planned_once_at_a_stable_path(self, tmp_path):
-        # Stable, because the previous manifest's path-to-URL map is what
-        # re-fetches a body whose URL moved. A path that varied would defeat it.
-        assert _plan_chart_index(tmp_path) == [
-            (DEVOPS_HELM_INDEX, tmp_path / "helm" / "index.json")
-        ]
-
     def test_it_asks_for_the_branch_the_raw_fetches_use(self):
         assert "ref=develop" in DEVOPS_HELM_INDEX
 
@@ -612,11 +603,6 @@ class TestRepoMeta:
 
 
 class TestCatalog:
-    def test_one_plan_at_a_stable_destination(self, tmp_path):
-        assert _plan_catalog(tmp_path) == [
-            (INFORES_CATALOG, tmp_path / "infores_catalog.yaml")
-        ]
-
     def test_it_spends_nothing_from_the_github_api_budget(self):
         # raw.githubusercontent.com, so no Accept header, no token, no ceiling.
         assert INFORES_CATALOG.startswith("https://raw.githubusercontent.com/")

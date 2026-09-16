@@ -11,6 +11,7 @@ Nothing here imports anything else in the package, and nothing here reaches
 the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
+import json
 import re
 from collections import Counter
 from collections.abc import Callable
@@ -352,6 +353,72 @@ sync summary straight off disk — and a matcher that reads `values` from one an
 So the vocabulary is written down once, here, beside the function that reads it.
 """
 
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def read_json(path: Path) -> Any:
+    """A cached JSON body, or None when it is missing or is not JSON.
+
+    Shared by `sync` and the dashboard, which both read the sync cache. Several
+    Translator endpoints answer 200 with an HTML error page and a throttled
+    GitHub call answers with an object where a list was asked for, so callers
+    still check the shape they get back.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+
+
+def read_yaml(path: Path) -> dict[str, Any] | None:
+    """A YAML mapping, or None when it is missing, malformed or not a mapping.
+
+    libyaml's loader where it is installed: the infores catalog alone takes
+    0.14 s through the pure-Python one and 0.02 s through it.
+    """
+    try:
+        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
+    except (OSError, yaml.YAMLError, UnicodeDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
+def chart_dirs(index: Any) -> list[str]:
+    """Every chart directory in a cached translator-devops `helm/` listing, sorted.
+
+    Directories only, and read defensively: `helm/` also holds loose files, and
+    a `redirects` entry that is raw Ingress manifests with no Chart.yaml would
+    otherwise be planned as a chart and 404 every run. A throttled contents call
+    answers with an object carrying a message rather than an array. An index we
+    cannot read has to mean "we do not know", never "the repository has no
+    charts" — the second is a claim, and it would publish forty-nine charts as
+    unclaimed.
+    """
+    return sorted(
+        entry["name"]
+        for entry in (index if isinstance(index, list) else [])
+        if isinstance(entry, dict)
+        and entry.get("type") == "dir"
+        and isinstance(entry.get("name"), str)
+        and entry["name"]
+    )
+
+
+def unclaimed_charts(
+    chart_names: list[str],
+    charts_meta: dict[str, dict[str, Any]],
+    components: list[ComponentFile],
+) -> list[str]:
+    """The charts `chart_matches` attributes to no component, sorted.
+
+    One definition for the sync summary and the page, so the two cannot come to
+    disagree about which charts nobody accounts for.
+    """
+    matched = chart_matches(chart_names, charts_meta, components)
+    return sorted(
+        chart for chart, match in matched.items() if match["confidence"] == "none"
+    )
+
 
 def chart_matches(
     chart_names: list[str],
@@ -581,7 +648,7 @@ def smartapi_record_for(
     infores = component.infores
     if not infores:
         return None, None, []
-    sharing = [hit for hit in hits if _record_infores(hit) == infores]
+    sharing = [hit for hit in hits if record_infores(hit) == infores]
     if len(sharing) == 1:
         return sharing[0], "infores", []
     if len(sharing) > 1:
@@ -595,7 +662,10 @@ def smartapi_record_for(
     return None, None, []
 
 
-def _record_infores(hit: dict[str, Any]) -> str | None:
+def record_infores(hit: Any) -> str | None:
+    """`info.x-translator.infores` out of a registry record or OpenAPI document."""
+    if not isinstance(hit, dict):
+        return None
     info = hit.get("info")
     translator = info.get("x-translator") if isinstance(info, dict) else None
     value = translator.get("infores") if isinstance(translator, dict) else None

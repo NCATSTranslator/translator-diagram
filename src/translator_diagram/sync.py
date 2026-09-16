@@ -22,19 +22,21 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from .components import (
     CHART_META_FILES,
     ComponentFile,
     Deployment,
-    chart_matches,
+    chart_dirs,
     deployments_from_smartapi,
     derive_deployments,
     endpoint_url_in,
     github_repo,
     merge_deployments,
+    read_json,
+    read_yaml,
+    record_infores,
     smartapi_record_for,
+    unclaimed_charts,
 )
 
 SMARTAPI_QUERY = (
@@ -297,7 +299,8 @@ def probe_to(
     """
     relative = str(destination.relative_to(root)) if root else str(destination)
     if _is_fresh(destination, max_age):
-        recorded = _read_probe(destination)
+        recorded = read_json(destination)
+        recorded = recorded if isinstance(recorded, dict) else {}
         return FetchResult(
             url=url, path=relative,
             status=recorded.get("status"), error=recorded.get("error"),
@@ -322,15 +325,6 @@ def probe_to(
         url=url, path=relative, status=status, error=error,
         bytes=size, fetched_at=_now(),
     )
-
-
-def _read_probe(path: Path) -> dict[str, Any]:
-    """One saved probe summary, tolerating a file that is not one."""
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
 
 
 def _plan_endpoint_fetches(
@@ -430,24 +424,29 @@ def _confirmed_deployments(
 # next sync.
 
 
+def _source_repos(components: Iterable[ComponentFile]) -> list[str]:
+    """Every distinct source repository, as `owner/name`, sorted.
+
+    Planners are keyed by the repository rather than by the component, because
+    three shepherd components share one repository and fetching it three times
+    would spend three of GitHub's sixty hourly calls on the same answer. The
+    `github_repo` rule also rejects a `helm-chart` URL, which names a path
+    *inside* translator-devops: that repository is the devops team's, not this
+    component's.
+    """
+    return sorted(
+        {repo for c in components if (repo := github_repo(c.repository("source")))}
+    )
+
+
 def _plan_release_fetches(
     components: Iterable[ComponentFile], root: Path
 ) -> list[tuple[str, Path]]:
-    """Every (url, destination) for a source repository's GitHub releases.
-
-    Keyed by the repository rather than by the component, because three
-    shepherd components share one repository and fetching it three times would
-    spend three of GitHub's sixty hourly calls on the same answer.
-    """
-    jobs: dict[str, tuple[str, Path]] = {}
-    for component in components:
-        repo = github_repo(component.repository("source"))
-        if repo:
-            jobs[repo] = (
-                GITHUB_RELEASES.format(repo=repo),
-                root / "releases" / f"{repo}.json",
-            )
-    return [jobs[repo] for repo in sorted(jobs)]
+    """Every (url, destination) for a source repository's GitHub releases."""
+    return [
+        (GITHUB_RELEASES.format(repo=repo), root / "releases" / f"{repo}.json")
+        for repo in _source_repos(components)
+    ]
 
 
 def _plan_chart_fetches(
@@ -479,44 +478,19 @@ def _claimed_charts(components: Iterable[ComponentFile]) -> list[str]:
     return sorted({chart for c in components for chart in c.helm_charts})
 
 
-def _plan_chart_index(root: Path) -> list[tuple[str, Path]]:
-    """The one call that lists every chart directory in translator-devops.
-
-    A list, not a pair, so it composes with the other planners in `sync`.
-    """
-    return [(DEVOPS_HELM_INDEX, root / "helm" / "index.json")]
+def _plan_repo_meta(
+    components: Iterable[ComponentFile], root: Path
+) -> list[tuple[str, Path]]:
+    """Every (url, destination) for a source repository's own metadata."""
+    return [
+        (GITHUB_REPO_META.format(repo=repo), root / "repos" / f"{repo}.json")
+        for repo in _source_repos(components)
+    ]
 
 
 def _chart_names(root: Path) -> list[str]:
-    """Chart directory names from the cached index, tolerating its absence.
-
-    Directories only. `helm/` also holds loose files, and a `redirects` entry
-    that is raw Ingress manifests with no Chart.yaml would otherwise be planned
-    as a chart and 404 every run.
-
-    A throttled or missing contents call answers with an *object* carrying a
-    message rather than an array. `fetch_to` never writes a non-200 body, so
-    what is on disk is the last good index — but read defensively anyway: an
-    unreadable one has to mean "we do not know", not "the repository has no
-    charts", which is a claim.
-    """
-    path = root / "helm" / "index.json"
-    if not path.exists():
-        return []
-    try:
-        entries = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
-    if not isinstance(entries, list):
-        return []
-    return sorted(
-        entry["name"]
-        for entry in entries
-        if isinstance(entry, dict)
-        and entry.get("type") == "dir"
-        and isinstance(entry.get("name"), str)
-        and entry["name"]
-    )
+    """Chart directory names from the cached index, tolerating its absence."""
+    return chart_dirs(read_json(root / "helm" / "index.json"))
 
 
 def _plan_index_chart_fetches(
@@ -565,32 +539,6 @@ def _plan_chart_commits(
     ]
 
 
-def _plan_repo_meta(
-    components: Iterable[ComponentFile], root: Path
-) -> list[tuple[str, Path]]:
-    """Every (url, destination) for a source repository's own metadata.
-
-    Keyed by repository for the same reason `_plan_release_fetches` is, and by
-    the same `github_repo` rule: a `helm-chart` URL names a path *inside*
-    translator-devops, and that repository's description is the devops team's,
-    not this component's.
-    """
-    jobs: dict[str, tuple[str, Path]] = {}
-    for component in components:
-        repo = github_repo(component.repository("source"))
-        if repo:
-            jobs[repo] = (
-                GITHUB_REPO_META.format(repo=repo),
-                root / "repos" / f"{repo}.json",
-            )
-    return [jobs[repo] for repo in sorted(jobs)]
-
-
-def _plan_catalog(root: Path) -> list[tuple[str, Path]]:
-    """The infores catalog: one raw file, no API budget, every resource in it."""
-    return [(INFORES_CATALOG, root / "infores_catalog.yaml")]
-
-
 def _chart_totals(
     components: Iterable[ComponentFile], root: Path
 ) -> tuple[int, int]:
@@ -623,21 +571,11 @@ def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str,
     """
     return {
         chart: {
-            key: _read_yaml(root / "helm" / chart / name)
+            key: read_yaml(root / "helm" / chart / name)
             for key, name in CHART_META_FILES.items()
         }
         for chart in charts
     }
-
-
-def _read_yaml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, UnicodeDecodeError):
-        return None
-    return loaded if isinstance(loaded, dict) else None
 
 
 def _previous_urls(root: Path) -> dict[str, str]:
@@ -649,13 +587,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
     answer a different question, and the new field would appear to be missing
     upstream until someone thought to run --force.
     """
-    path = root / "manifest.json"
-    if not path.exists():
-        return {}
-    try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+    manifest = read_json(root / "manifest.json")
     if not isinstance(manifest, dict):
         return {}
     return {
@@ -667,13 +599,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
 
 def _read_derived(root: Path) -> dict[str, Any]:
     """The previous run's derived.json, tolerating absence or an older shape."""
-    path = root / "derived.json"
-    if not path.exists():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+    loaded = read_json(root / "derived.json")
     return loaded if isinstance(loaded, dict) else {}
 
 
@@ -737,20 +663,10 @@ def _confirm_derived(
     result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
     if not result.ok:
         return result, False
-    try:
-        document = json.loads(destination.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        document = None
-    # Every level checked, because a guessed hostname answers with whatever it
-    # likes: a JSON array, or `{"info": null}`, both of which are valid JSON and
-    # neither of which has an infores. Chaining `.get` through them raises
-    # AttributeError, and one unlucky candidate would end the whole sync.
-    info = document.get("info") if isinstance(document, dict) else None
-    translator = info.get("x-translator") if isinstance(info, dict) else None
-    reported = (
-        translator.get("infores") if isinstance(translator, dict) else None
-    )
-    if reported != component.infores:
+    # A guessed hostname answers with whatever it likes — a JSON array, or
+    # `{"info": null}` — and `record_infores` checks every level, so one
+    # unlucky candidate cannot end the whole sync.
+    if record_infores(read_json(destination)) != component.infores:
         # Answered, but it is not this component. Drop the body so a later run
         # does not read it as though it were.
         destination.unlink(missing_ok=True)
@@ -771,10 +687,7 @@ def _echo_matching_summary(
     reads as a missing check on the good day.
     """
     names = _chart_names(root)
-    matched = chart_matches(names, _cached_chart_meta(root, names), components)
-    unclaimed = sorted(
-        chart for chart, match in matched.items() if match["confidence"] == "none"
-    )
+    unclaimed = unclaimed_charts(names, _cached_chart_meta(root, names), components)
     echo(
         f"Charts matching no component: {len(unclaimed)}"
         + (f" ({', '.join(unclaimed)})" if unclaimed else "")
@@ -876,8 +789,10 @@ def sync(
     ]
     registry_results = run(
         registry_jobs
-        + _plan_catalog(root)
-        + _plan_chart_index(root)
+        + [
+            (INFORES_CATALOG, root / "infores_catalog.yaml"),
+            (DEVOPS_HELM_INDEX, root / "helm" / "index.json"),
+        ]
         + chart_jobs
         + commit_jobs
         + repo_jobs
