@@ -209,13 +209,15 @@ class TestApply:
                     {"description": "jaeger", "last_changed": {"subject": "bump jaeger"}}
                 ],
                 "catalog": {"name": "jaeger", "description": "jaeger"},
-                "environments": {"ci": {"status_message": "jaeger ok"}},
+                "environments": {
+                    "ci": {"status_message": "jaeger ok", "openapi_title": "jaeger API"}
+                },
             },
             {"id": "jaeger", "environments": {}},
         ]
         kept, report = apply(rows, _policy(components=["jaeger"]))
         assert "jaeger" not in json.dumps(kept)
-        assert report.mentions == 11
+        assert report.mentions == 12
 
     def test_unclaimed_chart_descriptions_are_scrubbed(self):
         charts = [{"name": "tracing", "description": "Deploys jaeger."}]

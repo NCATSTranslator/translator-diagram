@@ -361,7 +361,7 @@ ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("helm_charts",), ("description",)),
     (("helm_charts", "last_changed"), ("subject",)),
     (("catalog",), ("name", "description")),
-    (("environments", "*"), ("status_message",)),
+    (("environments", "*"), ("status_message", "openapi_title")),
 )
 
 # `unclaimed_charts` names no component, but its descriptions are still prose.

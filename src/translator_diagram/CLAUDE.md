@@ -35,7 +35,7 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS` |
+| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS`, chart and SmartAPI matching, and the sync-cache readers `sync` and `dashboard` share (`read_json`, `read_yaml`, `chart_dirs`, `unclaimed_charts`) — shared here because neither of those two may import the other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
