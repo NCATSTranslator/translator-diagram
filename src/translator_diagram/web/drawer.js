@@ -797,10 +797,12 @@
     const catalogEdges = list(data().catalog_edges);
     const catalog = row.catalog;
     if (catalogEdges.length || catalog) {
+      // Catalog edges follow the data (`build_catalog_edges`): what this row
+      // consumes is an edge *into* it, and its consumers are edges out.
       const consumes = catalogEdges
-        .filter((edge) => edge && edge.from === row.id).map((edge) => edge.to);
-      const consumedBy = catalogEdges
         .filter((edge) => edge && edge.to === row.id).map((edge) => edge.from);
+      const consumedBy = catalogEdges
+        .filter((edge) => edge && edge.from === row.id).map((edge) => edge.to);
       const facts = catalog ? dl([
         drow("Status", catalog.status ? esc(catalog.status) : ""),
         drow("Knowledge level", catalog.knowledge_level ? esc(catalog.knowledge_level) : ""),
@@ -963,6 +965,9 @@
     for (const tr of document.querySelectorAll("table.grid tr.row")) {
       tr.classList.toggle("sel", tr.dataset.id === id);
     }
+    // The commits here are silent, so the map never repaints on its own and
+    // would keep ringing a node the drawer has let go of.
+    if (TD.map && TD.map.ring) TD.map.ring(id);
   }
 
   function renderPanel() {

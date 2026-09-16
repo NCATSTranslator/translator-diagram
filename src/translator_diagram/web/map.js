@@ -1025,11 +1025,15 @@
 
     const wanted = (TD.state && TD.state.sel) || "";
     if (wanted !== selShown) {
-      selShown = wanted;
-      nodeEls.forEach((el, id) => el.classList.toggle("sel", id === wanted));
+      ring(wanted);
       const node = nodeById.get(wanted);
       if (node) flyTo(node, Math.max(1.25, cam.k));
     }
+  }
+
+  function ring(id) {
+    selShown = id;
+    nodeEls.forEach((el, key) => el.classList.toggle("sel", key === id));
   }
 
   function select(id) {
@@ -1296,11 +1300,11 @@
 
   map.fit = () => fit(true);
   map.zoomBy = zoomBy;
+  map.ring = ring;
 
   map.focus = function focus(id) {
     if (!nodeById.has(id)) return;
-    selShown = id;
-    nodeEls.forEach((el, key) => el.classList.toggle("sel", key === id));
+    ring(id);
     flyTo(nodeById.get(id), Math.max(1.25, cam.k));
   };
 
