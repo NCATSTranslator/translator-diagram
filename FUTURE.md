@@ -14,17 +14,16 @@ deployed**. Nothing we currently fetch knows: the OpenAPI documents carry no
 date, the Helm chart files carry no date, and SmartAPI's `_status.refresh_ts`
 is its own uptime probe.
 
-**The Helm chart's last commit is the closest available proxy.** ITRB deploys
-from [`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops),
-so the last commit touching `helm/<chart>/` dates the intent to deploy:
+**The Helm chart's last commit is the closest available proxy, and it is
+half built.** ITRB deploys from
+[`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops),
+so the last commit touching `helm/<chart>/` dates the intent to deploy.
+`sync-components` already fetches it, one call per recorded chart, and the
+drawer's Helm tab shows it as "Chart last changed", labelled *intent to deploy,
+not a deployment*.
 
-```bash
-curl -s 'https://api.github.com/repos/helxplatform/translator-devops/commits?path=helm/name-lookup&per_page=1'
-```
-
-One call per chart, and we record five charts (`answer-appraiser`, `jaeger`,
-`name-lookup`, `shepherd`, `test-harness`), so five calls a sync. Two things
-to be careful about if this is built:
+What is not built is putting it on the table, where a reader scanning
+environments would see it. Two things to be careful about there:
 
 - It dates the *intent*, not the deployment. A chart change that was never
   rolled out, or a rollout of an unchanged chart, both make it wrong. It
