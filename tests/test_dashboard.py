@@ -424,8 +424,7 @@ class TestPayload:
         assert payload["unclaimed_charts"] == [
             {"name": "robokop", "description": "The ROBOKOP user interface"}]
         assert payload["smartapi_suggestions"] == [{
-            "component": "svc", "smartapi_id": "xyz", "title": "Service API",
-            "matched_by": "infores"}]
+            "component": "svc", "smartapi_id": "xyz", "title": "Service API"}]
 
     def test_a_chart_a_withheld_component_claims_is_not_unclaimed(
         self, synced, tmp_path
@@ -1974,9 +1973,9 @@ class TestTheMetadataBlock:
         assert row["component_type"] == "ARA"
         assert (row["hosted_at"], row["part_of"]) == ("ITRB", "Shepherd")
         assert row["itrb"] == {"app": "shepherd-ci-pipeline", "group": "shepherd"}
-        assert row["identifiers"]["helm_charts"] == ["one", "two"]
-        assert row["identifiers"]["helm_chart"] == "one"
-        assert row["identifiers"]["translator_all_wiki"] == "Some-Page"
+        assert row["chart_names"] == ["one", "two"]
+        assert row["helm_chart"] == "one"
+        assert row["translator_all_wiki"] == "Some-Page"
         assert row["repositories"] == [
             {"url": "https://github.com/a/b", "role": "source", "visibility": "public"}]
         # The full list is new; `documentation` stays the first URL, because a

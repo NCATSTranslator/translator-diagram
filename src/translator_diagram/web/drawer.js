@@ -179,13 +179,12 @@
   }
 
   function headerLinks(row) {
-    const ids = row.identifiers || {};
     const links = [];
     if (row.repository) links.push(ext(row.repository, "Repository"));
     const doc = list(row.docs)[0] || (row.documentation ? { url: row.documentation } : null);
     if (doc && doc.url) links.push(ext(doc.url, "Docs"));
-    if (ids.translator_all_wiki) {
-      links.push(ext(WIKI_BASE + ids.translator_all_wiki, "Wiki"));
+    if (row.translator_all_wiki) {
+      links.push(ext(WIKI_BASE + row.translator_all_wiki, "Wiki"));
     }
     const record = row.smartapi_record;
     if (record && record.registry_url) links.push(ext(record.registry_url, "SmartAPI registry"));
@@ -220,9 +219,7 @@
   /* --- Overview tab -------------------------------------------------------- */
 
   function otelHtml(row) {
-    const names = list((row.identifiers || {}).otel_services).length
-      ? list((row.identifiers || {}).otel_services)
-      : list(row.otel_services);
+    const names = list(row.otel_services);
     if (!names.length) return "";
     const presence = list(row.otel_presence);
     const items = names.map((name) => {
@@ -308,7 +305,6 @@
   }
 
   function panelOverview(row) {
-    const ids = row.identifiers || {};
     const itrb = row.itrb || {};
     const record = row.smartapi_record;
 
@@ -318,15 +314,14 @@
 
     const stage = [row.step_label, row.step_title].filter(filled).map(esc).join(" · ");
 
-    const smartapiId = ids.smartapi || row.smartapi;
+    const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
       ? (record && record.registry_url
         ? ext(record.registry_url, smartapiId, "dw-link dw-mono")
         : mono(smartapiId))
       : "";
 
-    const charts = list(ids.helm_charts).length ? list(ids.helm_charts)
-      : (ids.helm_chart || row.helm_chart ? [ids.helm_chart || row.helm_chart] : []);
+    const charts = list(row.chart_names);
     const chartDetails = list(row.helm_charts);
     const chartCell = charts.length
       ? charts.map((name) => {
@@ -354,11 +349,11 @@
       drow("Part of", row.part_of ? esc(row.part_of) : ""),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
         ? `${itrb.app ? mono(itrb.app) : DASH}${itrb.group ? ` ${note(`group ${itrb.group}`)}` : ""}` : ""),
-      drow("infores", ids.infores || row.infores ? mono(ids.infores || row.infores) : "", true),
+      drow("infores", row.infores ? mono(row.infores) : "", true),
       drow("SmartAPI id", smartapiCell, true),
       drow("Helm chart", chartCell),
-      drow("Wiki", ids.translator_all_wiki
-        ? ext(WIKI_BASE + ids.translator_all_wiki, ids.translator_all_wiki) : ""),
+      drow("Wiki", row.translator_all_wiki
+        ? ext(WIKI_BASE + row.translator_all_wiki, row.translator_all_wiki) : ""),
       drow("OTel services", otelHtml(row)),
       drow("Repositories", repositoriesHtml(row)),
       drow("Documentation", docsHtml(row)),

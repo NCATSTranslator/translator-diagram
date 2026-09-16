@@ -22,7 +22,7 @@ from typing import Any
 
 import click
 
-from .colors import load_owner_colors, owner_styles, text_color_for
+from .colors import load_owner_colors, owner_styles
 from .components import (
     CHART_META_FILES,
     ENVIRONMENTS,
@@ -309,20 +309,12 @@ class SyncedData:
         # The other half: hosts the convention predicted and the probe did not
         # confirm. "We looked here and this is not it" — never "this is down",
         # which is a claim about a deployment we have no evidence exists.
+        # The other half: hosts the convention predicted and the probe did not
+        # confirm, with the verdict attached — how the candidate was turned
+        # away, which is what tells "there is no such host" from "there is one
+        # and it is not this component". Never "this is down", which is a claim
+        # about a deployment we have no evidence exists.
         self.rejected = {
-            cid: {
-                env: spec["url"]
-                for env, spec in envs.items()
-                if isinstance(spec, dict) and spec.get("url")
-            }
-            for cid, envs in (probes.get("rejected") or {}).items()
-        }
-        # The same rejections with the verdict attached — how the candidate was
-        # turned away, which is what tells "there is no such host" from "there
-        # is one and it is not this component". Kept beside `rejected` rather
-        # than replacing it: that one is a URL map with a payload key built
-        # from it, and widening it would change what `derived_rejected` holds.
-        self.rejected_detail = {
             cid: {
                 env: spec
                 for env, spec in envs.items()
@@ -340,6 +332,8 @@ class SyncedData:
         # release list is.
         self._commits: dict[str, dict[str, Any] | None] = {}
         self._repos: dict[str, dict[str, Any] | None] = {}
+        self._bodies: dict[str, Any] = {}
+        self._releases: dict[str, list[dict[str, Any]]] = {}
         self._catalog: dict[str, dict[str, Any]] | None = None
         self.otel = {
             env: _service_names(read_json(root / "otel" / f"{env}.json"))
@@ -403,7 +397,7 @@ class SyncedData:
         path = self.root / relative
         if not path.exists():
             return None
-        document = read_json(path)
+        document = self._body(relative)
         if not isinstance(document, dict):
             return "not-json"
         info = document.get("info")
@@ -432,17 +426,27 @@ class SyncedData:
         fetch = self.statuses.get(relative)
         if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
             return None
-        return read_json(self.root / relative)
+        return self._body(relative)
+
+    def _body(self, relative: str) -> Any:
+        """A cached JSON body, parsed once per build: the version chain and
+        `openapi_outcome` both read every OpenAPI document."""
+        if relative not in self._bodies:
+            self._bodies[relative] = read_json(self.root / relative)
+        return self._bodies[relative]
 
     def releases(self, repo: str | None) -> list[dict[str, Any]]:
         """One repository's releases, newest first, as GitHub returned them."""
         if not repo:
             return []
-        return [
-            entry
-            for entry in _read_json_list(self.root / "releases" / f"{repo}.json")
-            if isinstance(entry, dict)
-        ]
+        # Cached per repository: the three shepherds share one release list.
+        if repo not in self._releases:
+            self._releases[repo] = [
+                entry
+                for entry in _read_json_list(self.root / "releases" / f"{repo}.json")
+                if isinstance(entry, dict)
+            ]
+        return self._releases[repo]
 
     def helm(self, chart: str, name: str) -> dict[str, Any] | None:
         """One file out of one cached chart, parsed once per build.
@@ -745,7 +749,7 @@ def _undeployed_reason(
     """
     if (component.hosted_at or "") == "Local":
         return CELL_REASONS["not-hosted"]
-    verdict = synced.rejected_detail.get(component.id, {}).get(env)
+    verdict = synced.rejected.get(component.id, {}).get(env)
     if verdict is not None:
         return _rejection_reason(verdict)
     if deployments_from_smartapi(smartapi_record):
@@ -1283,14 +1287,10 @@ def build_rows(
                 "hosted_at": component.hosted_at,
                 "part_of": component.part_of,
                 "itrb": {"app": component.itrb_app, "group": component.itrb_group},
-                "identifiers": {
-                    "infores": component.infores,
-                    "smartapi": component.smartapi_id,
-                    "helm_chart": component.helm_chart,
-                    "helm_charts": charts,
-                    "translator_all_wiki": component.translator_all_wiki,
-                    "otel_services": component.otel_services,
-                },
+                # Every chart the file records. `helm_chart` above is the first
+                # of them, and `helm_charts` below is the detail block per chart.
+                "chart_names": charts,
+                "translator_all_wiki": component.translator_all_wiki,
                 "repositories": [
                     {
                         "url": repo.get("url"),
@@ -1351,9 +1351,9 @@ def build_rows(
                 # component. In ladder order, so the list reads dev to prod like
                 # every other row of environments on the page.
                 "derived_rejected": [
-                    {"env": env, "url": url}
+                    {"env": env, "url": spec["url"]}
                     for env in ENVIRONMENTS
-                    if (url := synced.rejected.get(component.id, {}).get(env))
+                    if (spec := synced.rejected.get(component.id, {}).get(env))
                 ],
                 "environments": cells,
             }
@@ -1586,7 +1586,6 @@ def build_smartapi_suggestions(rows: list[dict[str, Any]]) -> list[dict[str, Any
                 "component": row["id"],
                 "smartapi_id": record.get("id"),
                 "title": record.get("title"),
-                "matched_by": "infores",
             }
         )
     return suggestions
@@ -1699,16 +1698,6 @@ def build_payload(
     }
 
 
-def _css_string(value: str) -> str:
-    """Escape a string for a double-quoted CSS attribute selector.
-
-    Not html.escape: a <style> element's contents are not HTML-decoded, so an
-    entity there stays literal and the selector matches nothing. Only the
-    backslash and the quote need escaping inside a CSS string.
-    """
-    return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
 def _assets(names: tuple[str, ...]) -> str:
     """The named files from web/, concatenated in the order given.
 
@@ -1747,12 +1736,6 @@ def render_html(payload: dict[str, Any]) -> str:
     scheduled job would publish; keeping both means the page never has to
     choose between being shareable and being automatable.
     """
-    colors = load_owner_colors()
-    owner_css = "\n".join(
-        f'.owner[data-owner="{_css_string(owner)}"] '
-        f"{{ background: {color}; color: {text_color_for(color)}; }}"
-        for owner, color in colors.items()
-    )
     data = json.dumps(payload, indent=None, separators=(",", ":"))
     # </script> inside a JSON string would close the tag early.
     data = data.replace("</", "<\\/")
@@ -1770,7 +1753,6 @@ def render_html(payload: dict[str, Any]) -> str:
 <link rel="icon" type="image/x-icon" href="{_favicon_data_uri()}">
 <style>
 {_assets(CSS_FILES)}
-{owner_css}
 </style>
 <script>
 // Applied before the body renders, or the page flashes the wrong theme.
