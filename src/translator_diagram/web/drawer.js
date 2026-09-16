@@ -65,7 +65,9 @@
      from it in place loses all of that. */
   function ext(url, text, cls) {
     if (!filled(url)) return "";
-    return `<a class="${cls || "dw-link"}" href="${esc(url)}" target="_blank"
+    const href = TD.fmt.href(url);
+    if (!href) return esc(filled(text) ? text : url);
+    return `<a class="${cls || "dw-link"}" href="${esc(href)}" target="_blank"
       rel="noopener">${esc(filled(text) ? text : url)}</a>`;
   }
 

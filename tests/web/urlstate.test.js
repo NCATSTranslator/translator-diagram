@@ -131,3 +131,10 @@ test("dir is written only beside a column, and never survives alone", () => {
 test("a query with everything default but whitespace stays empty", () => {
   assert.equal(TD.url.serialize({ ...defaults(), q: "   " }), "");
 });
+
+test("only http and https URLs become links", () => {
+  assert.equal(TD.fmt.href("https://smart-api.info/ui/abc"), "https://smart-api.info/ui/abc");
+  assert.equal(TD.fmt.href("javascript:alert(1)"), "");
+  assert.equal(TD.fmt.href(" JavaScript:alert(1)"), "");
+  assert.equal(TD.fmt.href("not a url"), "");
+});

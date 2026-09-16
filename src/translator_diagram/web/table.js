@@ -141,7 +141,7 @@
       .filter((release) => release.url)
       .map((release) =>
         `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(release.url)}" data-tip="rel" data-id="${esc(row.id)}"
+          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
           data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
       .join("");
   }
@@ -150,7 +150,7 @@
     if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
     const label = row.repository.replace("https://github.com/", "");
     const chips = releaseChips(row);
-    return `<td class="repo meta drop-md"><a href="${esc(row.repository)}">${esc(label)}</a>${
+    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${esc(label)}</a>${
       chips ? `<span class="releases">${chips}</span>` : ""}</td>`;
   }
 
@@ -280,7 +280,7 @@
       label: "Host",
       mono: true,
       read: (cell) => {
-        const href = cell.openapi_url || cell.url;
+        const href = TD.fmt.href(cell.openapi_url || cell.url);
         const name = esc(TD.fmt.host(cell.url)).replace(/\./g, ".<wbr>");
         return href ? `<a href="${esc(href)}">${name}</a>` : name;
       },
@@ -363,7 +363,7 @@
       .filter((release) => release.tag)
       .map((release) =>
         `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(release.url || "#")}" data-tip="rel" data-id="${esc(row.id)}"
+          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
           data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
       .join("");
   }

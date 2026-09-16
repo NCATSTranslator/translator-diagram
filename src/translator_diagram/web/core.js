@@ -84,7 +84,15 @@
     try { return new URL(url).hostname; } catch { return String(url ?? ""); }
   }
 
-  TD.fmt = { esc, relativeAge, since, plural, host, DASH: '<span class="dash">—</span>' };
+  /* Only web links reach an href. These URLs come from GitHub and SmartAPI
+     records other people edit, and escaping stops markup, not `javascript:`. */
+  function href(url) {
+    try {
+      return /^https?:$/.test(new URL(url).protocol) ? String(url) : "";
+    } catch { return ""; }
+  }
+
+  TD.fmt = { esc, relativeAge, since, plural, host, href, DASH: '<span class="dash">—</span>' };
 
   /* --- Motion ------------------------------------------------------------ */
 
