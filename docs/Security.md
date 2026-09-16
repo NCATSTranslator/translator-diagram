@@ -165,6 +165,14 @@ triggers or retries should state what it adds per run.
   nothing answered or something other than this component did. A live host
   under a conventional name that does not belong to the component is worth a
   person's attention, and is also worth an attacker's.
+- **`overview.json` without a `noindex`.** GitHub Pages cannot send an
+  `X-Robots-Tag` header, and crawlers read `robots.txt` only from the root of
+  the Pages domain, not from this project's path. The file stays published
+  anyway, for three reasons. It is a contract other tools may read. The page
+  does not link to it, so a crawler finds it only through someone else's link.
+  And it adds nothing: the same payload is inlined in `index.html`, which does
+  carry `noindex`. If the file ever holds something the page does not, look at
+  this again.
 
 ### Do not introduce
 
@@ -190,9 +198,6 @@ triggers or retries should state what it adds per run.
   so. Withholding the `jaeger` row does not help: the URLs are in this public
   repository. Tracked in
   [#44](https://github.com/NCATSTranslator/translator-diagram/issues/44).
-- **`overview.json` has no equivalent of the `noindex` meta tag.** GitHub Pages
-  cannot set `X-Robots-Tag` headers, and a `robots.txt` would only apply at the
-  root of the Pages domain.
 - **Handing out the full build.** Its own directory stops accidents, not
   decisions: sharing it on purpose is
   [#38](https://github.com/NCATSTranslator/translator-diagram/issues/38).
