@@ -878,7 +878,12 @@
       if (node) highlight(node.dataset.id);
     });
     root.addEventListener("mouseout", (event) => {
-      if (event.target.closest(".mp-node")) highlight("");
+      const node = event.target.closest(".mp-node");
+      // Moving between a node's own parts fires mouseout too; clearing and
+      // re-lighting on each would sweep every node, external and edge twice.
+      const into = event.relatedTarget instanceof Element
+        ? event.relatedTarget.closest(".mp-node") : null;
+      if (node && into !== node) highlight("");
     });
     root.addEventListener("focusin", (event) => {
       const node = event.target.closest(".mp-node");
