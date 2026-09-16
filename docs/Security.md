@@ -18,9 +18,8 @@ missing, add it under [Areas not yet examined](#areas-not-yet-examined), even
 as a single line.
 
 **Do not report a live vulnerability in a Translator component as a public
-issue here.** This repository is public, and private vulnerability reporting is
-not enabled on it today. Contact the maintainers directly. Choosing a proper
-reporting channel is itself an open item below.
+issue here.** This repository is public. Report it privately from the
+repository's Security tab, as [`SECURITY.md`](../SECURITY.md) describes.
 
 ## The ground rule: reach, not secrecy
 
@@ -136,6 +135,11 @@ triggers or retries should state what it adds per run.
   `--include-private`, and the Pages workflow passes no flag. A policy entry
   that matches nothing stops the build, so a renamed component cannot quietly
   stop being withheld.
+- **A full build has its own directory.** `build-dashboard --include-private`
+  writes to `data/dashboard-private/`, so it cannot overwrite the publishable
+  build in `data/dashboard/` and be served or shared from there by mistake. An
+  explicit `--output-dir` still overrides this. Who the full build is for is
+  still [#34](https://github.com/NCATSTranslator/translator-diagram/issues/34).
 - **Credentials stay where they belong.**
   - `GITHUB_TOKEN` is sent to `api.github.com` and nowhere else (`_headers` in
     `sync.py`). In Actions it is the default read-only workflow token.
@@ -184,15 +188,13 @@ triggers or retries should state what it adds per run.
   the same host probably does too. Traces can carry query contents, internal
   hostnames and headers. This needs confirming with ITRB, and fixing there if
   so. Withholding the `jaeger` row does not help: the URLs are in this public
-  repository.
+  repository. Tracked in
+  [#44](https://github.com/NCATSTranslator/translator-diagram/issues/44).
 - **`overview.json` has no equivalent of the `noindex` meta tag.** GitHub Pages
   cannot set `X-Robots-Tag` headers, and a `robots.txt` would only apply at the
   root of the Pages domain.
-- **A private build lands in the same place as a public one.**
-  `build-dashboard --include-private` writes to `data/dashboard/` by default,
-  the same directory the public build uses. A full build can therefore be
-  served, zipped or shared by mistake. See
-  [#34](https://github.com/NCATSTranslator/translator-diagram/issues/34) and
+- **Handing out the full build.** Its own directory stops accidents, not
+  decisions: sharing it on purpose is
   [#38](https://github.com/NCATSTranslator/translator-diagram/issues/38).
 - **The diagram is not covered by the privacy policy.** Its SVG tooltips embed
   owner, status and notes from the Google Sheet, and `components.json` carries
@@ -222,6 +224,9 @@ repository topics belong to other teams. Treat every field as hostile markup.
   The page is one self-contained file, so a compromised third party cannot
   change it and no viewer's visit is reported to anyone. `localStorage` holds
   only the theme choice.
+- **Actions are pinned to commit SHAs**, with the version in a comment, so a
+  moved tag cannot run new code with Pages deploy permission.
+  `.github/dependabot.yml` proposes updated pins weekly.
 - **Deploys are narrow.** The Pages workflow runs with `contents: read`. Only
   the deploy job gets `pages: write`, and it runs only for `main` or a manual
   dispatch. Pull requests, including from forks, only upload an artifact.
@@ -242,14 +247,9 @@ repository topics belong to other teams. Treat every field as hostile markup.
   style. A `<meta http-equiv="Content-Security-Policy">` with hashes, or
   `script-src 'self'` once assets are split out, would limit the damage of an
   escaping mistake.
-- **Actions are pinned by tag, not commit SHA** (`actions/checkout@v4`,
-  `astral-sh/setup-uv@v5`, and the Pages actions). A moved tag would run new
-  code with Pages deploy permission.
 - **A manual dispatch can deploy any branch** to the live URL. That is useful
   for review, but it means anyone with write access can publish arbitrary
   content there until the next deploy from `main`.
-- **No reporting channel.** Enable GitHub private vulnerability reporting or
-  name a contact, and add a `SECURITY.md` pointing here.
 
 ## Checklist for a change
 
@@ -267,6 +267,9 @@ rendering path:
   whose service?
 - [ ] **A new rendering path.** Is every value escaped and every link checked?
   Does it load nothing external?
+- [ ] **A workflow change.** A new action is pinned to a commit SHA with its
+  version in a comment, and a new deploy trigger is a deliberate edit to the
+  deploy job's `if:`.
 - [ ] **A new internal tool or host.** Add it to `config/privacy.yaml` in the
   same pull request.
 - [ ] **This document.** Move anything you addressed out of *Open*, and add
