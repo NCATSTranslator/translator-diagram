@@ -17,6 +17,7 @@ when it is relevant rather than every time:
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
 | [`docs/owner-colours.md`](docs/owner-colours.md) | The four constraints on a new team colour |
+| [`docs/Security.md`](docs/Security.md) | What the published page must not leak, what the build must not become, and the checklist for a change that adds a field, source or fetch |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** *Working agreements* below. Then, before simplifying anything in
