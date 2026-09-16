@@ -1,5 +1,6 @@
 """Tests for translator_diagram.colors."""
 
+import itertools
 from pathlib import Path
 
 import click
@@ -8,11 +9,17 @@ import pytest
 from translator_diagram.colors import (
     CONFIG_OWNER_COLORS_PATH,
     FALLBACK_COLORS,
+    HEX_COLOR_RE,
     PACKAGED_OWNER_COLORS,
     ColorAssigner,
+    delta_e,
     load_owner_colors,
+    metallic_stops,
+    owner_styles,
     text_color_for,
 )
+
+PALETTE = Path(__file__).resolve().parent.parent / "config" / "owner-colors.csv"
 
 
 class TestColorAssigner:
@@ -99,6 +106,85 @@ class TestOwnerChipsAreReadable:
         assert not failures, (
             f"owner chips below WCAG AA (4.5:1) against the text colour "
             f"text_color_for picks for them: {failures}"
+        )
+
+
+def _lightness(hex_color):
+    """HSL lightness, 0-100, computed independently of the module under test."""
+    channels = [int(hex_color.lstrip("#")[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    return (max(channels) + min(channels)) / 2 * 100
+
+
+class TestMetallicStops:
+    def test_four_hex_stops_with_the_base_second(self):
+        stops = metallic_stops("#8E99A4")
+        assert len(stops) == 4
+        assert all(HEX_COLOR_RE.match(stop) for stop in stops), stops
+        assert stops[1] == "#8E99A4"
+
+    def test_lightness_runs_highlight_return_base_shadow(self):
+        # +26, base, -10, +14: the two highlights sit above the base and the
+        # shadow below it, which is what makes the gradient read as brushed
+        # metal rather than as a flat swatch with noise on it.
+        highlight, base, shadow, ret = metallic_stops("#8E99A4")
+        assert (
+            _lightness(highlight) > _lightness(ret) > _lightness(base)
+            > _lightness(shadow)
+        )
+
+    @pytest.mark.parametrize("owner_color", ["#FFFFFF", "#000000", "#E8E8E8"])
+    def test_an_extreme_colour_is_clamped_rather_than_flattened(self, owner_color):
+        # `None` is #E8E8E8, and without the clamps its highlight would run off
+        # the end of the scale and come back as white four times over. A stop
+        # can land a rounding step outside 4-96 because the clamp is applied in
+        # HSL and the answer is then quantised to eight bits per channel.
+        step = 100 / 255
+        stops = metallic_stops(owner_color)
+        assert all(HEX_COLOR_RE.match(stop) for stop in stops), stops
+        assert all(-step <= _lightness(stop) <= 100 + step for stop in stops)
+        assert 4 - step <= _lightness(stops[0]) <= 96 + step
+        assert 4 - step <= _lightness(stops[2]) <= 96 + step
+        # Three at the extremes rather than four: at white the highlight and
+        # the return both clamp to the same stop, which is the honest outcome.
+        assert len(set(stops)) >= 3, stops
+
+
+class TestOwnerStyles:
+    def test_every_owner_gets_a_base_a_text_colour_and_four_metal_stops(self):
+        styles = owner_styles({"CATRAX": "#8E99A4", "UI": "#C2185B"})
+        assert set(styles) == {"CATRAX", "UI"}
+        assert styles["CATRAX"] == {
+            "base": "#8E99A4",
+            "text": text_color_for("#8E99A4"),
+            "metal": list(metallic_stops("#8E99A4")),
+        }
+        assert len(styles["UI"]["metal"]) == 4
+
+    def test_an_empty_palette_is_an_empty_mapping(self):
+        assert owner_styles({}) == {}
+
+
+class TestPaletteSeparation:
+    # The contrast test below asks whether one chip is readable. This asks
+    # whether two chips are distinguishable, which is a different failure and
+    # the one the palette actually has: nine owners share the blue-to-magenta
+    # arc left after the reserved hues, and two of them converging is a page
+    # where a reader cannot tell DOGSURF from UI. dE 24 in CIE76 is roughly
+    # "obviously a different colour at a glance", well above the ~2.3 nobody
+    # can see and below the ~31 the palette held before CATRAX moved.
+    FLOOR = 24.0
+
+    def test_every_pair_of_owners_is_separated(self):
+        colors = load_owner_colors(PALETTE)
+        distances = sorted(
+            (delta_e(colors[a], colors[b]), a, b)
+            for a, b in itertools.combinations(colors, 2)
+        )
+        worst, owner_a, owner_b = distances[0]
+        assert worst >= self.FLOOR, (
+            f"{owner_a} and {owner_b} are {worst:.1f} dE apart, below the "
+            f"{self.FLOOR} floor in docs/owner-colours.md. Two owner chips "
+            f"that close read as the same team."
         )
 
 

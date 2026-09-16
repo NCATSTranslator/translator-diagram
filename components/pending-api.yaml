@@ -29,6 +29,18 @@ repositories:
     role: source
     visibility: public
 
+endpoints:
+  # Checked on 2026-09-02, all three environments: this host answers *any*
+  # path with the app's own HTML and a 200, so a request for openapi.json
+  # comes back looking like a success and parsing as nothing. Null rather than
+  # absent, which is the difference between "checked, there is none" and "not
+  # looked at yet".
+  openapi: null
+  # A real JSON document, and the only one: `{"success": true, "status":
+  # "green"}`. No version in it, which is a finding rather than a gap — the
+  # host publishes none anywhere.
+  status: status
+
 environments:
   ci:
     url: https://biothings.ci.transltr.io/

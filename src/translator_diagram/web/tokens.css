@@ -1,0 +1,193 @@
+/*
+  Every custom property the page reads, and nothing else. Colours are defined
+  once here for light and once under [data-theme="dark"]; the other sheets
+  never name a colour, so a value that is wrong is wrong in one place.
+
+  The theme contract is dashboard.py's inline bootstrap: it sets
+  `data-theme` (the *resolved* theme, "light" or "dark") and
+  `data-theme-choice` (what the reader picked: "light", "dark" or "auto") on
+  <html> before the body paints. Nothing here reads the choice; only the
+  resolved value switches the palette.
+
+  Palette source: the live Translator UI (NCATSTranslator/ui-fe
+  _variables.scss), cool tokens only. The warm brand tokens ($red, $yellow)
+  are deliberately unused — amber as a "read this from a registry" signal made
+  27 of 45 cells shout, so drift is now an indigo tint (plus a sentence only a
+  screen reader hears) and every other signal is greyscale.
+*/
+
+:root {
+  color-scheme: light;
+
+  /* Two surfaces, no more. Grouping is done by hairlines and whitespace. */
+  --page: #ffffff;
+  --raised: #f2f4f7;               /* $lightGray */
+  --raised-2: rgba(220, 220, 230, 0.4);  /* $palePurple at 40% */
+
+  /* A third, quieter surface: the one a comfortable-density table row sits
+     on. It has to be lighter than --raised, because --raised is what the row
+     lifts *to* on hover, and a list item whose resting and hover states are
+     the same colour is not a list item. */
+  --row: #f7f8fa;
+  --row-hover: #eceff4;
+
+  --text: #202124;                 /* $black */
+  --muted: #606368;                /* $darkGray */
+  --hairline: rgba(206, 208, 208, 0.6);  /* $midGray at 60% */
+  --hairline-strong: rgba(206, 208, 208, 0.95);
+
+  --accent: #662e6b;               /* $purpleOne — identity, selection, focus */
+  --accent-soft: rgba(102, 46, 107, 0.12);
+  --link: #3562ac;                 /* $blueOne */
+  /* The stage spine: the accent at 40%, quiet enough to be a margin rule and
+     not a highlight. Written out per theme rather than composed, because the
+     two accents are different hues and a single alpha over both is not. */
+  --spine: rgba(102, 46, 107, 0.4);
+
+  /* Drift is never colour alone: the tinted cell also carries a
+     visually-hidden sentence, and the tooltip says what disagrees. */
+  --drift: rgba(82, 79, 129, 0.12);   /* $purpleTwo at 12% */
+  --drift-ink: #524f81;
+
+  --ok: #669f38;
+  --bad: #cc2e46;
+
+  /* The tooltip, the drawer edge, and an open row are the only shadows on the
+     page. --lift is the third: it is not decoration, it is the one signal
+     that says an item is open and that the panel under it belongs to it. */
+  --shadow-pop: 0 6px 24px rgba(32, 33, 36, 0.14), 0 1px 2px rgba(32, 33, 36, 0.1);
+  --lift: 0 4px 16px rgb(0 0 0 / 6%);
+
+  /* Type. Open Sans is the brand face, but a self-contained page cannot fetch
+     a web font, so it is asked for by name and used only if it is installed. */
+  --font: system-ui, -apple-system, "SF Pro Text", "Segoe UI", "Open Sans",
+          Inter, Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-num: 20px;      /* the stats line's numerals */
+  --fs-body: 14px;
+  --fs-table: 13px;
+  --fs-meta: 12px;
+  --fs-label: 11px;    /* uppercase, tracked */
+  --fs-micro: 10px;    /* source labels, release chips */
+  --tracking-label: 0.06em;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* Radius: 0 on regions, 4px on controls, 6px on map nodes, full on coins.
+     Nothing else is rounded, which is what keeps the page from reading as a
+     field of cards. */
+  --r-region: 0;
+  --r-control: 4px;
+  --r-node: 6px;
+  --r-coin: 999px;
+
+  --topbar-h: 64px;
+  --coin: 10px;
+
+  /* One row style, not two. The dense metrics won — 32px rows, the id beside
+     the name, the source word beside the version, no second line per cell —
+     and they are drawn on the list-item surface: each row its own --row
+     ground, six pixels of gutter, four-pixel outer corners, no hairline
+     between rows. The density control is gone; `density=` and `details=` in
+     an old link are read and thrown away by core.js. */
+  --row-h: 32px;
+  --row-gap: 6px;                  /* the gutter between two rows */
+  --row-bg: var(--row);
+  --row-bg-hover: var(--row-hover);
+  --row-radius: var(--r-control);
+  --cell-pad-y: 2px;
+  --cell-pad-x: 10px;
+  --cell-pad-left: 14px;
+  --exp-bg: var(--row-bg);         /* an open row and its detail are one item */
+  --detail-h: 22px;                /* one field of an open row */
+
+  /* Motion. State 120–180ms, layout 240–320ms, camera 360ms, one easing. */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-state: 160ms;
+  --dur-seg: 180ms;
+  --dur-layout: 240ms;
+  --dur-slow: 320ms;
+  --dur-camera: 360ms;
+  --dur-count: 600ms;
+  --stagger: 12ms;
+}
+
+/*
+  Dark is elevated, not black. Apple black (#000) under a table of hairlines
+  read as a hole rather than as a ground — the surfaces above it had nothing
+  to be above. These are the elevated-dark greys: the page itself is already
+  lifted, so a row, a hover and a popover each have somewhere to go.
+*/
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page: #161618;
+  --raised: #1f1f22;
+  --raised-2: #2c2c2e;             /* Apple grey 5 */
+
+  /* In light the row sits *above* --raised, because --raised is where it
+     hovers to. In dark there is room the other way: the elevated surface is
+     the row, and hover goes up to the second raise. Anything closer to the
+     page than this and the six-pixel gutters stopped reading at all. */
+  --row: #1f1f22;
+  --row-hover: #2c2c2e;
+
+  --text: #f2f2f7;
+  --muted: #a1a1a6;
+  --hairline: #3a3a3c;
+  --hairline-strong: #48484a;
+
+  --accent: #c2abc4;               /* $lightPurpleOne */
+  /* Both of these are alpha over a ground that is no longer black, so both
+     were re-measured against #161618 and lifted: at the old 16% / 18% the
+     pill and the tint had almost nothing left to sit on. */
+  --accent-soft: rgba(194, 171, 196, 0.2);
+  --link: #84a3dc;                 /* $lightBlueOne */
+  --spine: rgba(194, 171, 196, 0.4);
+
+  --drift: rgba(151, 149, 179, 0.22);
+  --drift-ink: #9795b3;
+
+  --ok: #669f38;
+  --bad: #cc2e46;
+
+  --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --lift: 0 4px 20px rgb(0 0 0 / 40%);
+}
+
+/*
+  The height of an open row plus its detail rows, in pixels, measured by
+  table.js. Registered rather than left as a plain custom property because a
+  registered one can be transitioned: that is what lets the single shadow
+  around an open item grow with the item instead of snapping to full size
+  while the rows are still unfolding. Inherited, because the element that sets
+  it is the row and the element that draws with it is a cell's pseudo-element.
+*/
+@property --open-h {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+
+/* One switch for every animation on the page. JS reads the same preference
+   through TD.motion.enabled and skips its rAF work, so a zeroed duration is
+   never the only thing standing between a reader and a moving page. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-state: 0ms;
+    --dur-seg: 0ms;
+    --dur-layout: 0ms;
+    --dur-slow: 0ms;
+    --dur-camera: 0ms;
+    --dur-count: 0ms;
+    --stagger: 0ms;
+  }
+}

@@ -19,8 +19,9 @@
 #   not-in-use    confirmed retired
 #
 # Validated by schema/unknown.schema.json; see tests/test_components.py.
-# New kinds of unattributed identifier get a new top-level key (`urls:` is
-# already in the schema, and is empty because nothing has needed it yet).
+# New kinds of unattributed identifier get a new top-level key (`helm_charts:`
+# and `urls:` are already in the schema; `urls:` is still empty because
+# nothing has needed it yet).
 # yaml-language-server: $schema=schema/unknown.schema.json
 
 otel_services:
@@ -198,3 +199,463 @@ otel_services:
 #   http.host=nodenorm-es.{ci,test}.transltr.io and a Tornado handler from
 #   the nodenorm package, backed by elasticsearch.es-core-components — so
 #   it is the ES rewrite, not the nodenorm it replaced.
+
+helm_charts:
+
+  # Every directory in helxplatform/translator-devops's helm/ index
+  # (data/sync/helm/index.json) that no components/*.yaml claims via
+  # identifiers.helm_chart. `not-recorded` entries are candidates for a new
+  # component file (issue #20); promoting one means adding
+  # `identifiers.helm_chart` to the component that owns it and deleting the
+  # entry here.
+
+  # --- Not recorded: candidates for a new component file (issue #20) --------
+
+  - name: cqs
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: cqs
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description ("A Helm
+      chart for Kubernetes"); the chart deploys the TranslatorSRI Curated
+      Query Service, image ghcr.io/translatorsri/cqs.
+    note: >-
+      Likely component: cqs. No components/cqs.yaml exists yet.
+
+  - name: translator-workflow-runner
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: translator-workflow-runner
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; the chart
+      deploys ghcr.io/ncatstranslator/workflow-runner, the Translator
+      workflow runner.
+    note: >-
+      Likely component: translator-workflow-runner. No component file
+      exists yet.
+
+  - name: sri-testing
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: sri-testing
+    evidence: >-
+      Chart.yaml is the unedited `helm create` default and declares a
+      bitnami/mongodb 13.1.2 dependency for storage; the chart deploys
+      ghcr.io/translatorsri/sri_testing-ui and ghcr.io/translatorsri/sri_testing-api.
+    note: >-
+      Likely component: sri-testing. No component file exists yet.
+
+  - name: query-logger
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: query-logger
+    evidence: >-
+      Chart.yaml names the chart `querylogger` internally and is the only
+      chart in the index still on `apiVersion: v1`; it deploys
+      ghcr.io/translatorsri/querylogger.
+    note: >-
+      Likely component: query-logger. No component file exists yet.
+
+  - name: openapi-spec-aggregator
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: openapi-spec-aggregator
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; the chart
+      deploys ghcr.io/translatorsri/trapi-openapi-aggregator.
+    note: >-
+      Likely component: openapi-spec-aggregator. No component file exists
+      yet.
+
+  - name: issue-router
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: issue-router
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; the chart
+      deploys ghcr.io/translatorsri/issuerouter.
+    note: >-
+      Likely component: issue-router. No component file exists yet.
+
+  - name: benchmark
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: benchmark
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; the chart
+      deploys ghcr.io/translatorsri/benchmarks.
+    note: >-
+      Likely component: benchmark. No component file exists yet.
+
+  - name: information-radiator
+    status: not-recorded
+    first_seen: "2026-09-02"
+    component: information-radiator
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description and names no
+      image; by name and role this is the ELK stack that reports Test
+      Harness results on a dashboard.
+    note: >-
+      Likely component: information-radiator. No component file exists yet.
+
+  # --- Unattributed: legacy ROBOKOP / Plater / Automat / standalone ARAGORN /
+  #     CAM / TranQL stack ----------------------------------------------------
+
+  - name: answer-coalesce
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "A Helm chart for Answer Coalesce
+      service" — a pre-Shepherd result-merging tool used by the
+      ARAGORN/ROBOKOP pipeline; nothing in the chart names a component here.
+
+  - name: api-docs
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description says this is "The API documentation site for
+      Automat. Built with Docusaurus & served with NGINX." — part of the
+      Automat stack, not a component in its own right.
+
+  - name: api-watchdog
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; only the
+      name (api-watchdog) and appVersion 1.16.0 — shared with several other
+      ROBOKOP-era charts in this index — are observable.
+
+  - name: aragorn
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. This is the
+      standalone ranking-agent ARAGORN stack, image
+      ghcr.io/ranking-agent/aragorn — matched by the OTel-name rule to
+      components/shepherd-aragorn.yaml because that file records the OTel
+      service `aragorn`. That is a name collision, not a real match:
+      shepherd-aragorn is the Shepherd worker, and this chart is the
+      standalone ARAGORN ARA.
+    note: >-
+      Must not be recorded on shepherd-aragorn.
+
+  - name: aragorn-ranker
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. By name
+      this is Aragorn Ranker, the scoring service in the standalone
+      ranking-agent/ARAGORN stack (the chart above), not a component
+      recorded here.
+
+  - name: automat
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; appVersion
+      2.1. This is the Automat KP-generation framework itself, parent of
+      automat-cam-kp, automat-hgnc, automat-icees-kg, automat-monarch-kg and
+      automat-robokopkg (already tracked above under otel_services,
+      component `automat`) — but the platform's own chart has no component
+      file.
+
+  - name: biolink-lookup
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "A Helm chart for Biolink lookup
+      service" — a Biolink Model lookup utility in the ROBOKOP-era ontology
+      tooling group, alongside ontology-kp and ontology-tools below.
+
+  - name: cam-kp-api
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; version
+      "0.2-trapi-1.3" ties it to TRAPI 1.3. By name this is the CAM (Causal
+      Activity Model) Knowledge Provider API, part of the CAM pipeline with
+      cam-pipeline-builder and cam-pipeline-web-server below.
+
+  - name: cam-pipeline-builder
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "Build the cam-pipeline" — the CAM
+      pipeline's build step, part of the same CAM stack as cam-kp-api.
+
+  - name: cam-pipeline-web-server
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; by name
+      this is the CAM pipeline's web server, part of the same CAM stack.
+
+  - name: graph-registry
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description says this is "A FastAPI application to
+      explore metadata for graphs ingested into Robokop." — a ROBOKOP-stack
+      utility, not a component recorded here.
+
+  - name: kg-summarizer
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; only the
+      name and appVersion 1.16.0 are observable. By name a knowledge-graph
+      summarization tool in the same ROBOKOP-era tooling group.
+
+  - name: landing-page
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description says this is "The landing page for ROBOKOP.
+      Built with Next.Js and React."
+
+  - name: omnicorp
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. Omnicorp
+      is the ROBOKOP-era literature co-occurrence / edge-provenance service
+      used by the ROBOKOP build pipeline.
+
+  - name: omnicorp-redis
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description and
+      declares one dependency, bitnami/redis 17.9.3 — a caching layer for
+      omnicorp above, not a component in its own right.
+
+  - name: ontology-kp
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; only the
+      name and appVersion 1.16.0 are observable. By name an ontology-backed
+      KP in the same ROBOKOP-era tooling group as biolink-lookup.
+
+  - name: ontology-tools
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "A Helm chart for Ontology tools".
+
+  - name: plater
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. Plater is
+      TranslatorSRI's Neo4j-to-TRAPI wrapper, used by ROBOKOP and the
+      Automat KPs to expose a graph as a TRAPI API.
+
+  - name: plater-graphs-server
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description says this is a "Static nginx fileserver
+      serving PLATER graph files from NFS at robokop.renci.org/graphs/" —
+      naming both Plater and the robokop.renci.org host directly.
+
+  - name: plater-standalone
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's internal `name:` field reads `plater` — identical to the
+      `plater` chart above — with the same unedited `helm create`
+      description; this directory is a second, standalone deployment of the
+      same chart content under a different directory name.
+
+  - name: qgraph
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; only the
+      name and appVersion 1.16.0 are observable. By name a query-graph
+      builder/visualization tool in the ROBOKOP-era stack.
+
+  - name: redis-tpf
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. By name a
+      Redis-backed cache for a Triple Pattern Fragments (TPF) server, likely
+      supporting Automat's or ROBOKOP's TPF endpoints.
+
+  - name: robokop
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "A Helm chart for Robokop" — the umbrella
+      chart for the ROBOKOP stack.
+
+  - name: robokop-ara
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; appVersion
+      "v2.6.4". This is ROBOKOP's own ARA, predating the ARAGORN/BTE/ARAX
+      Shepherd refactor.
+
+  - name: robokop-ui
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "ROBOKOP UI frontend and backend."
+
+  - name: robokop-ui-postgres
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "ROBOKOP UI backend PostgreSQL database
+      chart" — storage for robokop-ui above.
+
+  - name: robokopkg
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description. By name
+      this is the Neo4j-backed ROBOKOP knowledge graph database.
+
+  - name: strider
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description and
+      declares a conditional redis-insight dependency. Strider is
+      TranslatorSRI's query-planning/federation engine for the pre-Shepherd
+      ARAGORN pipeline; nothing in this chart itself names a component.
+    note: >-
+      The OTel service `strider` is already tracked above (otel_services,
+      component: strider) as not-recorded — a separate namespace from this
+      chart, so recording both is not a double claim.
+
+  - name: tranql
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's internal `name:` field reads `helm`, not `tranql`; its
+      description is "Helm chart for Tranql". TranQL is TranslatorSRI's
+      federated query language for ROBOKOP-era KPs.
+
+  # --- Unattributed: current NodeNorm charts, pending a maintainer decision --
+
+  - name: node-normalization-web-server
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's internal name is `node-normalization-web`, description
+      "Webserver for node normalization.", appVersion "2.4.1_2025sep1"
+      (image tag + Babel release date, the same convention documented for
+      name-lookup). Its values name image ghcr.io/ncatstranslator/nodenormalization*
+      and web.serverName infores:sri-node-normalizer — the current
+      Redis-backed NodeNorm, a different codebase from
+      components/nodenorm-es.yaml, which records the Elasticsearch rewrite
+      of biothings/NodeNormalizationAPI and carries no infores.
+    note: >-
+      Which one owns this chart is a maintainer decision: record it on
+      nodenorm-es, or add a separate node-normalization component.
+
+  - name: node-normalization-loader
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's internal name is `nodenorm-loader`, description "Data
+      loader for node normalization.", appVersion "2.3.26_2025sep1". Same
+      Redis-backed NodeNorm generation as node-normalization-web-server
+      above (image ghcr.io/ncatstranslator/nodenormalization*).
+    note: >-
+      Same maintainer decision as node-normalization-web-server: record on
+      nodenorm-es, or add a node-normalization component.
+
+  - name: r3
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "A Helm chart for r3" and gives no other
+      detail. Its values name image ghcr.io/ncatstranslator/nodenormalization*
+      and web.serverName infores:sri-node-normalizer — the same current,
+      Redis-backed NodeNorm as the two charts above, paired with
+      redis-r3-external below.
+    note: >-
+      Same maintainer decision as node-normalization-web-server: record on
+      nodenorm-es, or add a node-normalization component.
+
+  # --- Unattributed: infrastructure / adjacent programme ---------------------
+
+  - name: icees-api
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; appVersion
+      "1-2". ICEES (Integrated Clinical and Environmental Exposures
+      Service) is an NCATS programme adjacent to Translator, not a
+      Translator component itself — distinct from automat-icees-kg, the
+      Automat-wrapped KP already tracked above.
+
+  - name: redis-r3-external
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml's description is "Redis Chart wrapper", declaring seven
+      bitnami/redis 23.1.1 dependencies aliased id-id, id-eq-id,
+      id-categories, conflation-db, semantic-count, info-content and
+      chemical-drug-db — the conflation/equivalent-id/category Redis
+      databases NodeNorm uses, external to the r3 chart above.
+
+  - name: toss
+    status: unattributed
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Chart.yaml carries the unedited `helm create` description; name,
+      version and appVersion are the only fields present. The chart deploys
+      containers.renci.org/translator/toss, whose purpose is not
+      determinable from the chart alone.
+
+  # --- Not in use: no Chart.yaml, not a chart ---------------------------------
+
+  - name: redirects
+    status: not-in-use
+    first_seen: "2026-09-02"
+    component: null
+    evidence: >-
+      Not a Helm chart: the directory holds raw Kubernetes Ingress
+      manifests (covidkop, robokop-graphs and scentkop redirects) and has
+      no Chart.yaml, unlike the other 49 directories in the index.

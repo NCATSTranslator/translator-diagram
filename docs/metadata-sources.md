@@ -209,6 +209,44 @@ What it uniquely offers is **data provenance**: `babel_version` and
 else exposes them at runtime. `?full=true` adds JVM/OS/cache detail; the
 default is cheap enough for a liveness probe.
 
+## The deployment root
+
+The cheapest question there is, and for a while the one nothing here asked:
+**does anything answer at the deployment's own URL?** `sync-components` sends
+one GET per deployment and saves three fields — status, content type, error —
+under `data/sync/root/<component>/<env>.json`. Never the body: what these
+hosts answer with is a page, and a page under `data/sync/` is a document no
+reader there can parse.
+
+It exists because "reachable" used to mean "an API document parsed", which is
+a different claim and wrong in both directions. Four environments of the
+Translator UI record `openapi: null` — checked, the app answers its own HTML
+to every path — so nothing was ever fetched for them and the page drew four
+live hosts as unreachable, with no HTTP status beside the red dot.
+
+What the roots actually serve, checked 2026-09-02:
+
+| Host | `/` | Version anywhere? |
+|---|---|---|
+| `ui.{ci,test,}.transltr.io`, `transltr-bma-ui-dev.ncats.io` | 200 HTML | no |
+| `kgx-storage.ci.transltr.io` | 200 HTML, a file browser | no |
+| `biothings.{ci,test,}.transltr.io` | 200 HTML | no |
+| `docmetadata.{ci,}.transltr.io` | 200 HTML, 404 elsewhere | no |
+| `ars.ci.transltr.io/ars/api/` | 200 JSON index | no |
+
+Two of those answer a health endpoint and no document: kgx-storage's
+`/health` is `{"metrics_loaded":478,"service":"kgx-storage",
+"status":"healthy"}` and pending-api's `/status` is `{"success":true,
+"status":"green"}`. Both are JSON, neither carries a version, and both are
+recorded as `endpoints.status` so the page can say "up" without inventing a
+number to put beside it.
+
+**A single-page app is worse than a 404.** `biothings.*.transltr.io` answers
+200 `text/html` to a request for `openapi.json`, so the fetch looks like a
+success and the body parses as nothing. Those components record
+`endpoints.openapi: null` — checked, there is none — which is why the format
+distinguishes an absent key from an explicit null.
+
 ## OpenTelemetry collectors
 
 One Jaeger per environment, all three publicly readable:
@@ -331,20 +369,30 @@ ten components with no known deployment at all — `dingo-ingest`, the three
 components have no transltr.io deployment to find, and this is worth not
 retrying: it is the obvious next idea.
 
+One of those ten was wrong, and the way it was wrong is the lesson.
+`docmetadata-api` has no host under its id — but `docmetadata.ci.transltr.io`
+and `docmetadata.transltr.io` both answer, because the stem is the component
+minus the `-api`. Nothing derives that, and nothing should: a rule that
+strips suffixes until something resolves would attach hosts to components on
+the strength of a truncation. Both are recorded in
+`components/docmetadata-api.yaml` by hand, with a note saying they were found
+by observation and confirmed by no infores, because none is registered.
+
 ## Helm charts
 
 The public charts are in
 [`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops/tree/develop/helm)
-— 48 of them.
+— 50 directories under `helm/` on `develop` as of 2026-09-02, one of which
+(`redirects`) is raw Ingress manifests with no `Chart.yaml` at all.
 
 ```bash
 gh api "repos/helxplatform/translator-devops/contents/helm?ref=develop" \
   --jq '.[] | select(.type=="dir") | .name'
 ```
 
-**Coverage is the first problem.** Only five of those charts belong to the 26
-components recorded here — `answer-appraiser`, `jaeger`, `name-lookup`,
-`shepherd`, `test-harness` — and they cover seven components, because all
+**Coverage is the first problem.** Six of those charts are recorded by the 26
+components here — `answer-appraiser`, `gandalf`, `jaeger`, `name-lookup`,
+`shepherd`, `test-harness` — and they cover eight components, because all
 three `shepherd-*` components share one chart. The rest are deployed from
 charts that are private, elsewhere, or not Helm at all. Two components are
 confirmed to have no chart at all rather than an unfound one:
@@ -404,6 +452,39 @@ solr:            {image: solr, version: "9.1"}
 renciPythonImage:{image: ghcr.io/translatorsri/renci-python-image, version: latest}
 ```
 
+### Matching a chart to a component
+
+`components.chart_matches` tries five rules and stops at the first that
+matches, ordered by how much each claims:
+
+| Rule | Confidence | Reads |
+|---|---|---|
+| `identifiers.helm_chart` names the chart | `recorded` | the component file |
+| the chart name is a component id | `strong` | the component file |
+| the chart name is one of `otel_services` | `strong` | the component file |
+| the chart's values name the component's infores | `strong` | `values.yaml` |
+| an image repository names the source repository | `plausible` | `values.yaml`, `ncats-images-meta.yaml` |
+
+The last two only ever fire for charts a component already claims, because
+`values.yaml` and `ncats-images-meta.yaml` are fetched for those alone —
+`Chart.yaml` is fetched for all fifty. That is the cache staying proportional
+to what the page can show, and it means the two evidence-based rules currently
+confirm recorded matches rather than finding new ones.
+
+Run over today's cache: **7 charts of 50 attributed, 43 not**. Six are
+recorded; the seventh is `aragorn`, matched to `shepherd-aragorn` because
+that component records the OpenTelemetry service `aragorn`. **That one is a
+name collision, not a finding**: the chart deploys the standalone ARAGORN
+stack, not the Shepherd worker, and nothing in it names the component. It is
+the rule that finds `gandalf` for `dogpark-tier-0`, where the chart also
+carries `provenanceTag: infores:dogpark-tier0`; without a second piece of
+evidence a name match is worth reporting and not worth recording.
+
+The 43 remaining are named in the sync summary and land in the payload as
+`unclaimed_charts`. They are never written into a component file: those and
+`unknown.yaml` are hand-edited and test-enforced, and the matcher's job is to
+say what needs deciding, not to decide it.
+
 **Conclusion:** charts are not usable for *identity* today, but they are the
 only source for resources and data downloads, and they are the one artifact
 every deployed component must have. That makes them the natural place to
@@ -416,7 +497,8 @@ questions in [`component-metadata.md`](component-metadata.md).
 curl -sL https://raw.githubusercontent.com/biolink/information-resource-registry/main/infores_catalog.yaml
 ```
 
-496 entries under one `information_resources:` key. LinkML-schema'd, with a
+498 entries under one `information_resources:` key (496 when this was first
+surveyed). LinkML-schema'd, with a
 rule making `knowledge_level` and `agent_type` required once `status:
 released`.
 
@@ -439,6 +521,13 @@ deployment.** What it does uniquely offer is `consumes`/`consumed_by`, which
 makes the catalog a dataflow graph in its own right — worth comparing against
 ours, though it describes knowledge flow between resources rather than API
 calls between services.
+
+Measured on the current cache: 9 of the 26 components record an infores, all
+9 are in the catalog, and between them they yield **9 edges with both ends on
+a component here** (`catalog_edges` in the payload). Every other reference
+points at a knowledge source with no component file — `infores:arax` alone
+consumes 44 of them — which is why both ends have to resolve to a row before
+an edge is drawn.
 
 Two reasons it cannot be our primary key: it mixes upstream data sources
 (`infores:aact`) with Translator software (`infores:arax`) with no field

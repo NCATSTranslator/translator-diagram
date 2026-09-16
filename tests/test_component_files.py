@@ -49,6 +49,23 @@ def components() -> dict[str, dict]:
     return {path.stem: _load(path) for path in COMPONENT_FILES}
 
 
+@pytest.fixture(scope="module")
+def claimed_charts(components) -> dict[str, list[str]]:
+    """Chart name -> the component ids recording it.
+
+    A list, not a single id: `identifiers.helm_chart` is one name or several,
+    and three shepherd components legitimately share one chart.
+    """
+    claimed: dict[str, list[str]] = {}
+    for cid, data in components.items():
+        recorded = (data.get("identifiers") or {}).get("helm_chart")
+        if isinstance(recorded, str):
+            recorded = [recorded]
+        for name in recorded or []:
+            claimed.setdefault(name, []).append(cid)
+    return claimed
+
+
 def test_there_are_components():
     # A glob that quietly matches nothing would make every test below pass.
     assert COMPONENT_FILES, f"no *.yaml under {COMPONENTS_DIR}"
@@ -57,6 +74,20 @@ def test_there_are_components():
 class TestSchema:
     def test_schema_is_itself_valid(self, schema):
         jsonschema.Draft202012Validator.check_schema(schema)
+
+    def test_helm_chart_takes_one_name_or_several(self, schema):
+        # One component can be deployed by two charts -- a web server and its
+        # loader -- and the alternative to widening this key was inventing a
+        # second one that means the same thing.
+        validator = jsonschema.Draft202012Validator(schema)
+        document = _load(COMPONENTS_DIR / "name-lookup.yaml")
+        for value in ("name-lookup", ["web-server", "loader"], None):
+            document["identifiers"]["helm_chart"] = value
+            assert not list(validator.iter_errors(document)), value
+        # ...but not the same chart twice, which would fetch it twice and read
+        # as two deployments.
+        document["identifiers"]["helm_chart"] = ["shepherd", "shepherd"]
+        assert list(validator.iter_errors(document))
 
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
@@ -196,6 +227,33 @@ class TestUnknown:
                 f"deleting the unknown.yaml entry"
             )
             owners[name] = "unknown.yaml"
+
+    def test_helm_charts_are_claimed_once(self, unknown, claimed_charts):
+        # The mirror of the OTel rule, with one difference: a chart may be
+        # claimed by several components -- the three shepherds share one -- so
+        # what must not happen is a chart being claimed here *and* held in the
+        # pen, which is how a chart ends up recorded and reported unattributed
+        # at the same time.
+        for entry in unknown.get("helm_charts") or []:
+            name = entry["name"]
+            assert name not in claimed_charts, (
+                f"Helm chart {name!r} is in unknown.yaml but is already "
+                f"claimed by {', '.join(claimed_charts[name])} — promote it by "
+                f"deleting the unknown.yaml entry"
+            )
+
+    def test_a_not_recorded_chart_is_not_already_recorded(self, unknown, claimed_charts):
+        # `not-recorded` on a chart means "we know which component this
+        # deploys, and that component's file does not say so yet". Once it
+        # does, the entry is stale and this fails rather than letting it rot.
+        for entry in unknown.get("helm_charts") or []:
+            if entry["status"] != "not-recorded":
+                continue
+            assert entry["component"] not in claimed_charts.get(entry["name"], []), (
+                f"unknown.yaml: chart {entry['name']!r} is marked not-recorded "
+                f"but components/{entry['component']}.yaml now claims it — "
+                f"delete the entry"
+            )
 
     def test_not_recorded_entries_really_have_no_file(self, components, unknown):
         # `not-recorded` means "a component we know of that has no file yet".

@@ -39,16 +39,33 @@ Three of them are not obvious from the file:
 - **Keep clear of the 0.5 luminance line** that `text_color_for` switches on.
   A colour sitting on it has poor contrast whichever side it lands, and an
   innocent nudge flips the text. Material's Purple 300 sits 0.003 from it.
-- **The palette is full.** Its own separation floor is about 31 dE (UI against
-  DOGSURF), and after the reserved hues the usable space is the blue-to-magenta
-  arc, which five teams already share. A tenth owner has no good colour left;
-  `ColorAssigner` will hand it one from `FALLBACK_COLORS`, which none of the
-  above constrains. Re-deriving all of them together reaches about 43, and is
-  the honest fix when it comes to that.
+- **The palette is full.** After the reserved hues the usable space is the
+  blue-to-magenta arc, which five teams already share. A tenth owner has no
+  good colour left; `ColorAssigner` will hand it one from `FALLBACK_COLORS`,
+  which none of the above constrains. Re-deriving all of them together reaches
+  about 43 dE, and is the honest fix when it comes to that. This rule is now
+  tested too: `tests/test_colors.py` fails the build when any two owners are
+  closer than 24 dE (CIE76, in Lab), which is the point where two chips read as
+  the same team rather than as two. The current minimum is CATRAX against
+  Retriever at about 25.6, since CATRAX moved to steel silver; it was about 31
+  (UI against DOGSURF) before that, so the room left is smaller than it looks.
+
+## Metallic rendering is derived
+
+The dashboard does not draw owner colours flat. It draws them as brushed-metal
+coins and rails, and `metallic_stops` computes that finish — a highlight, the
+colour itself, a shadow, and a softer return — from the single hex in this
+file. So changing a colour here changes the chip, the rail and the legend
+together, and nothing else needs editing.
+Writing those gradients out by hand in the CSS and again in the SVG would put
+the same colour in three files that nobody edits together, and the failure mode
+is silent: each looks fine on its own while they disagree about what colour a
+team is.
 
 ## Contrast is tested, hue is not
 
 `tests/test_colors.py` fails the build for a colour below 4.5:1 against the
-black or white `text_color_for` picks for it, so the second rule enforces
-itself. The other three are judgement, and this file is where they are written
-down.
+black or white `text_color_for` picks for it, and again for any two owners
+closer than 24 dE, so the second and fourth rules enforce themselves. The
+reserved hues and the luminance line are judgement, and this file is where they
+are written down.

@@ -22,3 +22,25 @@ connections:
   gets_results_from: []
   calls: []
   externals: []
+
+endpoints:
+  # Checked on 2026-09-02, all three hosts: / is HTML and everything else
+  # 404s. There is no OpenAPI document to fetch and no status endpoint either.
+  openapi: null
+
+environments:
+  ci:
+    url: https://docmetadata.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://docmetadata.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://docmetadata.transltr.io/
+    location: ITRB
+
+notes: >-
+  Hosts follow the conventional ITRB name and answer HTML at / and 404
+  elsewhere; recorded from that observation on 2026-09-02, not confirmed by an
+  infores (none is registered). The stem is the component id minus the `-api`,
+  which is why nothing derived these: ci, test and prod all answer 200.

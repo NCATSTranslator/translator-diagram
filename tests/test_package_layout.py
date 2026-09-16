@@ -42,7 +42,10 @@ ALLOWED = {
     # nothing about where they came from, and dashboard can apply it without
     # anything in the graph moving.
     "privacy": set(),
-    "dashboard": {"colors", "components", "flow", "privacy"},
+    # payload_details is a leaf for the same reason: dict in, dict out, so the
+    # shaping can be tested without a network, a checkout or a rendered page.
+    "payload_details": set(),
+    "dashboard": {"colors", "components", "flow", "payload_details", "privacy"},
     "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
 }
 
