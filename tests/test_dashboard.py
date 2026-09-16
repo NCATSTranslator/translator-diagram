@@ -20,7 +20,6 @@ from translator_diagram.dashboard import (
     _live_openapi_facts,
     _mark_drift,
     _release_chips,
-    _same_version,
     _status_facts,
     build_catalog_edges,
     build_edges,
@@ -35,6 +34,7 @@ from translator_diagram.dashboard import (
     stage_blocks,
     write_dashboard,
 )
+from translator_diagram.payload_details import releases_detail
 
 
 def _comp(cid, **kwargs):
@@ -1242,40 +1242,26 @@ def _release(tag, **kwargs):
     }
 
 
-class TestSameVersion:
-    def test_the_v_prefix_is_ignored(self):
-        # NameResolution tags v1.5.2 and reports 1.5.2.
-        assert _same_version("v1.5.2", "1.5.2")
-        assert _same_version("1.5.2", "V1.5.2")
-
-    def test_different_versions_do_not_match(self):
-        assert not _same_version("v1.5.2", "1.5.1")
-        # node-annotator reports "1.0" in ci and "1.0.0" in prod; they are not
-        # the same string, and guessing they are the same release would put a
-        # wrong link on a row.
-        assert not _same_version("v1.0.0", "1.0")
-
-    def test_a_missing_side_never_matches(self):
-        assert not _same_version(None, "1.0")
-        assert not _same_version("v1.0", None)
+def _chips(entries, running):
+    return _release_chips(releases_detail(entries, running))
 
 
 class TestReleaseChips:
     def test_the_newest_few(self):
         entries = [_release(f"v{n}.0.0") for n in (9, 8, 7, 6, 5)]
-        assert [c["tag"] for c in _release_chips(entries, set())] == [
+        assert [c["tag"] for c in _chips(entries, set())] == [
             "v9.0.0", "v8.0.0", "v7.0.0"]
 
     def test_a_deployed_older_release_is_kept(self):
         # answer-appraiser's prod trails its ci by two minor versions; the
         # notes for what prod is running are the ones worth a link.
         entries = [_release(f"v0.{n}.0") for n in (8, 7, 6, 5, 4)]
-        chips = _release_chips(entries, {"0.4.0"})
+        chips = _chips(entries, {"0.4.0"})
         assert [c["tag"] for c in chips] == ["v0.8.0", "v0.7.0", "v0.6.0", "v0.4.0"]
         assert [c["deployed"] for c in chips] == [False, False, False, True]
 
     def test_a_deployed_newest_release_is_marked_not_duplicated(self):
-        chips = _release_chips([_release("v2.0.0"), _release("v1.0.0")], {"2.0.0"})
+        chips = _chips([_release("v2.0.0"), _release("v1.0.0")], {"2.0.0"})
         assert [(c["tag"], c["deployed"]) for c in chips] == [
             ("v2.0.0", True), ("v1.0.0", False)]
 
@@ -1287,13 +1273,13 @@ class TestReleaseChips:
             _release("v1.5.2", published_at="2026-04-08T00:00:00Z"),
             _release("v1.6.2", published_at="2026-02-20T00:00:00Z"),
         ]
-        assert [c["published"] for c in _release_chips(entries, set())] == [
+        assert [c["published"] for c in _chips(entries, set())] == [
             "2026-07-23", "2026-04-08", "2026-02-20"]
 
     def test_drafts_are_dropped(self):
         # Invisible without a token, visible with one: a link that works only
         # for whoever ran the sync is worse than no link.
-        chips = _release_chips(
+        chips = _chips(
             [_release("v2.0.0", draft=True), _release("v1.0.0")], set()
         )
         assert [c["tag"] for c in chips] == ["v1.0.0"]
@@ -1309,7 +1295,7 @@ class TestReleaseChips:
             _release("v5.0.0", published_at="2026-08-05T00:00:00Z"),
             _release("v4.0.0", published_at="2026-08-04T00:00:00Z"),
         ]
-        assert [c["tag"] for c in _release_chips(entries, set())] == [
+        assert [c["tag"] for c in _chips(entries, set())] == [
             "v7.0.0", "v6.0.0", "v5.0.0"]
 
     def test_a_tagless_entry_does_not_either(self):
@@ -1319,20 +1305,20 @@ class TestReleaseChips:
             _release("v6.0.0", published_at="2026-08-06T00:00:00Z"),
             _release("v5.0.0", published_at="2026-08-05T00:00:00Z"),
         ]
-        assert [c["tag"] for c in _release_chips(entries, set())] == [
+        assert [c["tag"] for c in _chips(entries, set())] == [
             "v7.0.0", "v6.0.0", "v5.0.0"]
 
     def test_the_fields_the_page_renders(self):
-        chip = _release_chips([_release("v1.0.0", prerelease=True)], set())[0]
+        chip = _chips([_release("v1.0.0", prerelease=True)], set())[0]
         assert chip["url"] == "https://github.com/a/b/releases/tag/v1.0.0"
         assert chip["published"] == "2026-08-01"
         assert chip["prerelease"] is True
 
     def test_an_entry_without_a_tag_is_skipped(self):
-        assert _release_chips([{"html_url": "https://x/"}], set()) == []
+        assert _chips([{"html_url": "https://x/"}], set()) == []
 
     def test_no_releases_at_all(self):
-        assert _release_chips([], {"1.0.0"}) == []
+        assert _chips([], {"1.0.0"}) == []
 
 
 class TestReleasesOnRows:

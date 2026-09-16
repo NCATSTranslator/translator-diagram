@@ -136,13 +136,16 @@
      its notes one click away. A release running somewhere is marked rather
      than merely listed; that mark is the link between this column and the four
      to its right. */
+  function releaseChip(row, release) {
+    return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
+      href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
+      data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
+  }
+
   function releaseChips(row) {
     return (row.releases || [])
       .filter((release) => release.url)
-      .map((release) =>
-        `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-          data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
+      .map((release) => releaseChip(row, release))
       .join("");
   }
 
@@ -357,15 +360,10 @@
       detailLabelCells(field.label)}${cells_}</tr>`;
   }
 
+  /* `releases` is a slice of `releases_detail` (see `_release_chips`), so the
+     expanded strip and the tooltips read the full list and nothing else. */
   function releaseChipsAll(row) {
-    const detail = (row.releases_detail || []).length ? row.releases_detail : (row.releases || []);
-    return detail
-      .filter((release) => release.tag)
-      .map((release) =>
-        `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-          data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
-      .join("");
+    return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
   function detailReleasesRow(row, chips, group, flags) {
@@ -505,8 +503,7 @@
     if (kind === "rel") {
       const row = rowById(target.dataset.id);
       if (!row) return "";
-      const all = (row.releases_detail || []).concat(row.releases || []);
-      const release = all.find((entry) => entry.tag === target.dataset.tag);
+      const release = (row.releases_detail || []).find((entry) => entry.tag === target.dataset.tag);
       if (!release) return "";
       const where = release.deployed ? "Running in an environment on this row" : "";
       return `<div class="title">${esc(release.tag)}</div><dl>${

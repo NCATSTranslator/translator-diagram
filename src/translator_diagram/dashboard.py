@@ -44,6 +44,7 @@ from .payload_details import (
     helm_detail,
     releases_detail,
     repo_meta_detail,
+    same_version,
     smartapi_detail,
 )
 from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
@@ -1032,70 +1033,34 @@ def _mark_running_release(
         if not cell.get("deployed") or not version:
             continue
         for chip in chips:
-            if _same_version(chip["tag"], version):
+            if same_version(chip["tag"], version):
                 cell["released"] = chip["published"]
                 cell["release_tag"] = chip["tag"]
                 cell["release_url"] = chip["url"]
                 break
 
 
-def _same_version(a: str | None, b: str | None) -> bool:
-    """Whether a release tag and a reported version name the same release.
-
-    Only the `v` prefix is normalised away, because that is the only difference
-    that actually occurs here: NameResolution tags `v1.5.2` and reports
-    `1.5.2`. Anything cleverer — stripping suffixes, comparing as semver —
-    would start claiming matches that are not there, and a wrong release-notes
-    link is worse than none.
-    """
-    if not a or not b:
-        return False
-    return a.strip().lower().removeprefix("v") == b.strip().lower().removeprefix("v")
-
-
-def _release_chips(
-    entries: list[dict[str, Any]], deployed: set[str]
-) -> list[dict[str, Any]]:
-    """The releases worth showing for one component, newest first.
+def _release_chips(detail: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The releases the Repository column shows, out of `releases_detail`.
 
     The newest few, plus any older release that some environment is running:
     prod lags dev often enough that the newest three would miss the version the
-    reader is looking at, which is the one whose notes they want.
-
-    Drafts are dropped. They are invisible to an unauthenticated fetch, so they
-    appear only once someone sets a GITHUB_TOKEN — and a link that works for
-    the person who ran the sync and 404s for everyone else is a trap.
+    reader is looking at, which is the one whose notes they want. The detail
+    list has already sorted by publication date, dropped drafts and marked what
+    is running, so this only cuts it shorter.
     """
-    # GitHub orders /releases by when the release was *created*, which is not
-    # when it was published: NameResolution's v1.5.2 was published after
-    # v1.6.2. The dates are on the chips, so the order has to match them.
-    ordered = sorted(
-        entries, key=lambda entry: entry.get("published_at") or "", reverse=True
-    )
-    chips = []
-    shown = 0
-    for entry in ordered:
-        tag = entry.get("tag_name")
-        if not tag or entry.get("draft"):
-            continue
-        running = any(_same_version(tag, version) for version in deployed)
-        # Counted after the skips, not from the enumeration: a repository
-        # whose two newest entries are drafts showed one chip where it should
-        # show three, because the drafts spent two of the three places.
-        if shown >= RELEASES_SHOWN and not running:
-            continue
-        shown += 1
-        chips.append(
-            {
-                "tag": tag,
-                "name": entry.get("name") or tag,
-                "url": entry.get("html_url"),
-                "published": (entry.get("published_at") or "")[:10],
-                "prerelease": bool(entry.get("prerelease")),
-                "deployed": running,
-            }
-        )
-    return chips
+    return [
+        {
+            "tag": entry["tag"],
+            "name": entry["name"] or entry["tag"],
+            "url": entry["url"],
+            "published": entry["published"] or "",
+            "prerelease": bool(entry["prerelease"]),
+            "deployed": entry["deployed"],
+        }
+        for index, entry in enumerate(detail)
+        if index < RELEASES_SHOWN or entry["deployed"]
+    ]
 
 
 def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
@@ -1263,10 +1228,11 @@ def build_rows(
 
         source_repo = github_repo(component.repository("source"))
         releases = synced.releases(source_repo)
-        chips = _release_chips(
+        detail = releases_detail(
             releases,
             {version for cell in cells.values() if (version := cell.get("version"))},
         )
+        chips = _release_chips(detail)
         _mark_running_release(cells, chips)
 
         uptime = ((record.get("_status") or {}).get("uptime_status")) or None
@@ -1365,9 +1331,7 @@ def build_rows(
                     if component.hosted_at not in (None, "ITRB")
                     else "none-in-devops"
                 ),
-                "releases_detail": releases_detail(
-                    releases, {chip["tag"] for chip in chips if chip["deployed"]}
-                ),
+                "releases_detail": detail,
                 # The source repository's own description, branch and activity.
                 # `pushed_at` in it is deliberately not fed into `last_updated`:
                 # a push is not a release, and ranking it beside one would date

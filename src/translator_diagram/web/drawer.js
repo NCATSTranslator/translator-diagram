@@ -512,22 +512,21 @@
 
   /* --- Releases tab -------------------------------------------------------- */
 
-  /* Which environments run this tag. Two sources, deliberately: `releases[]`
-     carries a `deployed` flag computed on the Python side, and the environment
-     cells carry the tag they are actually running. The second is what names
-     the environments, which is the part a reader asks about. */
-  function deployedIn(row, tag) {
+  /* Which environments run this release. Two sources, deliberately: the
+     release carries a `deployed` flag computed on the Python side, and the
+     environment cells carry the tag they are actually running. The second is
+     what names the environments, which is the part a reader asks about. */
+  function deployedIn(row, release) {
     const where = envs().filter((env) => {
       const cell = (row.environments || {})[env];
-      return cell && cell.deployed && cell.release_tag === tag;
+      return cell && cell.deployed && cell.release_tag === release.tag;
     });
     if (where.length) return where;
-    const short = list(row.releases).find((release) => release && release.tag === tag);
-    return short && short.deployed ? [] : null;
+    return release.deployed ? [] : null;
   }
 
   function releaseItem(row, release) {
-    const where = deployedIn(row, release.tag);
+    const where = deployedIn(row, release);
     const isDeployed = where !== null;
     const marks = [];
     if (isDeployed) {
@@ -551,8 +550,7 @@
   }
 
   function panelReleases(row) {
-    const detail = list(row.releases_detail).length ? list(row.releases_detail) : list(row.releases);
-    const usable = detail.filter((release) => release && release.tag);
+    const usable = list(row.releases_detail);
     if (!usable.length) return sections([muted("No releases recorded.")]);
     const items = usable.map((release) => releaseItem(row, release));
     const head = items.slice(0, LIST_LIMIT).join("");

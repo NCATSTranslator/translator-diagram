@@ -29,6 +29,7 @@ one upstream document changed shape is reporting on itself rather than on the
 platform.
 """
 
+from collections.abc import Iterable
 from html.parser import HTMLParser
 from typing import Any
 
@@ -492,15 +493,35 @@ def _is_placeholder(value: Any) -> bool:
 # --- GitHub ----------------------------------------------------------------
 
 
-def releases_detail(
-    entries: Any, running: set[str] = frozenset()
-) -> list[dict[str, Any]]:
-    """The newest releases, newest first, drafts left out.
+def same_version(a: str | None, b: str | None) -> bool:
+    """Whether a release tag and a reported version name the same release.
 
-    Plus any older release whose tag is in `running`, marked `deployed` like
-    the row's chips are: prod lags often enough that the newest ten miss the
-    release a reader has in front of them, and a list that drops it cannot
-    mark it either.
+    Only the `v` prefix is normalised away, because that is the only difference
+    that actually occurs here: NameResolution tags `v1.5.2` and reports
+    `1.5.2`. Anything cleverer — stripping suffixes, comparing as semver —
+    would start claiming matches that are not there, and a wrong release-notes
+    link is worse than none.
+    """
+    if not a or not b:
+        return False
+    return a.strip().lower().removeprefix("v") == b.strip().lower().removeprefix("v")
+
+
+def releases_detail(
+    entries: Any, running: Iterable[str] = ()
+) -> list[dict[str, Any]]:
+    """The newest releases, newest first, drafts and untagged entries left out.
+
+    Plus any older release some environment is running — a tag that
+    `same_version` matches to one of the `running` versions — marked
+    `deployed`: prod lags often enough that the newest ten miss the release a
+    reader has in front of them, and a list that drops it cannot mark it either.
+    The row's release chips are a projection of this list, so the two cannot
+    disagree about what is running.
+
+    Drafts are dropped because they are invisible to an unauthenticated fetch:
+    they appear only once someone sets a GITHUB_TOKEN, and a link that works
+    for the person who ran the sync and 404s for everyone else is a trap.
 
     Two things this gets right that the same code got wrong elsewhere first.
     The cut counts entries *kept*: two drafts at the top of the list must not
@@ -515,12 +536,13 @@ def releases_detail(
     """
     if not isinstance(entries, list):
         return []
+    running = list(running)
     kept: list[dict[str, Any]] = []
     for entry in sorted(_items(entries), key=_published_key, reverse=True):
-        if entry.get("draft"):
-            continue
         tag = _text(entry.get("tag_name"))
-        deployed = tag in running
+        if not tag or entry.get("draft"):
+            continue
+        deployed = any(same_version(tag, version) for version in running)
         if len(kept) >= RELEASES_DETAILED and not deployed:
             continue
         kept.append(
