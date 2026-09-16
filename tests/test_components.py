@@ -430,6 +430,12 @@ class TestSmartapiRecordFor:
         assert record["_id"] == "def"
         assert (matched_by, candidates) == ("id", [])
 
+    def test_a_stale_recorded_id_does_not_fall_back_to_the_infores(self):
+        hits = [self._hit("new", "infores:svc")]
+        assert smartapi_record_for(
+            _parse(identifiers={"smartapi": "gone", "infores": "infores:svc"}), hits
+        ) == (None, None, [])
+
     def test_one_record_claiming_the_infores(self):
         hits = [self._hit("abc", "infores:other"), self._hit("def", "infores:svc")]
         record, matched_by, candidates = smartapi_record_for(

@@ -571,9 +571,13 @@ def smartapi_record_for(
     """
     recorded = component.smartapi_id
     if recorded:
+        # A recorded id that is not in the registry attaches nothing. Falling
+        # back to the infores here would dress a guess up as the record
+        # somebody chose, and hide that their id has gone stale.
         for hit in hits:
             if hit.get("_id") == recorded:
                 return hit, "id", []
+        return None, None, []
     infores = component.infores
     if not infores:
         return None, None, []
