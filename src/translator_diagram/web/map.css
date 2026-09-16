@@ -128,8 +128,6 @@
 .mp-node.sel .mp-box { stroke: var(--accent); stroke-width: 2; }
 .mp-node:focus { outline: none; }
 .mp-node:focus-visible .mp-box { stroke: var(--accent); stroke-width: 2; }
-.mp-node:focus-visible .mp-focus { stroke: var(--accent); stroke-width: 1; }
-.mp-focus { fill: none; stroke: none; }
 
 .mp-name {
   font-family: var(--font);

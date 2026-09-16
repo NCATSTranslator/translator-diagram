@@ -47,7 +47,7 @@
   /* --- Small helpers ------------------------------------------------------- */
 
   const esc = (value) => TD.fmt.esc(value);
-  const DASH = '<span class="dash">—</span>';
+  const DASH = TD.fmt.DASH;
 
   const data = () => TD.DATA || {};
   const envs = () => (Array.isArray(TD.ENVS) && TD.ENVS.length ? TD.ENVS : []);
@@ -106,11 +106,11 @@
      eases. The grid-template-rows 0fr→1fr trick is what does the easing; it
      collapses to nothing under prefers-reduced-motion because --dur-layout
      does. */
-  function disclosure(summary, html, open) {
+  function disclosure(summary, html) {
     if (!html) return "";
     const id = `dw-disc-${++discId}`;
     return `<button type="button" class="dw-disc" data-disc="${id}"
-        aria-expanded="${open ? "true" : "false"}" aria-controls="${id}"
+        aria-expanded="false" aria-controls="${id}"
         >${TD.ui.CHEVRON}<span>${esc(summary)}</span></button>
       <div class="dw-disc-body" id="${id}"><div>${html}</div></div>`;
   }
@@ -148,7 +148,7 @@
       <tbody>${body}</tbody></table></div>`;
   }
 
-  const sourceLabel = (key) => (data().source_labels || {})[key] || key;
+  const sourceLabel = TD.fmt.sourceLabel;
 
   /* Colour is never the only carrier here either: the dot has a word beside
      it in every place it is used. */
@@ -166,22 +166,16 @@
   /* --- Header -------------------------------------------------------------- */
 
   /* Derived from the same four stops colors.py hands the map, so the rule
-     under the name and the rail on the map node are the same metal. A build
-     from before owner_styles existed still gets the flat hex; a component
-     with no owner at all gets a hairline rather than a gap. */
+     under the name and the rail on the map node are the same metal. A
+     component with no owner style gets a hairline rather than a gap. */
   function metalRule(owner) {
-    const style = TD.owner.style(owner);
-    if (!style) return "background: var(--hairline-strong)";
-    const metal = Array.isArray(style.metal) && style.metal.length >= 4
-      ? `linear-gradient(90deg, ${style.metal.join(", ")})`
-      : style.base;
-    return `background: ${metal}`;
+    return `background: ${TD.owner.metal(owner, "90deg") || "var(--hairline-strong)"}`;
   }
 
   function headerLinks(row) {
     const links = [];
     if (row.repository) links.push(ext(row.repository, "Repository"));
-    const doc = list(row.docs)[0] || (row.documentation ? { url: row.documentation } : null);
+    const doc = list(row.docs)[0];
     if (doc && doc.url) links.push(ext(doc.url, "Docs"));
     if (row.translator_all_wiki) {
       links.push(ext(WIKI_BASE + row.translator_all_wiki, "Wiki"));
@@ -260,7 +254,7 @@
 
   function docsHtml(row) {
     const docs = list(row.docs);
-    if (!docs.length) return row.documentation ? stack([ext(row.documentation)]) : "";
+    if (!docs.length) return "";
     return stack(docs.map((doc) =>
       `${ext(doc.url, docLabel(doc.url))} ${doc.kind ? note(doc.kind) : ""}`));
   }
@@ -604,7 +598,7 @@
 
   function panelHelm(row) {
     const charts = list(row.helm_charts);
-    const status = row.helm_status || (charts.length ? "recorded" : null);
+    const status = row.helm_status;
     const parts = [caption(
       "From the chart in translator-devops: what should be deployed, not what is running.")];
 
@@ -641,24 +635,12 @@
           c.title ? esc(c.title) : ""}`));
   }
 
-  function suggestionHtml(row) {
-    const hits = list(data().smartapi_suggestions)
-      .filter((entry) => entry && entry.component === row.id);
-    if (!hits.length) return "";
-    return caption("The registry holds an entry matching this component's infores, "
-      + "which the component file does not record:")
-      + stack(hits.map((hit) =>
-        `${ext(`https://smart-api.info/ui/${hit.smartapi_id}`, hit.smartapi_id, "dw-link dw-mono")} ${
-          hit.title ? esc(hit.title) : ""} ${note(`matched by ${hit.matched_by || "infores"}`)}`));
-  }
-
   function panelSmartapi(row) {
     const record = row.smartapi_record;
     if (!record) {
       return sections([
         muted("Not registered in SmartAPI."),
         candidatesHtml(row),
-        suggestionHtml(row),
       ]);
     }
 
@@ -1166,7 +1148,5 @@
   /* --- Public API ---------------------------------------------------------- */
 
   drawer.open = open;
-  drawer.close = close;
   drawer.isOpen = () => !!root && !root.hidden;
-  drawer.current = () => (drawer.isOpen() ? currentId : "");
 })();

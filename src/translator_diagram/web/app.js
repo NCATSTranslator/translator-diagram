@@ -128,7 +128,7 @@
     const named = ["openapi", "status", "smartapi", "helm"]
       .filter((key) => tally[key])
       .map((key) => `<strong>${tally[key]}</strong> from ${
-        esc((DATA.source_labels || {})[key] || key)}`);
+        esc(TD.fmt.sourceLabel(key))}`);
     const none = tally.none
       ? `, and <strong>${tally.none}</strong> from nothing at all`
       : "";

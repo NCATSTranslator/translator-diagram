@@ -92,7 +92,10 @@
     } catch { return ""; }
   }
 
-  TD.fmt = { esc, relativeAge, since, plural, host, href, DASH: '<span class="dash">—</span>' };
+  /* The payload's name for a version source, or the key itself. */
+  const sourceLabel = (key) => ((TD.DATA || {}).source_labels || {})[key] || key;
+
+  TD.fmt = { esc, relativeAge, since, plural, host, href, sourceLabel, DASH: '<span class="dash">—</span>' };
 
   /* --- Motion ------------------------------------------------------------ */
 
@@ -107,38 +110,32 @@
 
   /* --- Owner colour ------------------------------------------------------ */
 
-  /* owner_styles is the newer key: base colour, readable text colour and the
-     four metallic stops, all derived by colors.py from the one hex in
-     config/owner-colors.csv. A build made before that key existed still has
-     the flat owner_colors map, so the coin degrades to a flat fill rather
-     than disappearing. */
+  /* Base colour, readable text colour and the four metallic stops, all
+     derived by colors.py from the one hex in config/owner-colors.csv. The
+     payload is inlined into the same page as this script, so owner_styles is
+     always there; an owner missing from it has no style. */
   function ownerStyle(name) {
-    const data = TD.DATA || {};
-    const style = (data.owner_styles || {})[name];
-    if (style && style.base) return style;
-    const flat = (data.owner_colors || {})[name];
-    return flat ? { base: flat, text: null, metal: null } : null;
+    return ((TD.DATA || {}).owner_styles || {})[name] || null;
+  }
+
+  /* The brushed-metal gradient for one owner, at an angle: the coin, the
+     drawer's rule and the map's rail all draw the same four stops. */
+  function ownerMetal(name, angle) {
+    const style = ownerStyle(name);
+    return style ? `linear-gradient(${angle}, ${style.metal.join(", ")})` : "";
   }
 
   const HIGHLIGHT = "radial-gradient(circle at 32% 28%, rgba(255,255,255,.55), rgba(255,255,255,0) 62%)";
 
-  function ownerBackground(name) {
-    const style = ownerStyle(name);
-    if (!style) return "";
-    const metal = Array.isArray(style.metal) && style.metal.length >= 4
-      ? `linear-gradient(135deg, ${style.metal.join(", ")})`
-      : style.base;
-    return `${HIGHLIGHT}, ${metal}`;
-  }
-
   function ownerCoin(name, extraClass) {
-    const background = ownerBackground(name);
+    const metal = ownerMetal(name, "135deg");
+    const background = metal ? `${HIGHLIGHT}, ${metal}` : "";
     const cls = `coin${extraClass ? ` ${extraClass}` : ""}`;
     const style = background ? ` style="background:${background}"` : "";
     return `<span class="${cls}"${style} aria-hidden="true"></span>`;
   }
 
-  TD.owner = { style: ownerStyle, background: ownerBackground, coin: ownerCoin };
+  TD.owner = { style: ownerStyle, metal: ownerMetal, coin: ownerCoin };
 
   /* --- Sorting ----------------------------------------------------------- */
 
@@ -186,7 +183,7 @@
     return copy.sort(comparator(column, dir));
   }
 
-  TD.sort = { byText, byDate, envRank, comparator, rows: sortRows };
+  TD.sort = { byText, byDate, envRank, rows: sortRows };
 
   /* --- URL state --------------------------------------------------------- */
 
@@ -294,5 +291,5 @@
     return params.toString().replace(/%2C/g, ",");
   }
 
-  TD.url = { DEFAULTS, defaults, vocabulary, parse, serialize, commaList };
+  TD.url = { DEFAULTS, defaults, vocabulary, parse, serialize };
 })();

@@ -201,22 +201,19 @@
     owners.forEach((owner, index) => {
       const id = `mp-metal-${index}`;
       gradientId.set(owner, id);
-      const style = styles[owner] || {};
-      const stops = Array.isArray(style.metal) && style.metal.length >= 4
-        ? style.metal
-        : [style.base, style.base, style.base, style.base];
       const gradient = svg("linearGradient", { id, x1: 0, y1: 0, x2: 1, y2: 1 });
       [0, 0.38, 0.72, 1].forEach((offset, i) => {
-        gradient.append(svg("stop", { offset, "stop-color": stops[i] || style.base || "#888888" }));
+        gradient.append(svg("stop", { offset, "stop-color": styles[owner].metal[i] }));
       });
       defs.append(gradient);
     });
 
     // One clip path for every node, not one per node: the owner rail is a 3px
     // rectangle at x=0 and the clip is applied inside the node's own
-    // translated group, where all the rectangles are the same 188x60.
+    // translated group, where every rectangle is the layout's nodeW x nodeH.
+    const { nodeW, nodeH } = scene.meta.options;
     const clip = svg("clipPath", { id: "mp-nodeclip", clipPathUnits: "userSpaceOnUse" });
-    clip.append(svg("rect", { x: 0, y: 0, width: 188, height: 60, rx: 6 }));
+    clip.append(svg("rect", { x: 0, y: 0, width: nodeW, height: nodeH, rx: 6 }));
     defs.append(clip);
 
     // refX at the tip so the arrowhead's point lands exactly on the port,
@@ -502,7 +499,7 @@
       const nameBox = group.querySelector(".mp-namebox");
       const type = group.querySelector(".mp-type");
       const nodeBox = group.querySelector(".mp-box");
-      const nodeWidth = Number(nodeBox && nodeBox.getAttribute("width")) || 188;
+      const nodeWidth = Number(nodeBox && nodeBox.getAttribute("width")) || scene.meta.options.nodeW;
       const limit = nodeNameLimit(nodeWidth, measuredTextWidth(type, 6));
       if (nameBox) nameBox.setAttribute("width", limit);
       truncate(name, limit);
@@ -1298,8 +1295,6 @@
     else { size(); paint(); }
   };
 
-  map.fit = () => fit(true);
-  map.zoomBy = zoomBy;
   map.ring = ring;
 
   map.focus = function focus(id) {
@@ -1308,15 +1303,5 @@
     flyTo(nodeById.get(id), Math.max(1.25, cam.k));
   };
 
-  map.setEdgeKinds = function setEdgeKinds(kinds) {
-    const list = [...(kinds || [])].filter((kind) => KINDS.some((k) => k.key === kind));
-    allOff = list.length === 0;
-    TD.commit({ edges: list });
-  };
-
-  map.exportSvg = exportSvg;
-  map.exportPng = exportPng;
-  map.exportText = () => exportText();
-  map.KINDS = KINDS;
   map.nodeNameLimit = nodeNameLimit;
 })();

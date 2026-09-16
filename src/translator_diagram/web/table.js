@@ -78,9 +78,7 @@
 
   /* --- Cells --------------------------------------------------------------- */
 
-  function sourceLabel(key) {
-    return (TD.DATA.source_labels || {})[key] || key;
-  }
+  const sourceLabel = TD.fmt.sourceLabel;
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload

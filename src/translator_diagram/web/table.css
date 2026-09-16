@@ -339,12 +339,6 @@ tbody tr.row.sel td {
 /* Deployed, but absent from a SmartAPI record that lists other environments.
    Marked, not coloured: the deployment was confirmed live. */
 .unregistered .version { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
-/* The table's cells no longer print a `≠` — the tint says it and a
-   visually-hidden sentence says it to a screen reader — but the drawer and the
-   map still do, and this is where the class has always been defined. Kept so
-   removing it from one surface does not un-style it on two others. */
-.neq { color: var(--drift-ink); font-weight: 600; margin-right: 3px; }
-
 /* One line: version, reachability, source. Inline-flex so the source word
    sits beside it rather than under it. */
 .envline {
@@ -376,11 +370,6 @@ tbody tr.row.sel td {
 .src[data-src="helm"] { border-bottom: 1px solid var(--hairline-strong); }
 .src[data-src="registry"] { border-bottom: 1px solid var(--hairline-strong); }
 td.env .src { margin-left: 5px; }
-
-/* The per-cell detail line is gone from the row: TRAPI, Biolink, the release
-   date and the host are all in the open row's detail, one field per line and
-   under the right column, and in the tooltip before that. */
-.sub { display: none; }
 
 /* What a cell says when it has no version: why not, in the words the payload
    uses. Two lines at most — past that it is a sentence, and a sentence
