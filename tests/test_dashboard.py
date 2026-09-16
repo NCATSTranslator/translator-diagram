@@ -922,8 +922,9 @@ class TestReachable:
         assert _cell(probes)["reachable"] is False
 
     def test_a_404_at_the_root_is_still_not_reachable(self, tmp_path):
-        # Kept for the old contract: a 404 is the host saying "not here", and
-        # `reachable` counts 2xx and 3xx only.
+        # Deliberate: an ingress answers 404 for a deployment that has gone
+        # away, so `reachable` counts 2xx and 3xx only. The 404 still shows as
+        # the cell's HTTP status.
         assert _cell(_Probes(tmp_path).probe("ci", 404))["reachable"] is False
 
     def test_a_redirect_counts_as_up(self, tmp_path):
