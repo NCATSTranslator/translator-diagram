@@ -492,8 +492,15 @@ def _is_placeholder(value: Any) -> bool:
 # --- GitHub ----------------------------------------------------------------
 
 
-def releases_detail(entries: Any) -> list[dict[str, Any]]:
+def releases_detail(
+    entries: Any, running: set[str] = frozenset()
+) -> list[dict[str, Any]]:
     """The newest releases, newest first, drafts left out.
+
+    Plus any older release whose tag is in `running`, marked `deployed` like
+    the row's chips are: prod lags often enough that the newest ten miss the
+    release a reader has in front of them, and a list that drops it cannot
+    mark it either.
 
     Two things this gets right that the same code got wrong elsewhere first.
     The cut counts entries *kept*: two drafts at the top of the list must not
@@ -512,9 +519,14 @@ def releases_detail(entries: Any) -> list[dict[str, Any]]:
     for entry in sorted(_items(entries), key=_published_key, reverse=True):
         if entry.get("draft"):
             continue
+        tag = _text(entry.get("tag_name"))
+        deployed = tag in running
+        if len(kept) >= RELEASES_DETAILED and not deployed:
+            continue
         kept.append(
             {
-                "tag": _text(entry.get("tag_name")),
+                "tag": tag,
+                "deployed": deployed,
                 "name": _text(entry.get("name")),
                 "url": _text(entry.get("html_url")),
                 "published": _date_part(entry.get("published_at")),
@@ -526,8 +538,6 @@ def releases_detail(entries: Any) -> list[dict[str, Any]]:
                 "body_excerpt": strip_html(entry.get("body"), limit=BODY_EXCERPT),
             }
         )
-        if len(kept) == RELEASES_DETAILED:
-            break
     return kept
 
 

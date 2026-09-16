@@ -436,6 +436,16 @@ class TestReleasesDetail:
         assert len(kept) == RELEASES_DETAILED
         assert not [entry for entry in kept if entry["tag"].startswith("draft")]
 
+    def test_a_running_release_past_the_ten_is_kept_and_marked(self):
+        # Prod lags; the release it runs must still be in the list to be marked.
+        entries = [
+            {"tag_name": f"v{i}", "published_at": f"2026-01-{i + 1:02d}T00:00:00Z"}
+            for i in range(RELEASES_DETAILED + 5)
+        ]
+        kept = releases_detail(entries, {"v0", "v14"})
+        assert len(kept) == RELEASES_DETAILED + 1
+        assert [entry["tag"] for entry in kept if entry["deployed"]] == ["v14", "v0"]
+
     def test_published_order_beats_githubs_order(self):
         # GitHub orders by creation, so a release drafted in March and
         # published in September arrives ahead of everything published since.

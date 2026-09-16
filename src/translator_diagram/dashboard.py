@@ -1396,7 +1396,9 @@ def build_rows(
                     if component.hosted_at not in (None, "ITRB")
                     else "none-in-devops"
                 ),
-                "releases_detail": releases_detail(releases),
+                "releases_detail": releases_detail(
+                    releases, {chip["tag"] for chip in chips if chip["deployed"]}
+                ),
                 # The source repository's own description, branch and activity.
                 # `pushed_at` in it is deliberately not fed into `last_updated`:
                 # a push is not a release, and ranking it beside one would date
