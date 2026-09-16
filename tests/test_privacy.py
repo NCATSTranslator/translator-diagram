@@ -9,10 +9,13 @@ import pytest
 from translator_diagram.components import ComponentFile
 from translator_diagram.dashboard import SyncedData, build_payload, build_rows
 from translator_diagram.privacy import (
+    UNCLAIMED_CHART_FREE_TEXT,
     Policy,
     Redaction,
     apply,
     load_policy,
+    patterns_for,
+    scrub,
     verify,
 )
 
@@ -188,6 +191,38 @@ class TestApply:
         assert kept[0]["releases_detail"][0]["body_excerpt"] == "Adds …."
         assert report.mentions == 7
         assert "7 mentions in free text" in report.summary()
+
+    def test_every_free_text_field_on_a_row_is_scrubbed(self):
+        """Repository topics, chart commit subjects, catalog prose and the
+        rest: any of them saying "jaeger" would otherwise fail `verify`."""
+        rows = [
+            {
+                "id": "keep",
+                "smartapi_record": {
+                    "servers": [{"url": "https://x/", "description": "jaeger"}],
+                    "contact": {"name": "jaeger team"},
+                },
+                "smartapi_candidates": [{"smartapi_id": "a", "title": "jaeger"}],
+                "releases": [{"tag": "v1", "name": "jaeger"}],
+                "repository_meta": {"description": "jaeger", "topics": ["jaeger"]},
+                "helm_charts": [
+                    {"description": "jaeger", "last_changed": {"subject": "bump jaeger"}}
+                ],
+                "catalog": {"name": "jaeger", "description": "jaeger"},
+                "environments": {"ci": {"status_message": "jaeger ok"}},
+            },
+            {"id": "jaeger", "environments": {}},
+        ]
+        kept, report = apply(rows, _policy(components=["jaeger"]))
+        assert "jaeger" not in json.dumps(kept)
+        assert report.mentions == 11
+
+    def test_unclaimed_chart_descriptions_are_scrubbed(self):
+        charts = [{"name": "tracing", "description": "Deploys jaeger."}]
+        found = scrub(
+            charts, UNCLAIMED_CHART_FREE_TEXT, patterns_for(_policy(components=["jaeger"]))
+        )
+        assert (charts[0]["description"], found) == ("Deploys ….", 1)
 
     def test_a_word_that_merely_contains_a_withheld_id_is_left_alone(self):
         """The same boundary `verify` uses. Scrubbing `ars` out of `parsers`

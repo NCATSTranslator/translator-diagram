@@ -12,6 +12,7 @@ rather than assumed.
 """
 
 import base64
+import dataclasses
 import json
 from collections import Counter
 from datetime import UTC, datetime
@@ -43,7 +44,7 @@ from .payload_details import (
     repo_meta_detail,
     smartapi_detail,
 )
-from .privacy import Policy, Report
+from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
 
 ASSET_PACKAGE = "translator_diagram.web"
@@ -1714,8 +1715,14 @@ def build_payload(
     stages = load_stages()
     rows = build_rows(components, synced, stages=stages)
     report = Report()
+    unclaimed = build_unclaimed_charts(components, synced)
     if policy is not None:
         rows, report = apply_policy(rows, policy)
+        report = dataclasses.replace(
+            report,
+            mentions=report.mentions
+            + scrub(unclaimed, UNCLAIMED_CHART_FREE_TEXT, patterns_for(policy)),
+        )
     manifest = synced.manifest
     colors = load_owner_colors()
     return {
@@ -1759,7 +1766,7 @@ def build_payload(
         # rows, and it has to be: a chart is unclaimed only if *nobody* claims
         # it, and a withheld component still claims its chart. See
         # `build_unclaimed_charts`.
-        "unclaimed_charts": build_unclaimed_charts(components, synced),
+        "unclaimed_charts": unclaimed,
         "smartapi_suggestions": build_smartapi_suggestions(rows),
         "rows": rows,
     }

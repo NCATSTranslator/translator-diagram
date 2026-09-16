@@ -26,6 +26,7 @@ Two consequences follow, and both are deliberate:
 
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -258,15 +259,15 @@ def apply(
     `catalog_edges` and `smartapi_suggestions`. They are built in
     `build_payload` after this runs, out of the rows it returns, so they cannot
     carry an id that is not in a kept row. A second pass over them here would be
-    dead code that looks load-bearing. `unclaimed_charts` needs no pass either,
-    for the opposite reason: it is matched against every component, so a chart a
-    withheld component claims is never listed, and an entry names a chart and a
-    description rather than a component.
+    dead code that looks load-bearing. `unclaimed_charts` is not a row, so
+    `build_payload` scrubs its descriptions itself; a chart a withheld
+    component claims is never listed, since it is matched against every
+    component.
     """
     _check_known(rows, policy)
     withheld_ids = set(policy.component_ids)
     folded = {name.lower() for name in withheld_ids}
-    patterns = tuple(_word(name) for name in withheld_ids)
+    patterns = patterns_for(policy)
     withheld_sources = {
         FIELD_VERSION_SOURCES[name]
         for name in policy.field_names
@@ -278,7 +279,7 @@ def apply(
         for name in policy.field_names:
             row[name] = _emptied(row.get(name))
         _prune_ids(row, folded)
-        mentions += _scrub_row(row, patterns)
+        mentions += scrub(row, ROW_FREE_TEXT, patterns)
         for cell in row.get("environments", {}).values():
             for name in policy.environment_field_names:
                 if name in cell:
@@ -344,46 +345,80 @@ def _scrubbed(value: Any, patterns: tuple[re.Pattern[str], ...]) -> tuple[Any, i
     return value, found
 
 
-def _scrub_row(row: dict[str, Any], patterns: tuple[re.Pattern[str], ...]) -> int:
-    """Replace withheld ids in the free text a kept row carries.
+# Every free-text field a kept row carries, as (path to the mappings, keys).
+# A list along a path is walked item by item, and `*` is every value of a
+# mapping. URLs are deliberately absent: rewriting one breaks the link, and a
+# URL naming a withheld component is a reference for `verify` to stop on.
+ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    ((), ("notes",)),
+    (("smartapi_record",), ("title", "description_text", "tags")),
+    (("smartapi_record", "servers"), ("description",)),
+    (("smartapi_record", "contact"), ("name",)),
+    (("smartapi_candidates",), ("title",)),
+    (("releases",), ("name",)),
+    (("releases_detail",), ("name", "body_excerpt")),
+    (("repository_meta",), ("description", "topics")),
+    (("helm_charts",), ("description",)),
+    (("helm_charts", "last_changed"), ("subject",)),
+    (("catalog",), ("name", "description")),
+    (("environments", "*"), ("status_message",)),
+)
 
-    Every field here is prose from somewhere else: a note somebody wrote about
-    this component, the description and tags in its registry entry, the titles
-    and excerpts of its releases. We cannot ask GitHub to reword a release, so
-    the choice is between scrubbing the word and failing every publish on the
-    day one of them says "jaeger". Structured fields are not in this list —
-    those are pruned, not rewritten, because an id in a list of ids is a
-    reference and half of one is worse than none.
+# `unclaimed_charts` names no component, but its descriptions are still prose.
+UNCLAIMED_CHART_FREE_TEXT = (((), ("description",)),)
+
+
+def _mappings(node: Any, path: tuple[str, ...]) -> Iterator[dict[str, Any]]:
+    """The mappings at the end of `path`, through any lists along the way."""
+    if isinstance(node, list):
+        for item in node:
+            yield from _mappings(item, path)
+    elif isinstance(node, dict):
+        if not path:
+            yield node
+        elif path[0] == "*":
+            for child in node.values():
+                yield from _mappings(child, path[1:])
+        else:
+            yield from _mappings(node.get(path[0]), path[1:])
+
+
+def scrub(
+    node: Any,
+    fields: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...],
+    patterns: tuple[re.Pattern[str], ...],
+) -> int:
+    """Replace withheld ids in the free text at `fields`, and count them.
+
+    Every field named is prose from somewhere else: a note somebody wrote, a
+    registry description, a release title, a repository topic. We cannot ask
+    GitHub to reword a release, so the choice is between scrubbing the word and
+    failing every publish on the day one of them says "jaeger". Structured
+    fields are not named — those are pruned, not rewritten, because an id in a
+    list of ids is a reference and half of one is worse than none.
     """
     if not patterns:
         return 0
     found = 0
-    for key in ("notes",):
-        if key in row:
-            row[key], hits = _scrubbed(row.get(key), patterns)
-            found += hits
-    record = row.get("smartapi_record")
-    if isinstance(record, dict):
-        for key in ("description_text", "title"):
-            if key in record:
-                record[key], hits = _scrubbed(record.get(key), patterns)
-                found += hits
-        tags = record.get("tags")
-        if isinstance(tags, list):
-            cleaned = []
-            for tag in tags:
-                tag, hits = _scrubbed(tag, patterns)
-                found += hits
-                cleaned.append(tag)
-            record["tags"] = cleaned
-    for entry in row.get("releases_detail") or []:
-        if not isinstance(entry, dict):
-            continue
-        for key in ("name", "body_excerpt"):
-            if key in entry:
-                entry[key], hits = _scrubbed(entry.get(key), patterns)
-                found += hits
+    for path, keys in fields:
+        for mapping in _mappings(node, path):
+            for key in keys:
+                value = mapping.get(key)
+                if isinstance(value, list):
+                    cleaned = []
+                    for item in value:
+                        item, hits = _scrubbed(item, patterns)
+                        found += hits
+                        cleaned.append(item)
+                    mapping[key] = cleaned
+                elif key in mapping:
+                    mapping[key], hits = _scrubbed(value, patterns)
+                    found += hits
     return found
+
+
+def patterns_for(policy: Policy) -> tuple[re.Pattern[str], ...]:
+    return tuple(_word(name) for name in policy.component_ids)
 
 
 def verify(payload: dict[str, Any], policy: Policy) -> None:
