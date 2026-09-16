@@ -226,7 +226,8 @@ open data/dashboard/index.html
 # Map export and other features some browsers block from file://:
 cd data/dashboard && python3 -m http.server 8765
 
-# Everything, including what a published build withholds. Local use only.
+# Everything, including what a published build withholds. Local use only;
+# written to data/dashboard-private/ so it cannot replace the public build.
 uv run build-dashboard --include-private
 ```
 

@@ -100,7 +100,7 @@ uv run rumdl check .                                 # Markdown lint, gated in C
 
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
-uv run build-dashboard --include-private             # ignore config/privacy.yaml
+uv run build-dashboard --include-private             # -> data/dashboard-private/, no policy
 
 uv run generate-diagram --google-sheet               # most common
 uv run generate-diagram --input data/components.csv  # from a local CSV

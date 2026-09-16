@@ -7,6 +7,7 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -104,6 +105,30 @@ class TestTheFlagDefaultsToWithholding:
     def test_a_withholding_build_names_what_it_withheld(self, workspace):
         result, _ = _run(workspace)
         assert "Withheld 1 components (secret)" in result.output
+
+
+class TestAFullBuildHasItsOwnDirectory:
+    """So it cannot overwrite the publishable build and be shared from there."""
+
+    def _outputs(self, workspace, *args):
+        with CliRunner().isolated_filesystem(temp_dir=workspace) as cwd:
+            result = CliRunner().invoke(build_main, [
+                "--components", str(workspace / "components"),
+                "--sync-dir", str(workspace / "sync"),
+                *args,
+            ])
+            assert result.exit_code == 0, result.output
+            return sorted(
+                str(path.relative_to(cwd)) for path in Path(cwd).rglob("overview.json")
+            )
+
+    def test_a_plain_build_writes_the_public_directory(self, workspace):
+        assert self._outputs(workspace) == ["data/dashboard/overview.json"]
+
+    def test_a_full_build_writes_somewhere_else(self, workspace):
+        assert self._outputs(workspace, "--include-private") == [
+            "data/dashboard-private/overview.json"
+        ]
 
 
 class TestAMissingPolicyStopsTheBuild:
