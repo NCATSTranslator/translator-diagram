@@ -75,12 +75,14 @@ entries are there because someone already tried the obvious thing.
   This is the same stubbing trick as the JS note below.
 
   Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-  breakpoints — the table is wider than the window between about 1100 and
-  1500px, which is where the sticky header and the band descriptions go wrong.
-  At 760px the PROD column is clipped at the right edge; that is expected, not
-  the old bug — `div.tablewrap` scrolls while the page root does not, so the
-  column is reachable. Confirm that by measuring `scrollWidth` against
-  `clientWidth` rather than by eye, because a screenshot cannot show it.
+  breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
+  between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean
+  at 1480 and 1540 — where a column returns before there is room for it. The
+  page root never overflows at any width, and the wrap scrolls, so nothing is
+  unreachable; issue #31 describes the wider 1100–1500px version of this,
+  most of which is now gone. At 760px the PROD column is likewise clipped but
+  reachable. None of this is visible in a screenshot: measure `scrollWidth`
+  against `clientWidth` at several widths instead of judging by eye.
 
   Serve the build over HTTP rather than opening `file://`: Map export and
   other features are blocked on a `file://` origin, and the copies the theme
