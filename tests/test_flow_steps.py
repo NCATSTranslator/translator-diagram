@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 from translator_diagram.components import load_components
-from translator_diagram.dashboard import UNPLACED_TITLE, in_stage_order, load_stages
+from translator_diagram.stages import UNPLACED_TITLE, in_stage_order, load_stages
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGES_PATH = ROOT / "config" / "flow-steps.yaml"

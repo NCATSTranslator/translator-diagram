@@ -45,8 +45,23 @@ ALLOWED = {
     # payload_details is a leaf for the same reason: dict in, dict out, so the
     # shaping can be tested without a network, a checkout or a rendered page.
     "payload_details": set(),
-    "dashboard": {"colors", "components", "flow", "payload_details", "privacy"},
-    "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
+    # The dashboard stack, one subject per module and each layer reading only
+    # the one below it. synced_data is the only module that touches the sync
+    # cache; cells resolves one cell from it; rows assembles one component's
+    # row; dashboard assembles the payload and renders the page. Splitting it
+    # this way is what keeps any one of them small enough to hold in a head.
+    "synced_data": {"components"},
+    "stages": {"components", "flow"},
+    "cells": {"components", "synced_data"},
+    "rows": {
+        "cells", "components", "flow", "payload_details", "stages", "synced_data",
+    },
+    "dashboard": {
+        "cells", "colors", "components", "privacy", "rows", "stages", "synced_data",
+    },
+    "dashboard_cli": {
+        "components", "dashboard", "flow", "privacy", "sync", "synced_data",
+    },
 }
 
 # Neither entry point may be imported: a module that pulls in a CLI drags

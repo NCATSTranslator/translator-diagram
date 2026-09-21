@@ -459,7 +459,11 @@ translator-diagram/
 │   │                     # the dashboard
 │   ├── sync.py           # Fetches what the component files point at
 │   ├── flow.py           # Data-flow depths, and the stage-order check
-│   ├── dashboard.py      # Version-source chain, drift, the rendered page
+│   ├── synced_data.py    # Reads the sync cache; where the 200 gate lives
+│   ├── stages.py         # The bands, from config/flow-steps.yaml
+│   ├── cells.py          # The version-source chain, one cell at a time
+│   ├── rows.py           # One row per component: drift, dates, releases
+│   ├── dashboard.py      # The payload, the graph views, the rendered page
 │   ├── dashboard_cli.py  # sync-components and build-dashboard
 │   ├── web/              # dashboard.css and dashboard.js, inlined into the page
 │   └── CLAUDE.md         # The module map and the non-obvious decisions

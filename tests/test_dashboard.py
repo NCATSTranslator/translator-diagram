@@ -9,32 +9,38 @@ import click
 import pytest
 
 from translator_diagram import dashboard
+from translator_diagram.cells import (
+    CELL_REASONS,
+    _helm_facts,
+    _live_openapi_facts,
+    _status_facts,
+)
 from translator_diagram.components import ComponentFile, Deployment
 from translator_diagram.dashboard import (
-    CELL_REASONS,
-    UNPLACED_TITLE,
-    SyncedData,
-    _helm_facts,
-    _instant,
-    _last_updated,
-    _live_openapi_facts,
-    _mark_drift,
-    _release_chips,
-    _status_facts,
     build_catalog_edges,
     build_edges,
     build_externals,
     build_payload,
-    build_rows,
-    in_stage_order,
-    load_stages,
-    otel_presence,
     render_html,
     source_tally,
-    stage_blocks,
     write_dashboard,
 )
 from translator_diagram.payload_details import releases_detail
+from translator_diagram.rows import (
+    _instant,
+    _last_updated,
+    _mark_drift,
+    _release_chips,
+    build_rows,
+    otel_presence,
+)
+from translator_diagram.stages import (
+    UNPLACED_TITLE,
+    in_stage_order,
+    load_stages,
+    stage_blocks,
+)
+from translator_diagram.synced_data import SyncedData
 
 
 def _comp(cid, **kwargs):

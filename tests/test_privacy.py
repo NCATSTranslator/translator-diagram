@@ -7,7 +7,7 @@ import click
 import pytest
 
 from translator_diagram.components import ComponentFile
-from translator_diagram.dashboard import SyncedData, build_payload, build_rows
+from translator_diagram.dashboard import build_payload
 from translator_diagram.privacy import (
     UNCLAIMED_CHART_FREE_TEXT,
     Policy,
@@ -18,6 +18,8 @@ from translator_diagram.privacy import (
     scrub,
     verify,
 )
+from translator_diagram.rows import build_rows
+from translator_diagram.synced_data import SyncedData
 
 
 def _policy(components=(), fields=(), environment_fields=()):
@@ -459,7 +461,7 @@ class TestVerify:
     def test_the_real_public_build_verifies(self):
         """What `build-dashboard` does before it writes, on real data."""
         from translator_diagram.components import load_components
-        from translator_diagram.dashboard import SyncedData
+        from translator_diagram.synced_data import SyncedData
 
         sync_dir = pathlib.Path("data/sync")
         if not (sync_dir / "manifest.json").exists():
