@@ -36,36 +36,58 @@ entries are there because someone already tried the obvious thing.
   catch visual bugs: this page once passed 301 tests, `node --check` and a
   self-containment assertion while shipping a badge on 27 of 45 cells that
   drowned the table, a tile that counted 74 things where there were 41, and two
-  environment columns unreachable at narrow widths. Render it and look —
-  headless Firefox needs no extra tooling, and its own profile because yours is
-  probably already running. Screenshot **both views** (Overview and Map) in light
-  and dark:
+  environment columns unreachable at narrow widths. Render it and look, in
+  **both views** (Overview and Map) and in light and dark.
+
+  **Use Chromium, not Firefox.** Headless Firefox does not start on current
+  macOS — every invocation dies with `Could not find profile folder`, whatever
+  you pass for `--profile`, including a directory that demonstrably exists
+  ([gaurav/prcoder#61](https://github.com/gaurav/prcoder/issues/61)). The
+  recipe here used to be Firefox; it is kept only as the reason not to try it
+  again. Playwright's bundled headless shell needs no install:
 
   ```bash
   uv run build-dashboard
-  MOZ_NO_REMOTE=1 /Applications/Firefox.app/Contents/MacOS/firefox \
-    --headless --new-instance --profile /tmp/ffprofile \
-    --screenshot /tmp/dash.png --window-size=1700,1400 \
-    "file://$PWD/data/dashboard/index.html"
+  CHROME=~/Library/Caches/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell
+  cd data/dashboard && python3 -m http.server 8765 &   # see file:// note below
+  $CHROME --headless --disable-gpu --hide-scrollbars \
+    --force-prefers-reduced-motion --virtual-time-budget=8000 \
+    --screenshot="$PWD/data/shots/overview.png" --window-size=1700,1400 \
+    --user-data-dir="$PWD/data/cp1" "http://localhost:8765/index.html"
   ```
 
-  For Map export and other features browsers block from `file://`, serve the
-  build first: `cd data/dashboard && python3 -m http.server 8765`.
+  Each run needs its **own `--user-data-dir`**, or concurrent shots collide.
+  `?view=map` selects the Map view.
 
-  Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
+  **`--force-prefers-reduced-motion` is not optional.** The stat tiles count
+  up on load, and a screenshot without it catches them mid-animation: the page
+  reads `3 components · 6 deployments` when there are 24 and 51. That is
+  indistinguishable from the tile-counting bug listed above, so a naive shot
+  invents a bug that is not there. Freeze the animation, then check the tiles
+  against what `build-dashboard` printed.
+
+  **Forcing the theme needs a `matchMedia` stub, not a flag.** Chromium's
+  `--force-dark-mode` does not move the page's `prefers-color-scheme`, and the
+  shots come back byte-identical. The page resolves its theme through
+  `matchMedia("(prefers-color-scheme: dark)")` (`web/app.js`), so copy
+  `index.html` beside itself — relative paths must still resolve — and inject a
+  script before the bootstrap that returns a fixed `matches` for that query.
+  This is the same stubbing trick as the JS note below.
+
+  Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
   breakpoints — the table is wider than the window between about 1100 and
   1500px, which is where the sticky header and the band descriptions go wrong.
+  At 760px the PROD column is clipped at the right edge; that is expected, not
+  the old bug — `div.tablewrap` scrolls while the page root does not, so the
+  column is reachable. Confirm that by measuring `scrollWidth` against
+  `clientWidth` rather than by eye, because a screenshot cannot show it.
+
+  Serve the build over HTTP rather than opening `file://`: Map export and
+  other features are blocked on a `file://` origin, and the copies the theme
+  stub needs are simpler to reach over a server anyway.
+
   Whether the result *reads* well is still the operator's call: report what you
   saw and let them look.
-
-  A headless profile follows the system theme, so on a dark machine every
-  screenshot is dark and half the palette goes unchecked. A second profile with
-  one pref shoots the other theme (use `1` for dark on a light machine):
-
-  ```bash
-  mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
-  ```
-
 - **JS with judgement in it can be tested, even with no JS harness here.** Slice
   the block out of `web/table.js` or `web/core.js`, stub `document`/`localStorage`/
   `matchMedia`, and run it under `node` from the scratchpad — that is how the
