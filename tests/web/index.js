@@ -9,6 +9,8 @@
   loads this file and the requires register the same tests.
 
   Add a new suite to the list below as well as to the directory.
+  TestTheSuiteListMatchesTheDirectory in tests/test_web_assets.py fails
+  until you do, in either direction.
 */
 
 require("./urlstate.test.js");
