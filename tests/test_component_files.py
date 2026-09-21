@@ -34,6 +34,21 @@ def _load(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _validator_for(schema: dict) -> type:
+    """The validator class the schema's own `$schema` asks for.
+
+    `validator_for` falls back to the latest supported draft both when
+    `$schema` is missing and when it is present but unrecognised, which would
+    let a typo'd URI silently change the validation semantics. `default=None`
+    turns both into a failure here instead.
+    """
+    validator = jsonschema.validators.validator_for(schema, default=None)
+    assert validator is not None, (
+        f"schema does not declare a recognised $schema: {schema.get('$schema')!r}"
+    )
+    return validator
+
+
 @pytest.fixture(scope="module")
 def schema() -> dict:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -73,13 +88,21 @@ def test_there_are_components():
 
 class TestSchema:
     def test_schema_is_itself_valid(self, schema):
-        jsonschema.Draft202012Validator.check_schema(schema)
+        _validator_for(schema).check_schema(schema)
+
+    def test_an_unresolvable_schema_is_refused(self):
+        # The point of reading $schema from the file is that a missing or
+        # typo'd URI stops the suite rather than silently validating against
+        # whatever draft jsonschema considers newest that week.
+        for bad in ({"type": "object"}, {"$schema": "https://example.invalid/no"}):
+            with pytest.raises(AssertionError):
+                _validator_for(bad)
 
     def test_helm_chart_takes_one_name_or_several(self, schema):
         # One component can be deployed by two charts -- a web server and its
         # loader -- and the alternative to widening this key was inventing a
         # second one that means the same thing.
-        validator = jsonschema.Draft202012Validator(schema)
+        validator = _validator_for(schema)(schema)
         document = _load(COMPONENTS_DIR / "name-lookup.yaml")
         for value in ("name-lookup", ["web-server", "loader"], None):
             document["identifiers"]["helm_chart"] = value
@@ -92,7 +115,7 @@ class TestSchema:
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
         errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(_load(path)),
+            _validator_for(schema)(schema).iter_errors(_load(path)),
             key=lambda e: list(e.path),
         )
         assert not errors, "\n".join(
@@ -198,9 +221,9 @@ class TestUnknown:
 
     def test_validates(self, unknown):
         schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
-        jsonschema.Draft202012Validator.check_schema(schema)
+        _validator_for(schema).check_schema(schema)
         errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(unknown),
+            _validator_for(schema)(schema).iter_errors(unknown),
             key=lambda e: list(e.path),
         )
         assert not errors, "\n".join(
