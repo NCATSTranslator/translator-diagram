@@ -19,6 +19,12 @@ that are not visible from the line you are changing.
 One module per subject, and one test file per module. No line numbers here on
 purpose — they rot within a commit or two.
 
+A test belongs to the module whose *decision* it pins, not to the function it
+happens to call. Most of the dashboard's tests reach their assertion through
+`build_rows` or `build_payload`, so sorting them by call graph would pile
+almost all of them into `tests/test_rows.py` and leave the other files empty —
+which is how a 2000-line test file grows back.
+
 | Module | What's there |
 |---|---|
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
