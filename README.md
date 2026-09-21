@@ -443,51 +443,52 @@ uv run generate-diagram [OPTIONS]
 ```text
 translator-diagram/
 ├── src/translator_diagram/
-│   │                     # shared by both stacks
-│   ├── colors.py         # Owner colours and the palette
-│   ├── components.py     # Reads components/<id>.yaml
-│   ├── privacy.py        # What a published dashboard withholds
-│   │                     # the diagram
-│   ├── model.py          # Component, index_by_id (one sheet row)
-│   ├── naming.py         # SVG ids and output filename stems
-│   ├── loading.py        # CSV parsing and the Google Sheet download
-│   ├── validation.py     # Reference and id checks
-│   ├── render.py         # The diagram and the per-layer sub-figures
-│   ├── legend.py         # The two legends
-│   ├── export.py         # components.json
-│   ├── cli.py            # generate-diagram
-│   │                     # the dashboard
-│   ├── sync.py           # Fetches what the component files point at
-│   ├── flow.py           # Data-flow depths, and the stage-order check
-│   ├── synced_data.py    # Reads the sync cache; where the 200 gate lives
-│   ├── stages.py         # The bands, from config/flow-steps.yaml
-│   ├── cells.py          # The version-source chain, one cell at a time
-│   ├── rows.py           # One row per component: drift, dates, releases
-│   ├── dashboard.py      # The payload, the graph views, the rendered page
-│   ├── dashboard_cli.py  # sync-components and build-dashboard
-│   ├── web/              # dashboard.css and dashboard.js, inlined into the page
-│   └── CLAUDE.md         # The module map and the non-obvious decisions
-├── components/           # One YAML file per component — see docs/
-│   └── CLAUDE.md         # What a component file must contain
-├── unknown.yaml          # Identifiers no component file claims yet
-├── config/               # The data files, edited by hand
-│   ├── owner-colors.csv  # Owner → fill colour
-│   ├── flow-steps.yaml   # The dashboard's stages, in page order
-│   └── privacy.yaml      # What a published build leaves out
-├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
-├── docs/                 # The metadata case, its research, owner colours
-├── tests/                # One test file per module
-├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
-├── pyproject.toml        # uv/hatchling project metadata and dependencies
-├── uv.lock               # Pinned dependency versions
-├── env.default           # Template for .env (diagram only)
-├── FUTURE.md             # Ideas with their costs worked out
-├── AGENTS.md             # Working agreements, and where the rest is
-└── data/                 # Gitignored — every input and output goes here
-    ├── sync/             # Cached upstream responses + manifest.json
-    ├── dashboard/        # index.html and overview.json
-    ├── components.csv    # Downloaded from the Google Sheet
-    └── diagram.png       # Rendered diagram (plus .dot, .json, .svg, .pdf)
+│   │                       # shared by both stacks
+│   ├── colors.py           # Owner colours and the palette
+│   ├── components.py       # Reads components/<id>.yaml
+│   ├── privacy.py          # What a published dashboard withholds
+│   │                       # the diagram
+│   ├── model.py            # Component, index_by_id (one sheet row)
+│   ├── naming.py           # SVG ids and output filename stems
+│   ├── loading.py          # CSV parsing and the Google Sheet download
+│   ├── validation.py       # Reference and id checks
+│   ├── render.py           # The diagram and the per-layer sub-figures
+│   ├── legend.py           # The two legends
+│   ├── export.py           # components.json
+│   ├── cli.py              # generate-diagram
+│   │                       # the dashboard
+│   ├── sync.py             # Fetches what the component files point at
+│   ├── flow.py             # Data-flow depths, and the stage-order check
+│   ├── synced_data.py      # Reads the sync cache; where the 200 gate lives
+│   ├── payload_details.py  # Pure shapers over the cache and component files
+│   ├── stages.py           # The bands, from config/flow-steps.yaml
+│   ├── cells.py            # The version-source chain, one cell at a time
+│   ├── rows.py             # One row per component: drift, dates, releases
+│   ├── dashboard.py        # The payload, the graph views, the rendered page
+│   ├── dashboard_cli.py    # sync-components and build-dashboard
+│   ├── web/                # dashboard.css and dashboard.js, inlined into the page
+│   └── CLAUDE.md           # The module map and the non-obvious decisions
+├── components/             # One YAML file per component — see docs/
+│   └── CLAUDE.md           # What a component file must contain
+├── unknown.yaml            # Identifiers no component file claims yet
+├── config/                 # The data files, edited by hand
+│   ├── owner-colors.csv    # Owner → fill colour
+│   ├── flow-steps.yaml     # The dashboard's stages, in page order
+│   └── privacy.yaml        # What a published build leaves out
+├── schema/                 # JSON Schema for components/*.yaml and unknown.yaml
+├── docs/                   # The metadata case, its research, owner colours
+├── tests/                  # One test file per module
+├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
+├── pyproject.toml          # uv/hatchling project metadata and dependencies
+├── uv.lock                 # Pinned dependency versions
+├── env.default             # Template for .env (diagram only)
+├── FUTURE.md               # Ideas with their costs worked out
+├── AGENTS.md               # Working agreements, and where the rest is
+└── data/                   # Gitignored — every input and output goes here
+    ├── sync/               # Cached upstream responses + manifest.json
+    ├── dashboard/          # index.html and overview.json
+    ├── components.csv      # Downloaded from the Google Sheet
+    └── diagram.png         # Rendered diagram (plus .dot, .json, .svg, .pdf)
 ```
 
 ## Status and next steps

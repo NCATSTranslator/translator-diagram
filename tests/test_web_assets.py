@@ -71,12 +71,15 @@ class TestTheFileListsMatchTheDirectory:
 
 class TestTheJsUnitTests:
     def test_node_test_runner(self, node):
-        """node's built-in test runner, over tests/web/ once that directory
-        holds anything -- skipped rather than failed until it does, since its
-        absence is not yet a claim that the JS is untested."""
+        """node's built-in test runner, over the suites in tests/web/.
+
+        The directory is committed, so an empty one is a checkout that has
+        lost its JS units rather than a state to skip past -- which is what
+        this did until the suites landed, and would have gone on doing
+        silently if they were ever deleted."""
         web_tests = ROOT / "tests" / "web"
-        if not web_tests.exists():
-            pytest.skip("tests/web/ does not exist yet")
+        suites = sorted(p.name for p in web_tests.glob("*.test.js"))
+        assert suites, f"no *.test.js in {web_tests}: the JS units are gone"
         result = subprocess.run(
             [node, "--test", "tests/web/"], cwd=ROOT, capture_output=True, text=True, check=False
         )
