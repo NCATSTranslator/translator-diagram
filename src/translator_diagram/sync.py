@@ -3,7 +3,7 @@
 Writes raw responses under data/sync/ and a manifest recording every fetch it
 attempted, including the ones that failed. The dashboard reads that directory;
 nothing here renders anything, and nothing here decides what a version *is* —
-that judgement lives in dashboard.py, so it can be tested without a network.
+that judgement lives in cells.py, so it can be tested without a network.
 
 A service being down is data, not an error. The manifest records what
 happened and the run still succeeds, because "was this endpoint reachable at
