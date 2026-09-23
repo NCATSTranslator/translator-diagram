@@ -36,8 +36,11 @@ ALLOWED = {
     # palette across both — but nothing else: components.py parses the YAML
     # files, model.py parses the sheet, and neither knows about the other.
     "components": set(),
+    # Chart matching sits below both sync and dashboard, which each ask it and
+    # may not import each other.
+    "charts": {"components"},
     "flow": {"components"},
-    "sync": {"components"},
+    "sync": {"charts", "components"},
     # privacy is a leaf: it filters plain dictionaries, so it needs to know
     # nothing about where they came from, and dashboard can apply it without
     # anything in the graph moving.
@@ -50,14 +53,15 @@ ALLOWED = {
     # cache; cells resolves one cell from it; rows assembles one component's
     # row; dashboard assembles the payload and renders the page. Splitting it
     # this way is what keeps any one of them small enough to hold in a head.
-    "synced_data": {"components"},
+    "synced_data": {"charts", "components"},
     "stages": {"components", "flow"},
     "cells": {"components", "synced_data"},
     "rows": {
         "cells", "components", "flow", "payload_details", "stages", "synced_data",
     },
     "dashboard": {
-        "cells", "colors", "components", "privacy", "rows", "stages", "synced_data",
+        "cells", "charts", "colors", "components", "privacy", "rows", "stages",
+        "synced_data",
     },
     "dashboard_cli": {
         "components", "dashboard", "flow", "privacy", "sync", "synced_data",

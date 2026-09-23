@@ -11,7 +11,8 @@ not an error.
 from pathlib import Path
 from typing import Any
 
-from .components import CHART_META_FILES, Deployment, chart_dirs, read_json, read_yaml
+from .charts import CHART_META_FILES, chart_dirs
+from .components import Deployment, read_json, read_yaml
 
 
 def _read_json_list(path: Path) -> list[Any]:
@@ -224,7 +225,7 @@ class SyncedData:
 
         `values.yaml` and `ncats-images-meta.yaml` are only fetched for charts a
         component already claims, so both are None for most charts here. That is
-        the cache being proportional rather than a gap, and `chart_matches`
+        the cache being proportional rather than a gap, and `charts.chart_matches`
         treats a missing document as a rule that cannot fire.
         """
         return {

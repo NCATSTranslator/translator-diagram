@@ -21,8 +21,9 @@ from pathlib import Path
 from typing import Any
 
 from .cells import SOURCE_LABELS
+from .charts import unclaimed_charts
 from .colors import load_owner_colors, owner_styles
-from .components import ENVIRONMENTS, ComponentFile, unclaimed_charts
+from .components import ENVIRONMENTS, ComponentFile
 from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
 from .rows import UPDATED_LABELS, build_rows

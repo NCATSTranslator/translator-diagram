@@ -22,11 +22,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from .charts import CHART_META_FILES, chart_dirs, unclaimed_charts
 from .components import (
-    CHART_META_FILES,
     ComponentFile,
     Deployment,
-    chart_dirs,
     deployments_from_smartapi,
     derive_deployments,
     endpoint_url_in,
@@ -36,7 +35,6 @@ from .components import (
     read_yaml,
     record_infores,
     smartapi_record_for,
-    unclaimed_charts,
 )
 
 SMARTAPI_QUERY = (
@@ -557,7 +555,7 @@ def _chart_totals(
 
 
 def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Every cached chart, in the shape `chart_matches` reads.
+    """Every cached chart, in the shape `charts.chart_matches` reads.
 
     The same three files `HELM_FILES` fetches, keyed by what the matcher calls
     them rather than by filename — `CHART_META_FILES` owns that vocabulary, so
