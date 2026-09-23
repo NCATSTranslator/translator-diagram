@@ -15,6 +15,7 @@ from translator_diagram.dashboard import CSS_FILES, JS_FILES, _assets
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "src" / "translator_diagram" / "web"
+WEB_TESTS = ROOT / "tests" / "web"
 
 
 @pytest.fixture(scope="module")
@@ -69,14 +70,36 @@ class TestTheFileListsMatchTheDirectory:
         assert {p.name for p in WEB.glob("*.js")} == set(JS_FILES)
 
 
+class TestTheSuiteListMatchesTheDirectory:
+    """`tests/web/index.js` requires each suite by name, and its own comment
+    says to keep the list and the directory in step. Nothing checked that it
+    was: an older `node --test` globs the directory and never opens index.js,
+    a newer one loads index.js and runs only what it requires, so a suite
+    missing from the list passes on one runner and is silently skipped on the
+    other -- exactly the orphan-vs-missing split
+    TestTheFileListsMatchTheDirectory catches for web/.
+
+    Needs no `node`, so it still runs where the two subprocess checks skip.
+    """
+
+    def test_no_orphan_suite(self):
+        listed = set(re.findall(
+            r"""require\(\s*["']\./([^"']+)["']\s*\)""",
+            (WEB_TESTS / "index.js").read_text(),
+        ))
+        assert listed == {p.name for p in WEB_TESTS.glob("*.test.js")}
+
+
 class TestTheJsUnitTests:
     def test_node_test_runner(self, node):
-        """node's built-in test runner, over tests/web/ once that directory
-        holds anything -- skipped rather than failed until it does, since its
-        absence is not yet a claim that the JS is untested."""
-        web_tests = ROOT / "tests" / "web"
-        if not web_tests.exists():
-            pytest.skip("tests/web/ does not exist yet")
+        """node's built-in test runner, over the suites in tests/web/.
+
+        The directory is committed, so an empty one is a checkout that has
+        lost its JS units rather than a state to skip past -- which is what
+        this did until the suites landed, and would have gone on doing
+        silently if they were ever deleted."""
+        suites = sorted(p.name for p in WEB_TESTS.glob("*.test.js"))
+        assert suites, f"no *.test.js in {WEB_TESTS}: the JS units are gone"
         result = subprocess.run(
             [node, "--test", "tests/web/"], cwd=ROOT, capture_output=True, text=True, check=False
         )

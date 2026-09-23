@@ -19,6 +19,12 @@ that are not visible from the line you are changing.
 One module per subject, and one test file per module. No line numbers here on
 purpose — they rot within a commit or two.
 
+A test belongs to the module whose *decision* it pins, not to the function it
+happens to call. Most of the dashboard's tests reach their assertion through
+`build_rows` or `build_payload`, so sorting them by call graph would pile
+almost all of them into `tests/test_rows.py` and leave the other files empty —
+which is how a 2000-line test file grows back.
+
 | Module | What's there |
 |---|---|
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
@@ -40,9 +46,13 @@ The dashboard is a second, parallel stack over the same components:
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `payload_details.py` | Pure helpers over the sync cache and component files: live OpenAPI facts, Helm chart index, SmartAPI infores matching, repo metadata, connection ids, free-text scrub |
-| `dashboard.py` | The version-source chain, drift detection, payload assembly, and `render_html`. Returns plain dicts; no CLI, no network |
+| `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
+| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `config/flow-steps.yaml`, hand-written rather than computed |
+| `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
+| `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
+| `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged
@@ -59,13 +69,28 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {flow, sync, dashboard}
-flow → dashboard
+components → {flow, sync, synced_data, stages, cells, rows, dashboard}
+synced_data → {cells, rows, dashboard}
+flow → {stages, rows}
+stages → {rows, dashboard}
+cells → {rows, dashboard}
+rows → dashboard
 colors → dashboard
 privacy → dashboard
-payload_details → dashboard
+payload_details → rows
 dashboard_cli → everything above
 ```
+
+The dashboard stack reads downward and only downward: `synced_data` reads the
+cache, `cells` resolves one cell out of it, `rows` assembles one component's
+row, `stages` says what order the rows go in, and `dashboard` assembles the
+payload and renders the page. Two edges are the reason it is shaped this way
+rather than any other: `build_rows` calls `load_stages`, so `stages` has to sit
+below `rows` rather than beside `build_payload`; and `SyncedData.chart_commit`
+needs `_commit_facts`, which is why that one shaper lives in `synced_data.py`
+next to its only caller instead of with the other fact extractors in
+`cells.py`. Getting either wrong is a cycle, and
+`tests/test_package_layout.py` fails on it.
 
 Nothing imports either CLI. The palette constants live in `colors.py` rather
 than `render.py` for exactly this reason: `render` and `legend` both need
@@ -208,8 +233,8 @@ data-model table above, and the CSV-format table in the README.
 matching parameter in the `main` signature, plus the options block in the
 README (it is a hand-maintained paraphrase of `--help`, not generated).
 
-**Add a column to the dashboard** → `build_cell` or `build_rows` in
-`dashboard.py` for the value, then **one entry in the `COLUMNS` table** in
+**Add a column to the dashboard** → `build_cell` in `cells.py` or `build_rows`
+in `rows.py` for the value, then **one entry in the `COLUMNS` table** in
 `web/table.js`, and the matching `table.css` rule if it needs a style. That entry
 owns the header, the body cell, the `drop-*` class that hides both at narrow
 widths, the sort value and the column count the empty row's colspan needs —
@@ -222,7 +247,7 @@ files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
 breaks `web/table.js`.
 
-**Add a field to the drawer** → the value in `build_rows` or
+**Add a field to the drawer** → the value in `build_rows` (`rows.py`) or
 `payload_details.py` if it needs sync data, then the tab renderer in
 `web/drawer.js`. Per-environment fields that come from a live document must
 respect the same 200 gate as the table: `SyncedData` only reads bodies this
@@ -257,7 +282,7 @@ would fail every published build the day someone withholds a component called
 false alarm is to stop running the check.
 
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
-version-source chain in `dashboard.build_cell`. Order that chain by how close
+version-source chain in `cells.build_cell`. Order that chain by how close
 the source is to what is actually running: a live endpoint, then a manual
 registration, then a chart describing what should have been deployed. Whatever
 you add must appear in `SOURCE_LABELS` so the badge names it — a version whose
@@ -389,17 +414,6 @@ the older question. `sync` now carries the previous manifest's path-to-URL map
 and re-fetches anything whose URL moved. If you add a fetcher, give it a stable
 destination path and let that map do the work.
 
-**Environment columns sort by the age of the release running there**, not by
-version string: comparing `2.10.2` against `1.0` across two different
-components means nothing. Cells rank in tiers — running a release we can date,
-running something no release names, not deployed — and the tiers hold in both
-directions.
-
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
-
 **The privacy filter is about reach, not secrecy.** Everything the dashboard
 shows is read from public services, this repository is public, and
 `config/privacy.yaml` names what it withholds and why — so it hides nothing
@@ -429,23 +443,6 @@ than showing as an empty header. Step numbers come from the stage's position
 in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
-**The dashboard opens on every component**, having once opened on
-`Environments disagree` — which showed 7 rows of 24 and hid the platform to
-make a point about drift, so someone looking up one component found it missing
-from a page that never said it was filtered. Drift is still the first thing the
-page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `web/table.js`, listed in that
-order so the default reads first, with `DEFAULT_VIEW` naming it. `differ` means
-any of the three tinted axes, not versions alone. It replaced a "Drift only"
-toggle rather than joining it: two controls that select the same rows cannot be
-told apart by a reader.
-
-**The browser code is not a module system.** `web/*.js` is concatenated in
-`JS_FILES` order into one shared scope. A name declared with `const` in two
-files is a syntax error only when the bundle is checked — which is why
-`tests/test_web_assets.py` concatenates before `node --check`, and why
-`tests/web/` runs under `node --test`.
-
 **`edges` and `stages` are built after `privacy.apply`.** The map reads the
 published payload, so withheld components must disappear from the graph as well
 as the table. Building the graph before redaction would leave ghost nodes a
@@ -454,13 +451,6 @@ published build must not name.
 **OpenTelemetry joins are case-sensitive.** A service name in the OTel answer
 must match the deployment record exactly; normalising case would merge two
 different services and over-count.
-
-**The theme cycle starts by moving away from the system**, not at light: the
-page defaults to following the operating system, so `auto → light → dark`
-would spend the first click repainting a light machine light and read as a
-dead button. `nextTheme` therefore reads `prefers-color-scheme` to decide
-which way to go first, and the one click that does not change the appearance
-is the trip back to auto, which says so in the button's title.
 
 **`newrank="true"`** in `build_graph` is required for `rank=same` to work
 across cluster boundaries — the legend clusters rely on it.

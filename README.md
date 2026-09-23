@@ -73,8 +73,8 @@ on what is currently relevant.
 | change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
 | change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
-| change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code — particularly *Things that look wrong but aren't* |
+| change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
+| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -443,47 +443,53 @@ uv run generate-diagram [OPTIONS]
 ```text
 translator-diagram/
 ├── src/translator_diagram/
-│   │                     # shared by both stacks
-│   ├── colors.py         # Owner colours and the palette
-│   ├── components.py     # Reads components/<id>.yaml
-│   ├── privacy.py        # What a published dashboard withholds
-│   │                     # the diagram
-│   ├── model.py          # Component, index_by_id (one sheet row)
-│   ├── naming.py         # SVG ids and output filename stems
-│   ├── loading.py        # CSV parsing and the Google Sheet download
-│   ├── validation.py     # Reference and id checks
-│   ├── render.py         # The diagram and the per-layer sub-figures
-│   ├── legend.py         # The two legends
-│   ├── export.py         # components.json
-│   ├── cli.py            # generate-diagram
-│   │                     # the dashboard
-│   ├── sync.py           # Fetches what the component files point at
-│   ├── flow.py           # Data-flow depths, and the stage-order check
-│   ├── dashboard.py      # Version-source chain, drift, the rendered page
-│   ├── dashboard_cli.py  # sync-components and build-dashboard
-│   ├── web/              # dashboard.css and dashboard.js, inlined into the page
-│   └── CLAUDE.md         # The module map and the non-obvious decisions
-├── components/           # One YAML file per component — see docs/
-│   └── CLAUDE.md         # What a component file must contain
-├── unknown.yaml          # Identifiers no component file claims yet
-├── config/               # The data files, edited by hand
-│   ├── owner-colors.csv  # Owner → fill colour
-│   ├── flow-steps.yaml   # The dashboard's stages, in page order
-│   └── privacy.yaml      # What a published build leaves out
-├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
-├── docs/                 # The metadata case, its research, owner colours
-├── tests/                # One test file per module
-├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
-├── pyproject.toml        # uv/hatchling project metadata and dependencies
-├── uv.lock               # Pinned dependency versions
-├── env.default           # Template for .env (diagram only)
-├── FUTURE.md             # Ideas with their costs worked out
-├── AGENTS.md             # Working agreements, and where the rest is
-└── data/                 # Gitignored — every input and output goes here
-    ├── sync/             # Cached upstream responses + manifest.json
-    ├── dashboard/        # index.html and overview.json
-    ├── components.csv    # Downloaded from the Google Sheet
-    └── diagram.png       # Rendered diagram (plus .dot, .json, .svg, .pdf)
+│   │                       # shared by both stacks
+│   ├── colors.py           # Owner colours and the palette
+│   ├── components.py       # Reads components/<id>.yaml
+│   ├── privacy.py          # What a published dashboard withholds
+│   │                       # the diagram
+│   ├── model.py            # Component, index_by_id (one sheet row)
+│   ├── naming.py           # SVG ids and output filename stems
+│   ├── loading.py          # CSV parsing and the Google Sheet download
+│   ├── validation.py       # Reference and id checks
+│   ├── render.py           # The diagram and the per-layer sub-figures
+│   ├── legend.py           # The two legends
+│   ├── export.py           # components.json
+│   ├── cli.py              # generate-diagram
+│   │                       # the dashboard
+│   ├── sync.py             # Fetches what the component files point at
+│   ├── flow.py             # Data-flow depths, and the stage-order check
+│   ├── synced_data.py      # Reads the sync cache; where the 200 gate lives
+│   ├── payload_details.py  # Pure shapers over the cache and component files
+│   ├── stages.py           # The bands, from config/flow-steps.yaml
+│   ├── cells.py            # The version-source chain, one cell at a time
+│   ├── rows.py             # One row per component: drift, dates, releases
+│   ├── dashboard.py        # The payload, the graph views, the rendered page
+│   ├── dashboard_cli.py    # sync-components and build-dashboard
+│   ├── web/                # The page's CSS and JS, inlined into it
+│   │   └── CLAUDE.md       # How to look at the page, and its non-obvious decisions
+│   └── CLAUDE.md           # The module map and the non-obvious decisions
+├── components/             # One YAML file per component — see docs/
+│   └── CLAUDE.md           # What a component file must contain
+├── unknown.yaml            # Identifiers no component file claims yet
+├── config/                 # The data files, edited by hand
+│   ├── owner-colors.csv    # Owner → fill colour
+│   ├── flow-steps.yaml     # The dashboard's stages, in page order
+│   └── privacy.yaml        # What a published build leaves out
+├── schema/                 # JSON Schema for components/*.yaml and unknown.yaml
+├── docs/                   # The metadata case, its research, owner colours
+├── tests/                  # One test file per module
+├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
+├── pyproject.toml          # uv/hatchling project metadata and dependencies
+├── uv.lock                 # Pinned dependency versions
+├── env.default             # Template for .env (diagram only)
+├── FUTURE.md               # Ideas with their costs worked out
+├── AGENTS.md               # Working agreements, and where the rest is
+└── data/                   # Gitignored — every input and output goes here
+    ├── sync/               # Cached upstream responses + manifest.json
+    ├── dashboard/          # index.html and overview.json
+    ├── components.csv      # Downloaded from the Google Sheet
+    └── diagram.png         # Rendered diagram (plus .dot, .json, .svg, .pdf)
 ```
 
 ## Status and next steps
@@ -541,13 +547,16 @@ source is one module per subject under `src/translator_diagram/`, and `tests/`
 has one file per module — a change to `loading.py` belongs in
 `tests/test_loading.py`.
 
-Two things are worth reading before a first change. [AGENTS.md](AGENTS.md) has
-the module map, the rule about which module may import which (enforced by
+Two things are worth reading before a first change.
+[`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) has the
+module map, the rule about which module may import which (enforced by
 `tests/test_package_layout.py`), and a *Things that look wrong but aren't*
 section that exists because most of them were arrived at the hard way. And if
 you change the dashboard, render it and look at it: the page has passed a full
-test suite while visibly broken more than once, and AGENTS.md carries the
-headless-Firefox recipe for checking it at several widths and in both themes.
+test suite while visibly broken more than once, and
+[`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md)
+carries the headless-Chromium recipe for checking it at several widths and in
+both themes.
 
 ## Licence
 
