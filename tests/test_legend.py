@@ -6,6 +6,7 @@ import graphviz
 
 from translator_diagram.colors import ColorAssigner
 from translator_diagram.legend import (
+    _add_edge_cluster,
     _add_legend,
     _build_edge_legend_graph,
     _build_owners_graph,
@@ -20,6 +21,10 @@ def _colors(*used: str) -> ColorAssigner:
     for owner in used:
         colors.get(owner)
     return colors
+
+
+def _legend_nodes(source: str) -> set[str]:
+    return set(re.findall(r"\b_leg_\w+", source))
 
 
 class TestOwnerLegend:
@@ -60,9 +65,28 @@ class TestEmbeddedLegend:
         assert re.search(r"\{\s*rank=max\s*_leg_owners\s*\}", dot.source)
 
 
+class TestEdgeKeyLayout:
+    def test_three_rows_held_together_by_invisible_edges(self):
+        # What keeps the key compact: three rank=same rows, stacked by two
+        # invisible edges. Easy to delete while tidying, and the damage only
+        # shows in a rendered picture.
+        dot = graphviz.Digraph()
+        _add_edge_cluster(dot)
+        assert dot.source.count("rank=same") == 3
+        assert re.search(r"_leg_p -> _leg_a \[style=invis\]", dot.source)
+        assert re.search(r"_leg_a -> _leg_src \[style=invis\]", dot.source)
+
+
 class TestStandaloneLegends:
     # --split-legends writes each key to its own file, so each must carry only
     # its own cluster.
+
+    def test_both_routes_draw_the_same_keys(self):
+        embedded = graphviz.Digraph()
+        _add_legend(embedded, _colors("UI"))
+        standalone = (_build_owners_graph(_colors("UI")).source
+                      + _build_edge_legend_graph().source)
+        assert _legend_nodes(embedded.source) == _legend_nodes(standalone)
 
     def test_the_owners_graph_has_no_edge_key(self):
         source = _build_owners_graph(_colors("UI")).source
