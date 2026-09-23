@@ -73,8 +73,8 @@ on what is currently relevant.
 | change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
 | change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
-| change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code — particularly *Things that look wrong but aren't* |
+| change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
+| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -466,7 +466,8 @@ translator-diagram/
 │   ├── rows.py             # One row per component: drift, dates, releases
 │   ├── dashboard.py        # The payload, the graph views, the rendered page
 │   ├── dashboard_cli.py    # sync-components and build-dashboard
-│   ├── web/                # dashboard.css and dashboard.js, inlined into the page
+│   ├── web/                # The page's CSS and JS, inlined into it
+│   │   └── CLAUDE.md       # How to look at the page, and its non-obvious decisions
 │   └── CLAUDE.md           # The module map and the non-obvious decisions
 ├── components/             # One YAML file per component — see docs/
 │   └── CLAUDE.md           # What a component file must contain
@@ -546,13 +547,16 @@ source is one module per subject under `src/translator_diagram/`, and `tests/`
 has one file per module — a change to `loading.py` belongs in
 `tests/test_loading.py`.
 
-Two things are worth reading before a first change. [AGENTS.md](AGENTS.md) has
-the module map, the rule about which module may import which (enforced by
+Two things are worth reading before a first change.
+[`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) has the
+module map, the rule about which module may import which (enforced by
 `tests/test_package_layout.py`), and a *Things that look wrong but aren't*
 section that exists because most of them were arrived at the hard way. And if
 you change the dashboard, render it and look at it: the page has passed a full
-test suite while visibly broken more than once, and AGENTS.md carries the
-headless-Firefox recipe for checking it at several widths and in both themes.
+test suite while visibly broken more than once, and
+[`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md)
+carries the headless-Chromium recipe for checking it at several widths and in
+both themes.
 
 ## Licence
 
