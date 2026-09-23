@@ -496,6 +496,117 @@ def _confirm_derived(
     return result, True
 
 
+def _probe_derived_hosts(
+    components: list[ComponentFile],
+    by_smartapi: dict[str, dict[str, Any]],
+    previous: dict[str, Any],
+    *,
+    fetcher: Fetcher,
+    root: Path,
+    max_age: int,
+    workers: int,
+    echo: Callable[[str], None],
+) -> list[FetchResult]:
+    """Wave three: the environments nobody registered.
+
+    ITRB's hostnames follow a convention, so knowing one tells us where to look
+    for the others — answer-appraiser registers only production but is deployed
+    to ci and test as well. Each candidate is confirmed against the infores it
+    reports before it is believed.
+
+    Writes `derived.json` and returns every request it made, for the manifest.
+    """
+    confirmed_before = previous.get("confirmed", {})
+    rejected_before = previous.get("rejected", {})
+
+    results: list[FetchResult] = []
+    derived: dict[str, dict[str, Any]] = {}
+    rejected: dict[str, dict[str, Any]] = {}
+    pending, skipped = [], 0
+    for component in components:
+        known = merge_deployments(
+            component, deployments_from_smartapi(
+                by_smartapi.get(component.smartapi_id or "", {})
+            )
+        )
+        for env, candidate in derive_deployments(known).items():
+            stale = rejected_before.get(component.id, {}).get(env)
+            if _still_fresh(stale, max_age) and stale.get("url") == candidate.url:
+                # Most candidates are hostnames that do not resolve, and there
+                # are nine of those for every one that does. Re-probing them
+                # every run buys nothing: carry the answer forward until it is
+                # as stale as anything else we cache.
+                rejected.setdefault(component.id, {})[env] = stale
+                skipped += 1
+                continue
+            pending.append((component, env, candidate))
+    if skipped:
+        echo(f"  {skipped} hostnames already known not to resolve")
+    if pending:
+        echo(f"Probing {len(pending)} conventional hostnames ...")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            confirmed = list(pool.map(
+                lambda job: (job[0], job[1], job[2],
+                             _confirm_derived(job[0], job[2], fetcher, root, max_age)),
+                pending,
+            ))
+        for component, env, candidate, (result, accepted) in confirmed:
+            url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
+            # Every request, not every success: nine of these hostnames do not
+            # resolve, and a manifest that leaves them out is one that cannot
+            # be used to ask what this run actually did.
+            if result is not None:
+                results.append(result)
+            if not accepted:
+                # How it was turned away, not just that it was. A hostname that
+                # does not resolve and a host that answers as something else
+                # are both "not confirmed" and they are not the same finding —
+                # the first says there is nothing there, the second says there
+                # is, and it belongs to somebody else. Recorded here rather
+                # than left to be read out of the manifest, because a rejection
+                # is carried forward for as long as it is fresh and the
+                # manifest entry that explained it is not.
+                rejected.setdefault(component.id, {})[env] = {
+                    "url": candidate.url,
+                    "checked_at": _now(),
+                    "status": result.status if result else None,
+                    "error": result.error if result else None,
+                    # Which question was asked, because a 200 means two
+                    # different things depending on it. To a document check, a
+                    # 200 reporting somebody else's infores is evidence the
+                    # host belongs to another service. To a root probe -- all
+                    # this component had, having no infores to check against --
+                    # a 200 is only "something answers here", and calling that
+                    # another service would be inventing the finding the check
+                    # exists to make.
+                    "checked": "document" if url else "root",
+                }
+                continue
+            derived.setdefault(component.id, {})[env] = {
+                "url": candidate.url, "location": candidate.location,
+            }
+        found = sum(len(envs) for envs in derived.values())
+        echo(f"  {found} confirmed by the infores they report")
+    # Carry forward anything confirmed earlier whose candidate was not re-derived
+    # this run — a URL recorded in a component file stops being derived, and
+    # dropping it here would look like the deployment had disappeared.
+    #
+    # Not the ones this run probed and rejected, though: those were asked and
+    # answered, and reinstating them would publish a derived deployment forever
+    # on the strength of one confirmation, however long ago it stopped being
+    # true. A rejection is the newer fact.
+    for cid, envs in confirmed_before.items():
+        for env, spec in envs.items():
+            if env in rejected.get(cid, {}):
+                continue
+            derived.setdefault(cid, {}).setdefault(env, spec)
+    (root / "derived.json").write_text(
+        json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return results
+
+
 def _echo_matching_summary(
     components: list[ComponentFile],
     root: Path,
@@ -691,98 +802,12 @@ def sync(
     )
     run_all((endpoint_jobs + index_chart_jobs, fetch_to), (root_jobs, probe_to))
 
-    # Wave three: the environments nobody registered. ITRB's hostnames follow a
-    # convention, so knowing one tells us where to look for the others —
-    # answer-appraiser registers only production but is deployed to ci and test
-    # as well. Each candidate is confirmed against the infores it reports
-    # before it is believed.
-    confirmed_before = previous.get("confirmed", {})
-    rejected_before = previous.get("rejected", {})
-
-    derived: dict[str, dict[str, Any]] = {}
-    rejected: dict[str, dict[str, Any]] = {}
-    pending, skipped = [], 0
-    for component in components:
-        known = merge_deployments(
-            component, deployments_from_smartapi(
-                by_smartapi.get(component.smartapi_id or "", {})
-            )
-        )
-        for env, candidate in derive_deployments(known).items():
-            stale = rejected_before.get(component.id, {}).get(env)
-            if _still_fresh(stale, max_age) and stale.get("url") == candidate.url:
-                # Most candidates are hostnames that do not resolve, and there
-                # are nine of those for every one that does. Re-probing them
-                # every run buys nothing: carry the answer forward until it is
-                # as stale as anything else we cache.
-                rejected.setdefault(component.id, {})[env] = stale
-                skipped += 1
-                continue
-            pending.append((component, env, candidate))
-    if skipped:
-        echo(f"  {skipped} hostnames already known not to resolve")
-    if pending:
-        echo(f"Probing {len(pending)} conventional hostnames ...")
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            confirmed = list(pool.map(
-                lambda job: (job[0], job[1], job[2],
-                             _confirm_derived(job[0], job[2], fetcher, root, max_age)),
-                pending,
-            ))
-        for component, env, candidate, (result, accepted) in confirmed:
-            url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
-            # Every request, not every success: nine of these hostnames do not
-            # resolve, and a manifest that leaves them out is one that cannot
-            # be used to ask what this run actually did.
-            if result is not None:
-                report.fetches.append(result)
-            if not accepted:
-                # How it was turned away, not just that it was. A hostname that
-                # does not resolve and a host that answers as something else
-                # are both "not confirmed" and they are not the same finding —
-                # the first says there is nothing there, the second says there
-                # is, and it belongs to somebody else. Recorded here rather
-                # than left to be read out of the manifest, because a rejection
-                # is carried forward for as long as it is fresh and the
-                # manifest entry that explained it is not.
-                rejected.setdefault(component.id, {})[env] = {
-                    "url": candidate.url,
-                    "checked_at": _now(),
-                    "status": result.status if result else None,
-                    "error": result.error if result else None,
-                    # Which question was asked, because a 200 means two
-                    # different things depending on it. To a document check, a
-                    # 200 reporting somebody else's infores is evidence the
-                    # host belongs to another service. To a root probe -- all
-                    # this component had, having no infores to check against --
-                    # a 200 is only "something answers here", and calling that
-                    # another service would be inventing the finding the check
-                    # exists to make.
-                    "checked": "document" if url else "root",
-                }
-                continue
-            derived.setdefault(component.id, {})[env] = {
-                "url": candidate.url, "location": candidate.location,
-            }
-        found = sum(len(envs) for envs in derived.values())
-        echo(f"  {found} confirmed by the infores they report")
-    # Carry forward anything confirmed earlier whose candidate was not re-derived
-    # this run — a URL recorded in a component file stops being derived, and
-    # dropping it here would look like the deployment had disappeared.
-    #
-    # Not the ones this run probed and rejected, though: those were asked and
-    # answered, and reinstating them would publish a derived deployment forever
-    # on the strength of one confirmation, however long ago it stopped being
-    # true. A rejection is the newer fact.
-    for cid, envs in confirmed_before.items():
-        for env, spec in envs.items():
-            if env in rejected.get(cid, {}):
-                continue
-            derived.setdefault(cid, {}).setdefault(env, spec)
-    (root / "derived.json").write_text(
-        json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # Wave three: the environments nobody registered, each confirmed against
+    # the infores it reports before it is believed.
+    report.fetches.extend(_probe_derived_hosts(
+        components, by_smartapi, previous,
+        fetcher=fetcher, root=root, max_age=max_age, workers=workers, echo=echo,
+    ))
 
     # How much of the chart repository the component files account for. Two
     # numbers rather than a list of names: naming the unclaimed charts is a
