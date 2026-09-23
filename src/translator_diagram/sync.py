@@ -39,9 +39,9 @@ from .fetch import (
     GITHUB_API_PREFIX,
     Fetcher,
     FetchResult,
-    _now,
     fetch_to,
     http_fetch,
+    now,
     probe_to,
 )
 
@@ -568,7 +568,7 @@ def _probe_derived_hosts(
                 # manifest entry that explained it is not.
                 rejected.setdefault(component.id, {})[env] = {
                     "url": candidate.url,
-                    "checked_at": _now(),
+                    "checked_at": now(),
                     "status": result.status if result else None,
                     "error": result.error if result else None,
                     # Which question was asked, because a 200 means two
@@ -677,7 +677,7 @@ def sync(
     Then the run writes `derived.json`, prints the chart and matching summaries,
     and writes the manifest.
     """
-    report = SyncReport(started_at=_now())
+    report = SyncReport(started_at=now())
     root.mkdir(parents=True, exist_ok=True)
 
     previous_urls = _previous_urls(root)
@@ -827,7 +827,7 @@ def sync(
     # them would be deciding what the maintainers decide.
     _echo_matching_summary(components, root, by_smartapi, echo)
 
-    report.finished_at = _now()
+    report.finished_at = now()
     (root / "manifest.json").write_text(
         json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8"
     )

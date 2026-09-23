@@ -102,7 +102,7 @@ def http_fetch(
         return exc.code, exc.read(), exc.headers.get_content_type() if exc.headers else None
 
 
-def _now() -> str:
+def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
@@ -127,21 +127,21 @@ def fetch_to(
     if _is_fresh(destination, max_age):
         return FetchResult(
             url=url, path=relative, status=200, cached=True,
-            bytes=destination.stat().st_size, fetched_at=_now(),
+            bytes=destination.stat().st_size, fetched_at=now(),
         )
     try:
         status, body, _ = _answer(fetcher, url)
     except Exception as exc:  # noqa: BLE001 - any failure is a recorded finding
         return FetchResult(
             url=url, path=relative,
-            error=f"{type(exc).__name__}: {exc}", fetched_at=_now(),
+            error=f"{type(exc).__name__}: {exc}", fetched_at=now(),
         )
     if status == 200:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(body)
     return FetchResult(
         url=url, path=relative, status=status,
-        bytes=len(body), fetched_at=_now(),
+        bytes=len(body), fetched_at=now(),
     )
 
 
@@ -182,7 +182,7 @@ def probe_to(
         return FetchResult(
             url=url, path=relative,
             status=recorded.get("status"), error=recorded.get("error"),
-            cached=True, bytes=destination.stat().st_size, fetched_at=_now(),
+            cached=True, bytes=destination.stat().st_size, fetched_at=now(),
         )
     error, status, content_type, size = None, None, None, 0
     try:
@@ -201,5 +201,5 @@ def probe_to(
     )
     return FetchResult(
         url=url, path=relative, status=status, error=error,
-        bytes=size, fetched_at=_now(),
+        bytes=size, fetched_at=now(),
     )
