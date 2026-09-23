@@ -13,12 +13,8 @@ there" are different answers, and an empty cell gives neither.
 
 from typing import Any
 
-from .components import (
-    ComponentFile,
-    Deployment,
-    deployments_from_smartapi,
-    endpoint_url_in,
-)
+from .components import ComponentFile, Deployment, endpoint_url_in
+from .deployments import deployments_from_smartapi
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live

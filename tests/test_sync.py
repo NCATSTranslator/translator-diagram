@@ -20,7 +20,6 @@ from translator_diagram.sync import (
     _plan_repo_meta,
     _plan_root_probes,
     _still_fresh,
-    deployments_from_smartapi,
     fetch_to,
     probe_to,
     sync,
@@ -50,105 +49,6 @@ class FakeFetcher:
         if isinstance(value, Exception):
             raise value
         return value
-
-
-class TestDeploymentsFromSmartapi:
-    def test_maturities_map_to_our_ladder(self):
-        record = {"servers": [
-            {"url": "https://x.dev/", "x-maturity": "development"},
-            {"url": "https://x.ci/", "x-maturity": "staging"},
-            {"url": "https://x.test/", "x-maturity": "testing"},
-            {"url": "https://x/", "x-maturity": "production"},
-        ]}
-        assert set(deployments_from_smartapi(record)) == {"dev", "ci", "test", "prod"}
-
-    def test_ci_is_staging_not_development(self):
-        # The mapping everyone gets wrong, and the reason it is a constant.
-        record = {"servers": [{"url": "https://x.ci/", "x-maturity": "staging"}]}
-        assert deployments_from_smartapi(record)["ci"].url == "https://x.ci/"
-
-    def test_a_server_without_maturity_is_dropped(self):
-        # Real: node-annotator's ci and test entries carry none. An environment
-        # we cannot name is not one we can put in a column.
-        record = {"servers": [{"url": "https://x/"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_the_first_of_a_duplicated_server_wins(self):
-        # name-lookup and sri-node-normalizer each list every server twice.
-        record = {"servers": [
-            {"url": "https://first/", "x-maturity": "production"},
-            {"url": "https://second/", "x-maturity": "production"},
-        ]}
-        assert deployments_from_smartapi(record)["prod"].url == "https://first/"
-
-    def test_no_servers_at_all(self):
-        assert deployments_from_smartapi({}) == {}
-
-
-class TestInferredMaturity:
-    """A registry record that describes its servers instead of declaring them."""
-
-    def _smartapi_shaped(self):
-        # The smartapi component's own registration, as the registry serves it
-        # today: two servers, prose descriptions, no x-maturity anywhere. It
-        # used to yield no environments at all, so the one component that is
-        # the registry had an empty row on a page about deployments.
-        return {"servers": [
-            {"description": "Production server", "url": "https://smart-api.info/api"},
-            {"description": "Development server",
-             "url": "https://dev.smart-api.info/api"},
-        ]}
-
-    def test_a_described_server_is_placed_and_marked(self):
-        found = deployments_from_smartapi(self._smartapi_shaped())
-        assert set(found) == {"prod", "dev"}
-        assert found["prod"].url == "https://smart-api.info/api"
-        assert all(d.inferred for d in found.values())
-
-    def test_a_declared_maturity_is_not_marked_inferred(self):
-        record = {"servers": [
-            {"url": "https://x.ci/", "x-maturity": "staging",
-             "description": "Production server"},
-        ]}
-        # Declared staging, described production. The field wins, and the cell
-        # must not be labelled as a guess when nothing was guessed.
-        found = deployments_from_smartapi(record)
-        assert set(found) == {"ci"}
-        assert found["ci"].inferred is False
-
-    def test_a_declaration_is_never_overwritten_by_a_description(self):
-        # Declaration first, description second, whatever order the servers are
-        # listed in -- an ordering by position would let the later entry win.
-        record = {"servers": [
-            {"url": "https://described/", "description": "Production server"},
-            {"url": "https://declared/", "x-maturity": "production"},
-        ]}
-        found = deployments_from_smartapi(record)
-        assert found["prod"].url == "https://declared/"
-        assert found["prod"].inferred is False
-
-    def test_the_url_is_never_read_as_a_maturity(self):
-        # `dev.smart-api.info` and `foo.ci.transltr.io` look like they name an
-        # environment. Reading one would file a production host as dev on the
-        # strength of a substring, which is the guess these files exist to
-        # avoid: only prose somebody wrote counts.
-        record = {"servers": [{"url": "https://dev.smart-api.info/api"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_a_description_naming_nothing_is_dropped(self):
-        record = {"servers": [{"url": "https://x/", "description": "Main server"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_testing_is_not_read_as_test(self):
-        # The alternation is ordered longest first, so "testing" cannot be
-        # matched as "test" plus a suffix -- both map to the same environment
-        # here, and would not if the vocabulary ever grew.
-        record = {"servers": [{"url": "https://x/", "description": "Testing server"}]}
-        assert set(deployments_from_smartapi(record)) == {"test"}
-
-    def test_staging_is_ci_the_way_x_maturity_is(self):
-        record = {"servers": [{"url": "https://x/", "description": "Staging server"}]}
-        assert set(deployments_from_smartapi(record)) == {"ci"}
 
 
 class TestFetchTo:

@@ -39,8 +39,9 @@ ALLOWED = {
     # Chart matching sits below both sync and dashboard, which each ask it and
     # may not import each other.
     "charts": {"components"},
+    "deployments": {"components"},
     "flow": {"components"},
-    "sync": {"charts", "components"},
+    "sync": {"charts", "components", "deployments"},
     # privacy is a leaf: it filters plain dictionaries, so it needs to know
     # nothing about where they came from, and dashboard can apply it without
     # anything in the graph moving.
@@ -55,9 +56,10 @@ ALLOWED = {
     # this way is what keeps any one of them small enough to hold in a head.
     "synced_data": {"charts", "components"},
     "stages": {"components", "flow"},
-    "cells": {"components", "synced_data"},
+    "cells": {"components", "deployments", "synced_data"},
     "rows": {
-        "cells", "components", "flow", "payload_details", "stages", "synced_data",
+        "cells", "components", "deployments", "flow", "payload_details", "stages",
+        "synced_data",
     },
     "dashboard": {
         "cells", "charts", "colors", "components", "privacy", "rows", "stages",

@@ -13,11 +13,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .cells import _helm_facts, _openapi_facts, build_cell
-from .components import (
-    ENVIRONMENTS,
-    ComponentFile,
+from .components import ENVIRONMENTS, ComponentFile, github_repo
+from .deployments import (
     deployments_from_smartapi,
-    github_repo,
     merge_deployments,
     smartapi_record_for,
 )

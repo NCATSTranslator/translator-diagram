@@ -26,13 +26,15 @@ from .charts import CHART_META_FILES, chart_dirs, unclaimed_charts
 from .components import (
     ComponentFile,
     Deployment,
-    deployments_from_smartapi,
-    derive_deployments,
     endpoint_url_in,
     github_repo,
-    merge_deployments,
     read_json,
     read_yaml,
+)
+from .deployments import (
+    deployments_from_smartapi,
+    derive_deployments,
+    merge_deployments,
     record_infores,
     smartapi_record_for,
 )
