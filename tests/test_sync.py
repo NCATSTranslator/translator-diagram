@@ -2,6 +2,7 @@
 fetcher so nothing here reaches the network. The fetch itself is test_fetch.py."""
 
 import json
+import threading
 from datetime import UTC, datetime
 
 from tests.dashboard_helpers import FakeFetcher
@@ -861,3 +862,46 @@ def test_sync_writes_derived_json_even_when_nothing_is_found(tmp_path):
     sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
     assert json.loads((tmp_path / "derived.json").read_text()) == {
         "confirmed": {}, "rejected": {}}
+
+
+class TestCandidatesShareWaveTwo:
+    """The conventional hostnames go out in wave two's pool, not after it (#47)."""
+
+    def _smartapi(self, url):
+        return json.dumps({"hits": [{"_id": "abc", "servers": [
+            {"url": url, "x-maturity": "production"}]}]}).encode()
+
+    def test_the_candidates_do_not_wait_for_the_endpoints(self, tmp_path):
+        # This endpoint answers only once a candidate has been asked for, which
+        # a pool started after wave two could never do in time.
+        component = _comp("svc", identifiers={
+            "smartapi": "abc", "infores": "infores:svc"})
+        smartapi = self._smartapi("https://svc.transltr.io/")
+        candidate_asked = threading.Event()
+        waited = []
+
+        def fetcher(url):
+            if url == SMARTAPI_QUERY:
+                return 200, smartapi
+            if url.startswith("https://svc.test.transltr.io/"):
+                candidate_asked.set()
+            if url == "https://svc.transltr.io/openapi.json":
+                waited.append(candidate_asked.wait(timeout=5))
+            return 404, b""
+
+        sync([component], tmp_path, fetcher=fetcher, max_age=0, workers=4)
+        assert waited == [True]
+
+    def test_a_confirmed_host_that_can_only_be_probed_is_asked_once(self, tmp_path):
+        # Confirmed last run, and its component has since lost the infores
+        # that confirmed it, so it is both a known deployment to root-probe
+        # and a candidate to root-probe — at the same path. In one pool, two
+        # requests would race to write that file.
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {"svc": {
+            "ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}}))
+        fetcher = FakeFetcher({
+            SMARTAPI_QUERY: (200, self._smartapi("https://svc.transltr.io/"))})
+        report = sync([_comp("svc", identifiers={"smartapi": "abc"})], tmp_path,
+                      fetcher=fetcher, max_age=0)
+        assert fetcher.urls.count("https://svc.ci.transltr.io/") == 1
+        assert [f.path for f in report.fetches].count("root/svc/ci.json") == 1

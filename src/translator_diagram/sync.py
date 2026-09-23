@@ -211,12 +211,13 @@ def _confirmed_deployments(
 ) -> dict[str, dict[str, Deployment]]:
     """The previous run's confirmed derived hosts, as Deployments.
 
-    Read at the top of the run rather than in wave three, because the root
-    probes go out in wave two and a host confirmed last run is a host worth
-    contacting this run. This run's own confirmations land in `derived.json` at
-    the end and are probed by the next sync — a wave-two job cannot wait on a
-    wave-three answer, and probing the same host twice in one run to close that
-    one-run gap would cost every deployment a second request.
+    Read from last run's `derived.json`, because the root probes and the
+    candidate probes go out together in wave two and a host confirmed last run
+    is a host worth contacting this run. This run's own confirmations land in
+    `derived.json` at the end and are probed by the next sync — a root probe
+    cannot wait on a confirmation sharing its pool, and probing the same host a
+    second time after the pool to close that one-run gap would cost every
+    deployment a second request.
     """
     return {
         cid: {
@@ -436,6 +437,15 @@ def _still_fresh(record: dict[str, Any] | None, max_age: int) -> bool:
     return datetime.now(UTC) - checked < timedelta(seconds=max_age)
 
 
+def _confirmation_url(component: ComponentFile, candidate: Deployment) -> str | None:
+    """The document that can confirm a candidate, or None if only a root probe can.
+
+    Checking an answer needs an infores to check it against and an OpenAPI
+    document to read one from; without both, the address can only be probed.
+    """
+    return endpoint_url_in(component, candidate, "openapi") if component.infores else None
+
+
 def _confirm_derived(
     component: ComponentFile,
     candidate: Deployment,
@@ -465,7 +475,7 @@ def _confirm_derived(
     a finding. Six of the ten candidates this repository derives fall in here,
     and they were the six the page could say nothing about.
     """
-    url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
+    url = _confirmation_url(component, candidate)
     if not url:
         # Nothing to check an answer against — no infores, or no OpenAPI
         # document to ask for one. Probe the root so the rejection carries a
@@ -496,33 +506,25 @@ def _confirm_derived(
     return result, True
 
 
-def _probe_derived_hosts(
+def _plan_derived_probes(
     components: list[ComponentFile],
     by_smartapi: dict[str, dict[str, Any]],
     previous: dict[str, Any],
-    *,
-    fetcher: Fetcher,
-    root: Path,
     max_age: int,
-    workers: int,
-    echo: Callable[[str], None],
-) -> list[FetchResult]:
-    """Wave three: the environments nobody registered.
+) -> tuple[list[tuple[ComponentFile, str, Deployment]], dict[str, dict[str, Any]]]:
+    """The environments nobody registered, as candidates to probe.
 
     ITRB's hostnames follow a convention, so knowing one tells us where to look
     for the others — answer-appraiser registers only production but is deployed
-    to ci and test as well. Each candidate is confirmed against the infores it
-    reports before it is believed.
+    to ci and test as well. The candidates are derived from wave one's registry
+    answer and nothing later, which is why they can go out in wave two's pool.
 
-    Writes `derived.json` and returns every request it made, for the manifest.
+    Returns the candidates to probe as (component, env, candidate), and the
+    fresh rejections carried forward instead of being probed again.
     """
-    confirmed_before = previous.get("confirmed", {})
     rejected_before = previous.get("rejected", {})
-
-    results: list[FetchResult] = []
-    derived: dict[str, dict[str, Any]] = {}
     rejected: dict[str, dict[str, Any]] = {}
-    pending, skipped = [], 0
+    pending = []
     for component in components:
         known = merge_deployments(
             component, deployments_from_smartapi(
@@ -537,54 +539,80 @@ def _probe_derived_hosts(
                 # every run buys nothing: carry the answer forward until it is
                 # as stale as anything else we cache.
                 rejected.setdefault(component.id, {})[env] = stale
-                skipped += 1
                 continue
             pending.append((component, env, candidate))
-    if skipped:
-        echo(f"  {skipped} hostnames already known not to resolve")
-    if pending:
-        echo(f"Probing {len(pending)} conventional hostnames ...")
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            confirmed = list(pool.map(
-                lambda job: (job[0], job[1], job[2],
-                             _confirm_derived(job[0], job[2], fetcher, root, max_age)),
-                pending,
-            ))
-        for component, env, candidate, (result, accepted) in confirmed:
-            url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
-            # Every request, not every success: nine of these hostnames do not
-            # resolve, and a manifest that leaves them out is one that cannot
-            # be used to ask what this run actually did.
-            if result is not None:
-                results.append(result)
-            if not accepted:
-                # How it was turned away, not just that it was. A hostname that
-                # does not resolve and a host that answers as something else
-                # are both "not confirmed" and they are not the same finding —
-                # the first says there is nothing there, the second says there
-                # is, and it belongs to somebody else. Recorded here rather
-                # than left to be read out of the manifest, because a rejection
-                # is carried forward for as long as it is fresh and the
-                # manifest entry that explained it is not.
-                rejected.setdefault(component.id, {})[env] = {
-                    "url": candidate.url,
-                    "checked_at": now(),
-                    "status": result.status if result else None,
-                    "error": result.error if result else None,
-                    # Which question was asked, because a 200 means two
-                    # different things depending on it. To a document check, a
-                    # 200 reporting somebody else's infores is evidence the
-                    # host belongs to another service. To a root probe -- all
-                    # this component had, having no infores to check against --
-                    # a 200 is only "something answers here", and calling that
-                    # another service would be inventing the finding the check
-                    # exists to make.
-                    "checked": "document" if url else "root",
-                }
-                continue
-            derived.setdefault(component.id, {})[env] = {
-                "url": candidate.url, "location": candidate.location,
+    return pending, rejected
+
+
+def _root_probed_candidates(
+    pending: list[tuple[ComponentFile, str, Deployment]], root: Path
+) -> set[Path]:
+    """Where the candidates that can only be root-probed save their probe.
+
+    The same path wave two's root probe uses for a host confirmed on an earlier
+    run, which a candidate can also be — a component that has since lost its
+    infores, or recorded `openapi: null`, is re-derived and root-probed. One request answers both questions,
+    and two in one pool would race to write one file.
+    """
+    return {
+        root / "root" / component.id / f"{env}.json"
+        for component, env, candidate in pending
+        if _confirmation_url(component, candidate) is None
+    }
+
+
+def _record_derived(
+    confirmed: list[tuple[ComponentFile, str, Deployment, tuple[FetchResult | None, bool]]],
+    rejected: dict[str, dict[str, Any]],
+    previous: dict[str, Any],
+    root: Path,
+    echo: Callable[[str], None],
+) -> list[FetchResult]:
+    """Record what the candidate probes found, and write `derived.json`.
+
+    Each candidate is believed only if it reported the component's own infores
+    (`_confirm_derived`). Returns every request the probes made, for the
+    manifest.
+    """
+    confirmed_before = previous.get("confirmed", {})
+    results: list[FetchResult] = []
+    derived: dict[str, dict[str, Any]] = {}
+    for component, env, candidate, (result, accepted) in confirmed:
+        url = _confirmation_url(component, candidate)
+        # Every request, not every success: nine of these hostnames do not
+        # resolve, and a manifest that leaves them out is one that cannot
+        # be used to ask what this run actually did.
+        if result is not None:
+            results.append(result)
+        if not accepted:
+            # How it was turned away, not just that it was. A hostname that
+            # does not resolve and a host that answers as something else
+            # are both "not confirmed" and they are not the same finding —
+            # the first says there is nothing there, the second says there
+            # is, and it belongs to somebody else. Recorded here rather
+            # than left to be read out of the manifest, because a rejection
+            # is carried forward for as long as it is fresh and the
+            # manifest entry that explained it is not.
+            rejected.setdefault(component.id, {})[env] = {
+                "url": candidate.url,
+                "checked_at": now(),
+                "status": result.status if result else None,
+                "error": result.error if result else None,
+                # Which question was asked, because a 200 means two
+                # different things depending on it. To a document check, a
+                # 200 reporting somebody else's infores is evidence the
+                # host belongs to another service. To a root probe -- all
+                # this component had, having no infores to check against --
+                # a 200 is only "something answers here", and calling that
+                # another service would be inventing the finding the check
+                # exists to make.
+                "checked": "document" if url else "root",
             }
+            continue
+        derived.setdefault(component.id, {})[env] = {
+            "url": candidate.url, "location": candidate.location,
+        }
+    if confirmed:
         found = sum(len(envs) for envs in derived.values())
         echo(f"  {found} confirmed by the infores they report")
     # Carry forward anything confirmed earlier whose candidate was not re-derived
@@ -657,22 +685,22 @@ def sync(
 ) -> SyncReport:
     """Fetch everything the component files point at, into `root`.
 
-    Runs in waves because each depends on the one before it: SmartAPI is what
-    tells us which environments most components have and the chart index is
-    what tells us which charts exist, so neither the per-endpoint fetches nor
-    the per-chart ones can be planned until wave one has landed.
+    Runs in two waves because the second depends on the first: SmartAPI is
+    what tells us which environments most components have and the chart index
+    is what tells us which charts exist, so neither the per-endpoint fetches
+    nor the per-chart ones can be planned until wave one has landed.
 
     1. Wave one waits on nothing: the SmartAPI registry, the OpenTelemetry
        collectors, the infores catalog, the chart index, the claimed charts'
        files and last commits, and each source repository's releases and
        description.
-    2. Wave two waits on wave one: the OpenAPI and `/status` endpoints the
-       registry and the component files point at, a `Chart.yaml` for every
-       chart the index names, and a root probe of every known deployment.
-    3. Wave three, last: the conventional `transltr.io` hosts nobody
-       registered, derived from the deployments wave one revealed, each
-       believed only if it reports the component's own infores. What it
-       confirms is probed by the next run's wave two (`_confirmed_deployments`).
+    2. Wave two waits on wave one and nothing else, so it all goes out in one
+       pool: the OpenAPI and `/status` endpoints the registry and the
+       component files point at, a `Chart.yaml` for every chart the index
+       names, a root probe of every known deployment, and the conventional
+       `transltr.io` hosts nobody registered — each believed only if it
+       reports the component's own infores. What it confirms is probed by the
+       next run (`_confirmed_deployments`).
 
     Then the run writes `derived.json`, prints the chart and matching summaries,
     and writes the manifest.
@@ -690,6 +718,7 @@ def sync(
 
     def run_all(
         *groups: tuple[list[tuple[str, Path]], Callable[..., FetchResult]],
+        pool: ThreadPoolExecutor | None = None,
     ) -> list[FetchResult]:
         """Several groups of jobs in one pool, each with its own writer.
 
@@ -698,21 +727,24 @@ def sync(
         disk. Grouped rather than run one list after another so a wave stays
         one wave: the root probes and the endpoint fetches wait on the same
         registry answer and on nothing else, and two sequential pools would
-        pay the slowest host's latency twice for no reason.
+        pay the slowest host's latency twice for no reason. Pass `pool` to share
+        one with other work, as wave two does with the candidate probes.
         """
         planned = [(url, dest, do) for jobs, do in groups for url, dest in jobs]
         if not planned:
             return []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(
-                pool.map(
-                    lambda job: job[2](
-                        job[0], job[1], fetcher,
-                        max_age=age_for(job[0], job[1]), root=root,
-                    ),
-                    planned,
-                )
+        if pool is None:
+            with ThreadPoolExecutor(max_workers=workers) as own:
+                return run_all(*groups, pool=own)
+        results = list(
+            pool.map(
+                lambda job: job[2](
+                    job[0], job[1], fetcher,
+                    max_age=age_for(job[0], job[1]), root=root,
+                ),
+                planned,
             )
+        )
         report.fetches.extend(results)
         return results
 
@@ -783,31 +815,48 @@ def sync(
         }
         echo(f"  {len(by_smartapi)} SmartAPI records")
 
-    # Wave two: the endpoints those registries point at, and a Chart.yaml for
-    # every chart the index just named. Neither could be planned before wave
-    # one landed — one waits on SmartAPI, the other on the index — and neither
-    # waits on the other, so they go out in one pool.
+    # Wave two: the endpoints those registries point at, a Chart.yaml for
+    # every chart the index just named, the deployment roots, and the
+    # conventional hostnames nobody registered. None could be planned before
+    # wave one landed and none waits on another, so they go out in one pool.
     endpoint_jobs = _plan_endpoint_fetches(components, by_smartapi, root)
     index_chart_jobs = _plan_index_chart_fetches(
         root, [destination for _, destination in chart_jobs]
     )
     previous = _read_derived(root)
-    root_jobs = _plan_root_probes(
-        components, by_smartapi, _confirmed_deployments(previous), root
-    )
+    pending, rejected = _plan_derived_probes(components, by_smartapi, previous, max_age)
+    candidate_roots = _root_probed_candidates(pending, root)
+    root_jobs = [
+        job
+        for job in _plan_root_probes(
+            components, by_smartapi, _confirmed_deployments(previous), root
+        )
+        if job[1] not in candidate_roots
+    ]
     echo(
         f"Fetching {len(endpoint_jobs)} component endpoints and "
         f"{len(index_chart_jobs)} unclaimed charts, and probing "
         f"{len(root_jobs)} deployment roots ..."
     )
-    run_all((endpoint_jobs + index_chart_jobs, fetch_to), (root_jobs, probe_to))
-
-    # Wave three: the environments nobody registered, each confirmed against
-    # the infores it reports before it is believed.
-    report.fetches.extend(_probe_derived_hosts(
-        components, by_smartapi, previous,
-        fetcher=fetcher, root=root, max_age=max_age, workers=workers, echo=echo,
-    ))
+    if rejected:
+        skipped = sum(len(envs) for envs in rejected.values())
+        echo(f"  {skipped} hostnames already known not to resolve")
+    if pending:
+        echo(f"Probing {len(pending)} conventional hostnames ...")
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        probing = [
+            pool.submit(_confirm_derived, component, candidate, fetcher, root, max_age)
+            for component, _, candidate in pending
+        ]
+        run_all(
+            (endpoint_jobs + index_chart_jobs, fetch_to), (root_jobs, probe_to),
+            pool=pool,
+        )
+        confirmed = [
+            (component, env, candidate, future.result())
+            for (component, env, candidate), future in zip(pending, probing)
+        ]
+    report.fetches.extend(_record_derived(confirmed, rejected, previous, root, echo))
 
     # How much of the chart repository the component files account for. Two
     # numbers rather than a list of names: naming the unclaimed charts is a
