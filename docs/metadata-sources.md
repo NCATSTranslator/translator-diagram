@@ -454,7 +454,7 @@ renciPythonImage:{image: ghcr.io/translatorsri/renci-python-image, version: late
 
 ### Matching a chart to a component
 
-`components.chart_matches` tries five rules and stops at the first that
+`charts.chart_matches` tries five rules and stops at the first that
 matches, ordered by how much each claims:
 
 | Rule | Confidence | Reads |

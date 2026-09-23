@@ -41,7 +41,9 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS`, chart and SmartAPI matching, and the sync-cache readers `sync` and `dashboard` share (`read_json`, `read_yaml`, `chart_dirs`, `unclaimed_charts`) — shared here because neither of those two may import the other |
+| `components.py` | `ComponentFile` and `Deployment` (one `components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
+| `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
@@ -69,7 +71,9 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {flow, sync, synced_data, stages, cells, rows, dashboard}
+components → {charts, deployments, flow, sync, synced_data, stages, cells, rows, dashboard}
+charts → {sync, synced_data, dashboard}
+deployments → {sync, cells, rows}
 synced_data → {cells, rows, dashboard}
 flow → {stages, rows}
 stages → {rows, dashboard}
