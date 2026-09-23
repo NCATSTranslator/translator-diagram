@@ -482,6 +482,7 @@ translator-diagram/
 ├── schema/                 # JSON Schema for components/*.yaml and unknown.yaml
 ├── docs/                   # The metadata case, its research, owner colours
 ├── tests/                  # One test file per module
+├── tools/                  # replay_sync.py: sync() offline, from a recorded cache
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml          # uv/hatchling project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions
