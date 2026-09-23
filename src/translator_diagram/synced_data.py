@@ -117,8 +117,8 @@ class SyncedData:
         document can be believed, and only a 200 makes one believable. Here a
         404 *is* the answer, and dropping it would leave the page unable to
         tell it from silence. It is shown as the HTTP status, not counted as
-        up: `_reachable` takes 2xx and 3xx only, because a 404 at `/` is also
-        what an ingress says for a deployment that has gone away.
+        up: `cells._reachable` takes 2xx and 3xx only, because a 404 at `/` is
+        also what an ingress says for a deployment that has gone away.
 
         Not named `root`: this class already has one, the sync directory
         itself, and a method shadowing it would be a bug that reads as a name.

@@ -257,10 +257,10 @@ def build_rows(
     """One dictionary per component, in the stage order the config file sets.
 
     `stages` is a keyword argument with a default so the loader runs once per
-    build rather than once per call: `build_payload` reads the file and hands
-    the same list to `stage_blocks` afterwards, and the two must be the same
-    list or the step numbers on the rows and the step numbers on the bands
-    could be computed from different files.
+    build rather than once per call: `dashboard.build_payload` reads the file
+    and hands the same list to `stage_blocks` afterwards, and the two must be
+    the same list or the step numbers on the rows and the step numbers on the
+    bands could be computed from different files.
     """
     depths = flow_depths(components)
     stranded = set(isolated(components))

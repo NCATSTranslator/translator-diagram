@@ -465,16 +465,6 @@ any of the three tinted axes, not versions alone. It replaced a "Drift only"
 toggle rather than joining it: two controls that select the same rows cannot be
 told apart by a reader.
 
-**Three references across the dashboard stack look like import cycles and are
-not.** `SyncedData`'s docstring mentions `_reachable`, and `build_rows`'
-mentions `build_payload` and `stage_blocks` — all three name a function the
-module does not import, in prose explaining where the value goes next. Grep
-says cycle; the AST says there is no reference. Do not "fix" them by moving
-code to satisfy a dependency that is not there, and do not delete the prose to
-quiet the grep: the two edges that *are* real are recorded under
-[Package layout](#package-layout-srctranslator_diagram), and
-`tests/test_package_layout.py` fails on an actual cycle.
-
 **The browser code is not a module system.** `web/*.js` is concatenated in
 `JS_FILES` order into one shared scope. A name declared with `const` in two
 files is a syntax error only when the bundle is checked — which is why
