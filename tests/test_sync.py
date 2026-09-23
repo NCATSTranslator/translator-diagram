@@ -1,4 +1,5 @@
-"""The fetchers, driven by an injected fetcher so nothing here reaches the network."""
+"""What sync plans, in which wave, and what it records — driven by an injected
+fetcher so nothing here reaches the network. The fetch itself is test_fetch.py."""
 
 import json
 from datetime import UTC, datetime

@@ -48,7 +48,7 @@ The dashboard is a second, parallel stack over the same components:
 | `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
 | `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the three waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
-| `payload_details.py` | Pure helpers over the sync cache and component files: live OpenAPI facts, Helm chart index, SmartAPI infores matching, repo metadata, connection ids, free-text scrub |
+| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
 | `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
 | `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `config/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
