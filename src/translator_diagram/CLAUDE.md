@@ -297,9 +297,10 @@ budget: 60 calls an hour per address unauthenticated, 5000 with a
 `GITHUB_TOKEN` in the environment, which `_headers` sends to api.github.com and
 nowhere else. Release lists are keyed by repository rather than by component so
 the three shepherds cost one call, and a throttled 403 is reported by name at
-the end of wave one — a silent one reads as "this repository has no releases",
-which is a different and wrong finding. Nothing here fails the run: the
-dashboard shows fewer tags, and the next sync picks them up.
+the end of wave one (the waves are listed in `sync`'s docstring) — a silent one
+reads as "this repository has no releases", which is a different and wrong
+finding. Nothing here fails the run: the dashboard shows fewer tags, and the
+next sync picks them up.
 
 **Only a `source` repository whose URL names a whole repository gets releases.**
 `github_repo` rejects `.../translator-devops/tree/develop/helm/<chart>`, which

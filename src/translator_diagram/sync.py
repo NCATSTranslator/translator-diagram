@@ -728,6 +728,21 @@ def sync(
     tells us which environments most components have and the chart index is
     what tells us which charts exist, so neither the per-endpoint fetches nor
     the per-chart ones can be planned until wave one has landed.
+
+    1. Wave one waits on nothing: the SmartAPI registry, the OpenTelemetry
+       collectors, the infores catalog, the chart index, the claimed charts'
+       files and last commits, and each source repository's releases and
+       description.
+    2. Wave two waits on wave one: the OpenAPI and `/status` endpoints the
+       registry and the component files point at, a `Chart.yaml` for every
+       chart the index names, and a root probe of every known deployment.
+    3. Wave three, last: the conventional `transltr.io` hosts nobody
+       registered, derived from the deployments wave one revealed, each
+       believed only if it reports the component's own infores. What it
+       confirms is probed by the next run's wave two (`_confirmed_deployments`).
+
+    Then the run writes `derived.json`, prints the chart and matching summaries,
+    and writes the manifest.
     """
     report = SyncReport(started_at=_now())
     root.mkdir(parents=True, exist_ok=True)
