@@ -28,6 +28,12 @@ def workspace(tmp_path):
             "  ci:\n"
             "    url: https://example.invalid/\n"
             "refactor_status: New in Refactor\n"
+            # keeper calls secret, so a published build has a withheld
+            # component to strip out of a kept row's connections.
+            "connections:\n"
+            "  gets_results_from: []\n"
+            f"  calls: [{'secret' if cid == 'keeper' else ''}]\n"
+            "  externals: []\n"
         )
     sync = tmp_path / "sync"
     sync.mkdir()
@@ -101,6 +107,15 @@ class TestTheFlagDefaultsToWithholding:
         result, _ = _run(workspace, "--include-private")
         assert "Do not publish" in result.output
 
+    def test_a_withheld_component_survives_in_no_ones_connections(self, workspace):
+        # End to end through the real command, verify included: the build
+        # aborts rather than publishing if this regresses.
+        result, payload = _run(workspace)
+        assert result.exit_code == 0, result.output
+        block = payload["rows"][0]["connections"]
+        assert block["calls"] == []
+        assert block["withheld"] == {"calls": 1}
+
     def test_a_withholding_build_names_what_it_withheld(self, workspace):
         result, _ = _run(workspace)
         assert "Withheld 1 components (secret)" in result.output
@@ -130,3 +145,52 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestTheStageOrderReport:
+    """`build-dashboard` says where the written order and the edges disagree."""
+
+    def _stage(self, workspace, components):
+        (workspace / "config" / "flow-steps.yaml").write_text(
+            "stages:\n"
+            "  - title: First\n"
+            "    description: Comes first.\n"
+            f"    components: [{components[0]}]\n"
+            "  - title: Second\n"
+            "    description: Comes second.\n"
+            f"    components: [{components[1]}]\n"
+            "unplaced:\n"
+            "  description: Nothing is unplaced.\n"
+            "  components: []\n"
+        )
+
+    def test_a_backwards_results_edge_is_reported(self, workspace):
+        # keeper is staged first and takes results from secret, which is
+        # staged second: either the placement is wrong or the edge is.
+        self._stage(workspace, ["keeper", "secret"])
+        (workspace / "components" / "keeper.yaml").write_text(
+            "id: keeper\nname: keeper\nowner: DOGSLED\n"
+            "environments:\n  ci:\n    url: https://example.invalid/\n"
+            "refactor_status: New in Refactor\n"
+            "connections:\n"
+            "  gets_results_from: [secret]\n  calls: []\n  externals: []\n"
+        )
+        result, _ = _run(workspace, "--include-private")
+        assert result.exit_code == 0, result.output
+        assert "Stage order disagrees with the recorded edges" in result.output
+        assert "keeper (step 1) gets results from secret (step 2)" in result.output
+
+    def test_an_order_that_agrees_says_nothing(self, workspace):
+        # The common case, and the one that must stay quiet: a report that
+        # fires on every build is one nobody reads.
+        self._stage(workspace, ["secret", "keeper"])
+        (workspace / "components" / "keeper.yaml").write_text(
+            "id: keeper\nname: keeper\nowner: DOGSLED\n"
+            "environments:\n  ci:\n    url: https://example.invalid/\n"
+            "refactor_status: New in Refactor\n"
+            "connections:\n"
+            "  gets_results_from: [secret]\n  calls: []\n  externals: []\n"
+        )
+        result, _ = _run(workspace, "--include-private")
+        assert result.exit_code == 0, result.output
+        assert "Stage order disagrees" not in result.output

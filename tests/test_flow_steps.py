@@ -19,6 +19,7 @@ import yaml
 
 from translator_diagram.components import load_components
 from translator_diagram.dashboard import UNPLACED_TITLE, in_stage_order, load_stages
+from translator_diagram.flow import order_conflicts
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGES_PATH = ROOT / "config" / "flow-steps.yaml"
@@ -117,3 +118,27 @@ def test_a_missing_file_is_refused(components, tmp_path):
     ordered = in_stage_order(components, [])
     assert len(ordered) == len(components)
     assert {number for _, number, _ in ordered} == {1}
+
+
+def test_no_component_is_staged_before_something_it_gets_results_from(
+    components, stages
+):
+    """The written order and the recorded edges have to agree.
+
+    `config/flow-steps.yaml` replaced the computed order because the edges are
+    too sparse to derive one from — but where an edge *is* recorded it is
+    evidence about the order, and a component staged before something it takes
+    results from means one of the two is wrong. Clean today, across all twenty
+    recorded results edges; this keeps it that way.
+
+    Calls are deliberately not checked: eleven of them run backwards and every
+    one is correct. See `flow.order_conflicts`.
+    """
+    steps = {c.id: number for c, number, _ in in_stage_order(components, stages)}
+    conflicts = order_conflicts(components, steps)
+    assert not conflicts, "\n".join(
+        f"{cid} (step {steps[cid]}) gets results from {feeder} "
+        f"(step {steps[feeder]}) — move one of them in config/flow-steps.yaml, "
+        f"or fix the edge in components/{cid}.yaml"
+        for cid, feeder, _ in conflicts
+    )
