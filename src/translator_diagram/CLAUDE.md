@@ -45,7 +45,8 @@ The dashboard is a second, parallel stack over the same components:
 | `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
 | `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
-| `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
+| `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
+| `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the three waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `payload_details.py` | Pure helpers over the sync cache and component files: live OpenAPI facts, Helm chart index, SmartAPI infores matching, repo metadata, connection ids, free-text scrub |
 | `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
@@ -71,9 +72,10 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {charts, deployments, flow, sync, synced_data, stages, cells, rows, dashboard}
+components → {charts, deployments, fetch, flow, sync, synced_data, stages, cells, rows, dashboard}
 charts → {sync, synced_data, dashboard}
 deployments → {sync, cells, rows}
+fetch → sync
 synced_data → {cells, rows, dashboard}
 flow → {stages, rows}
 stages → {rows, dashboard}
@@ -351,7 +353,7 @@ rendering, and says something that is not true.
   including the ones that fail, which is why the Fetches tile counts more than
   the endpoints — the manifest promises every attempt.
 - **A host it never contacted.** `reachable` is three states, not two. Every
-  deployment gets a root probe of its own URL — `sync.probe_to`, which saves a
+  deployment gets a root probe of its own URL — `fetch.probe_to`, which saves a
   `{status, content_type, error}` summary rather than the page — and the cell
   is reachable if the root or any document answered 2xx/3xx, not reachable if
   every probe failed, and *null* if nothing was probed. Before the root probe

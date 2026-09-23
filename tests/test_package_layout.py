@@ -40,8 +40,11 @@ ALLOWED = {
     # may not import each other.
     "charts": {"components"},
     "deployments": {"components"},
+    # The transport under sync: one URL into one file. It knows HTTP and the
+    # cache's file shapes, and nothing about what a component is.
+    "fetch": {"components"},
     "flow": {"components"},
-    "sync": {"charts", "components", "deployments"},
+    "sync": {"charts", "components", "deployments", "fetch"},
     # privacy is a leaf: it filters plain dictionaries, so it needs to know
     # nothing about where they came from, and dashboard can apply it without
     # anything in the graph moving.

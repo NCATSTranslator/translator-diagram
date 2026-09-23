@@ -459,6 +459,7 @@ translator-diagram/
 │   │                       # the dashboard
 │   ├── deployments.py      # Where each component runs: recorded, registered, derived
 │   ├── charts.py           # Which component each Helm chart belongs to
+│   ├── fetch.py            # One URL into one file: fetch_to, probe_to
 │   ├── sync.py             # Fetches what the component files point at
 │   ├── flow.py             # Data-flow depths, and the stage-order check
 │   ├── synced_data.py      # Reads the sync cache; where the 200 gate lives

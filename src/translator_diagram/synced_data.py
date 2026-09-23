@@ -107,7 +107,7 @@ class SyncedData:
     def root_probe(self, component_id: str, env: str) -> dict[str, Any] | None:
         """How the deployment's own URL answered this run, or None.
 
-        `{"status", "content_type", "error"}` — what `sync.probe_to` saved,
+        `{"status", "content_type", "error"}` — what `fetch.probe_to` saved,
         which is a summary rather than the page itself. Gated the way the
         endpoint bodies are: a summary is only read when this run's manifest
         has an entry for it, so a host that has since been taken out of the

@@ -18,14 +18,30 @@ def _comp(cid, **kwargs):
     return ComponentFile(id=cid, name=kwargs.pop("name", cid), owner="DOGSLED", **kwargs)
 
 
+class FakeFetcher:
+    """Answers from a dict, and records what it was asked for."""
+
+    def __init__(self, responses, default=(404, b"")):
+        self.responses = responses
+        self.default = default
+        self.urls = []
+
+    def __call__(self, url):
+        self.urls.append(url)
+        value = self.responses.get(url, self.default)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+
 class _Probes:
     """A sync directory built one recorded probe at a time.
 
     Every test below turns on the same thing -- which requests this run made
     and how each answered -- and writing that as a manifest by hand four lines
     at a time is how a fixture comes to disagree with what `sync` actually
-    writes. So: one builder, the same shapes `sync.probe_to` and
-    `sync.fetch_to` produce, and the manifest assembled from what was asked
+    writes. So: one builder, the same shapes `fetch.probe_to` and
+    `fetch.fetch_to` produce, and the manifest assembled from what was asked
     for rather than declared separately.
     """
 
