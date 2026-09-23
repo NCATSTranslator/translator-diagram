@@ -52,7 +52,7 @@ The dashboard is a second, parallel stack over the same components:
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
 | `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged
@@ -414,17 +414,6 @@ the older question. `sync` now carries the previous manifest's path-to-URL map
 and re-fetches anything whose URL moved. If you add a fetcher, give it a stable
 destination path and let that map do the work.
 
-**Environment columns sort by the age of the release running there**, not by
-version string: comparing `2.10.2` against `1.0` across two different
-components means nothing. Cells rank in tiers — running a release we can date,
-running something no release names, not deployed — and the tiers hold in both
-directions.
-
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
-
 **The privacy filter is about reach, not secrecy.** Everything the dashboard
 shows is read from public services, this repository is public, and
 `config/privacy.yaml` names what it withholds and why — so it hides nothing
@@ -454,23 +443,6 @@ than showing as an empty header. Step numbers come from the stage's position
 in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
-**The dashboard opens on every component**, having once opened on
-`Environments disagree` — which showed 7 rows of 24 and hid the platform to
-make a point about drift, so someone looking up one component found it missing
-from a page that never said it was filtered. Drift is still the first thing the
-page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `web/table.js`, listed in that
-order so the default reads first, with `DEFAULT_VIEW` naming it. `differ` means
-any of the three tinted axes, not versions alone. It replaced a "Drift only"
-toggle rather than joining it: two controls that select the same rows cannot be
-told apart by a reader.
-
-**The browser code is not a module system.** `web/*.js` is concatenated in
-`JS_FILES` order into one shared scope. A name declared with `const` in two
-files is a syntax error only when the bundle is checked — which is why
-`tests/test_web_assets.py` concatenates before `node --check`, and why
-`tests/web/` runs under `node --test`.
-
 **`edges` and `stages` are built after `privacy.apply`.** The map reads the
 published payload, so withheld components must disappear from the graph as well
 as the table. Building the graph before redaction would leave ghost nodes a
@@ -479,13 +451,6 @@ published build must not name.
 **OpenTelemetry joins are case-sensitive.** A service name in the OTel answer
 must match the deployment record exactly; normalising case would merge two
 different services and over-count.
-
-**The theme cycle starts by moving away from the system**, not at light: the
-page defaults to following the operating system, so `auto → light → dark`
-would spend the first click repainting a light machine light and read as a
-dead button. `nextTheme` therefore reads `prefers-color-scheme` to decide
-which way to go first, and the one click that does not change the appearance
-is the trip back to auto, which says so in the button's title.
 
 **`newrank="true"`** in `build_graph` is required for `rank=same` to work
 across cluster boundaries — the legend clusters rely on it.
