@@ -29,7 +29,20 @@ repositories:
     role: source
     visibility: public
 
+endpoints:
+  # Checked on 2026-09-02: / and /docs are HTML, /health is JSON, and
+  # /openapi.json and /status are both 404. This is a file server, not an API
+  # service, so there is no OpenAPI document to find.
+  openapi: null
+  status: health
+
 environments:
   ci:
     url: https://kgx-storage.ci.transltr.io/
     location: ITRB
+
+notes: >-
+  A file browser over the Translator ingests, with a JSON health endpoint at
+  /health reporting how many metrics it has loaded. It publishes no version
+  anywhere — not at /health, not in a document, and it is in no registry — so
+  its cell shows the health it reports and no version number.

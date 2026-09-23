@@ -36,14 +36,41 @@ ALLOWED = {
     # palette across both — but nothing else: components.py parses the YAML
     # files, model.py parses the sheet, and neither knows about the other.
     "components": set(),
+    # Chart matching sits below both sync and dashboard, which each ask it and
+    # may not import each other.
+    "charts": {"components"},
+    "deployments": {"components"},
+    # The transport under sync: one URL into one file. It knows HTTP and the
+    # cache's file shapes, and nothing about what a component is.
+    "fetch": {"components"},
     "flow": {"components"},
-    "sync": {"components"},
+    "sync": {"charts", "components", "deployments", "fetch"},
     # privacy is a leaf: it filters plain dictionaries, so it needs to know
     # nothing about where they came from, and dashboard can apply it without
     # anything in the graph moving.
     "privacy": set(),
-    "dashboard": {"colors", "components", "flow", "privacy"},
-    "dashboard_cli": {"components", "dashboard", "flow", "privacy", "sync"},
+    # payload_details is a leaf for the same reason: dict in, dict out, so the
+    # shaping can be tested without a network, a checkout or a rendered page.
+    "payload_details": set(),
+    # The dashboard stack, one subject per module and each layer reading only
+    # the one below it. synced_data is the only module that touches the sync
+    # cache; cells resolves one cell from it; rows assembles one component's
+    # row; dashboard assembles the payload and renders the page. Splitting it
+    # this way is what keeps any one of them small enough to hold in a head.
+    "synced_data": {"charts", "components"},
+    "stages": {"components", "flow"},
+    "cells": {"components", "deployments", "synced_data"},
+    "rows": {
+        "cells", "components", "deployments", "flow", "payload_details", "stages",
+        "synced_data",
+    },
+    "dashboard": {
+        "cells", "charts", "colors", "components", "privacy", "rows", "stages",
+        "synced_data",
+    },
+    "dashboard_cli": {
+        "components", "dashboard", "flow", "privacy", "sync", "synced_data",
+    },
 }
 
 # Neither entry point may be imported: a module that pulls in a CLI drags

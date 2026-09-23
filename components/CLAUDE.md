@@ -22,6 +22,12 @@ appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
 never URLs; and no file writes a `diagram:` flag at its default, which is what
 keeps that block absent rather than 26 copies of `ubiquitous: false`.
 
+`diagram.ubiquitous: true` marks cross-cutting infrastructure (jaeger today)
+that the **Map view** draws beside each caller instead of as one central node —
+the same idea as the sheet's `Ubiquitous` column in the Graphviz diagram.
+`diagram.hide: true` removes a component from the Map only; it stays in the
+Overview table (ploverdb today).
+
 `unknown.yaml` collects identifiers observed in the platform that no
 component file claims — today, the OpenTelemetry service names that could not
 be attributed. Do not delete an entry to make a test pass: an entry is removed

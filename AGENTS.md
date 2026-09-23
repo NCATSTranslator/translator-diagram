@@ -13,6 +13,7 @@ when it is relevant rather than every time:
 | Where | What is in it |
 |---|---|
 | [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) | The module map, the import rules, the data model, "I want to change X → open this", and two sections of decisions that look wrong and aren't. **Read it before changing any module.** |
+| [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) | The browser half: how to screenshot and measure the page, how to test its JS, and the browser-side decisions that look wrong and aren't |
 | [`components/CLAUDE.md`](components/CLAUDE.md) | What a `components/<id>.yaml` must contain and which rules the tests enforce on it |
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
@@ -36,44 +37,25 @@ entries are there because someone already tried the obvious thing.
   catch visual bugs: this page once passed 301 tests, `node --check` and a
   self-containment assertion while shipping a badge on 27 of 45 cells that
   drowned the table, a tile that counted 74 things where there were 41, and two
-  environment columns unreachable at narrow widths. Render it and look —
-  headless Firefox needs no extra tooling, and its own profile because yours is
-  probably already running:
+  environment columns unreachable at narrow widths. Render it and look, in
+  **both views** (Overview and Map) and in light and dark.
 
-  ```bash
-  uv run build-dashboard
-  MOZ_NO_REMOTE=1 /Applications/Firefox.app/Contents/MacOS/firefox \
-    --headless --new-instance --profile /tmp/ffprofile \
-    --screenshot /tmp/dash.png --window-size=1700,1400 \
-    "file://$PWD/data/dashboard/index.html"
-  ```
-
-  Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
-  breakpoints — the table is wider than the window between about 1100 and
-  1500px, which is where the sticky header and the band descriptions go wrong.
-  Whether the result *reads* well is still the operator's call: report what you
-  saw and let them look.
-
-  A headless profile follows the system theme, so on a dark machine every
-  screenshot is dark and half the palette goes unchecked. A second profile with
-  one pref shoots the other theme (use `1` for dark on a light machine):
-
-  ```bash
-  mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
-  ```
-
-- **JS with judgement in it can be tested, even with no JS harness here.** Slice
-  the block out of `web/dashboard.js`, stub `document`/`localStorage`/
-  `matchMedia`, and run it under `node` from the scratchpad — that is how the
-  theme cycle was checked against both system preferences, and how the sort
-  comparators were driven over the real `overview.json` to prove undated rows
-  stay last in *both* directions. Throwaway scripts, not fixtures: nothing in
-  CI runs JS beyond `node --check`.
+  The recipe — Chromium rather than Firefox, frozen animations, the theme
+  stub, and which widths to measure rather than eyeball — is in
+  [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md),
+  along with how to test the JS without a harness. Whether the result *reads*
+  well is still the operator's call: report what you saw and let them look.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`
   never is: it embeds a creation timestamp.) This is stronger than reading the
   diff, and it does not need an aesthetic judgement.
+
+  The dashboard works the same way: build from one `data/sync/` before and
+  after, and `overview.json` and `index.html` are byte-identical. `sync` itself
+  cannot be compared across two live runs, because upstream answers change in
+  between, so replay a recorded one with `tools/replay_sync.py` — its docstring
+  has the recipe.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
   temporary files, sample CSVs, cloned repos, or anything else you need to
   write while working. Never commit anything from it.

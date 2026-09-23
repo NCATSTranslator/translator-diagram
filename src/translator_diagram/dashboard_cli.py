@@ -12,11 +12,12 @@ from pathlib import Path
 import click
 
 from .components import load_components
-from .dashboard import SyncedData, build_payload, write_dashboard
+from .dashboard import build_payload, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
+from .synced_data import SyncedData
 
 DEFAULT_COMPONENTS = Path("components")
 DEFAULT_SYNC_DIR = Path("data/sync")

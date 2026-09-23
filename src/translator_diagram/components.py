@@ -11,34 +11,17 @@ Nothing here imports anything else in the package, and nothing here reaches
 the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
+import json
 import re
-from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
 
 import yaml
 
 # Our environment ladder, in the order a change travels along it. Also the
 # column order in the dashboard, so it is defined once, here.
 ENVIRONMENTS = ("dev", "ci", "test", "prod")
-
-# ITRB deploys on a fixed hostname convention: `<stem>.ci.transltr.io`,
-# `<stem>.test.transltr.io`, `<stem>.transltr.io`. Knowing one environment's
-# host therefore tells you where to *look* for the others — which matters
-# because SmartAPI registration is manual and routinely incomplete.
-#
-# `dev` is deliberately absent: development deployments live at RENCI, at
-# BioThings, and elsewhere, with no convention to derive from.
-TRANSLTR_HOST = re.compile(
-    r"^(?P<stem>[^.]+)\.(?:(?P<maturity>ci|test)\.)?transltr\.io$"
-)
-DERIVABLE_HOSTS = {
-    "ci": "{stem}.ci.transltr.io",
-    "test": "{stem}.test.transltr.io",
-    "prod": "{stem}.transltr.io",
-}
 
 # Where an endpoint lives when the component file does not say. Only applied
 # when the key is *absent*: an explicit null means someone checked and this
@@ -57,15 +40,6 @@ GITHUB_REPO = re.compile(
     r"^https?://github\.com/(?P<owner>[^/]+)/(?P<name>[^/#?]+?)(?:\.git)?/?$"
 )
 
-# SmartAPI's `x-maturity` vocabulary is not ours. `ci` is "staging", which is
-# the mapping people get wrong: it is not "development".
-MATURITY_TO_ENV = {
-    "development": "dev",
-    "staging": "ci",
-    "testing": "test",
-    "production": "prod",
-}
-
 
 @dataclass(frozen=True)
 class Deployment:
@@ -76,6 +50,10 @@ class Deployment:
     location: str | None = None
     # Overrides the component's shared `endpoints` for this environment only.
     endpoints: dict[str, str | None] = field(default_factory=dict)
+    # True when nothing declared this environment and it was read off the
+    # server's own description. A weaker claim than a declared `x-maturity`,
+    # and the page says so rather than showing the two as one kind of fact.
+    inferred: bool = False
 
 
 @dataclass
@@ -114,12 +92,57 @@ class ComponentFile:
         return self.identifiers.get("smartapi")
 
     @property
+    def helm_charts(self) -> list[str]:
+        """Every chart this component is deployed from, in the order recorded.
+
+        `identifiers.helm_chart` is a string or a list of strings, because one
+        component can be deployed from several charts — a web server and its
+        loader are two charts and one thing — and recording both is more honest
+        than picking one and losing the other. A string is the one-chart case
+        spelled the short way, and an absent key is the empty list rather than
+        `[None]`.
+        """
+        recorded = self.identifiers.get("helm_chart")
+        if isinstance(recorded, str):
+            recorded = [recorded]
+        elif not isinstance(recorded, list):
+            recorded = []
+
+        names: list[str] = []
+        seen: set[str] = set()
+        for name in recorded:
+            if not isinstance(name, str):
+                continue
+            cleaned = name.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                names.append(cleaned)
+        return names
+
+    @property
     def helm_chart(self) -> str | None:
-        return self.identifiers.get("helm_chart")
+        """The first chart, or None.
+
+        Kept alongside `helm_charts` because `overview.json` has carried this
+        key since before a component could have two, and a payload key is a
+        contract: a consumer reading `helm_chart` must keep getting a string.
+        """
+        charts = self.helm_charts
+        return charts[0] if charts else None
 
     @property
     def otel_services(self) -> list[str]:
         return list(self.identifiers.get("otel_services") or [])
+
+    @property
+    def translator_all_wiki(self) -> str | None:
+        """The page name in the Translator-All wiki, not a URL.
+
+        The wiki is one identifier space among several, so the file records the
+        page name the way it records an infores or a chart name; whoever renders
+        it builds the link.
+        """
+        return self.identifiers.get("translator_all_wiki")
 
     # -- itrb -------------------------------------------------------------
 
@@ -136,6 +159,41 @@ class ComponentFile:
     @property
     def hidden(self) -> bool:
         return bool(self.diagram.get("hide"))
+
+    @property
+    def ubiquitous(self) -> bool:
+        """Drawn beside each caller rather than once in the middle."""
+        return bool(self.diagram.get("ubiquitous"))
+
+    def connection_ids(self) -> dict[str, list[str]]:
+        """The four recorded edge lists, planned ones separated out.
+
+        `gets_results_from` and `calls` are two different relationships and the
+        page draws them differently, so unlike `upstream` — which flattens both
+        because a data-flow ordering does not care how a call was made — this
+        keeps them apart. A leading `~` means planned rather than implemented,
+        and it is a marker on the reference, not part of the id: it is stripped
+        here so every list holds ids that resolve, and the tilde survives as the
+        list the reference landed in.
+
+        Every key is always present, empty where the file records nothing, so a
+        consumer can index all four without asking whether the component
+        happens to have any.
+        """
+        found: dict[str, list[str]] = {
+            "gets_results_from": [],
+            "calls": [],
+            "planned_gets_results_from": [],
+            "planned_calls": [],
+        }
+        for kind in ("gets_results_from", "calls"):
+            for ref in self.connections.get(kind) or []:
+                if not isinstance(ref, str) or not ref.strip():
+                    continue
+                text = ref.strip()
+                planned = text.startswith("~")
+                found[f"planned_{kind}" if planned else kind].append(text.lstrip("~"))
+        return found
 
     @property
     def upstream(self) -> list[str]:
@@ -178,7 +236,7 @@ class ComponentFile:
         Only sees deployments recorded in the file. Most components have none,
         deliberately — SmartAPI already knows their URLs, so recording them
         here would be a second copy. Pass the merged mapping from
-        `merge_deployments` to `endpoint_url_in` for those.
+        `deployments.merge_deployments` to `endpoint_url_in` for those.
         """
         deployment = self.environments.get(env)
         if deployment is None:
@@ -229,85 +287,34 @@ def github_repo(url: str | None) -> str | None:
     return f"{match['owner']}/{match['name']}" if match else None
 
 
-def deployments_from_smartapi(record: dict[str, Any]) -> dict[str, Deployment]:
-    """The environments a SmartAPI record declares.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
-    Records routinely list the same server twice, and some carry no
-    `x-maturity` at all — node-annotator's ci and test entries do not, and are
-    declared http:// rather than https://. Both are dropped rather than
-    guessed at: an environment we cannot name is not one we can put in a
-    column.
+
+def read_json(path: Path) -> Any:
+    """A cached JSON body, or None when it is missing or is not JSON.
+
+    Shared by `sync` and the dashboard, which both read the sync cache. Several
+    Translator endpoints answer 200 with an HTML error page and a throttled
+    GitHub call answers with an object where a list was asked for, so callers
+    still check the shape they get back.
     """
-    out: dict[str, Deployment] = {}
-    for server in record.get("servers") or []:
-        env = MATURITY_TO_ENV.get(server.get("x-maturity") or "")
-        url = server.get("url")
-        if not env or not url or env in out:
-            continue
-        out[env] = Deployment(env=env, url=url, location=server.get("x-location"))
-    return out
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
 
 
-def derive_deployments(known: dict[str, Deployment]) -> dict[str, Deployment]:
-    """Where a component's missing environments would be, by convention.
+def read_yaml(path: Path) -> dict[str, Any] | None:
+    """A YAML mapping, or None when it is missing, malformed or not a mapping.
 
-    Candidates, not facts. Nothing here has been contacted, so a caller must
-    confirm each one before believing it — `sync` does that by fetching the
-    endpoint and checking the infores it reports. Deriving without confirming
-    would be guessing, which is the one thing these files must never do.
-
-    The stem and any path are taken from an environment we already know, so
-    arax's `/api/arax/v1.4` survives into its siblings.
-
-    One stem is chosen even when the known hosts disagree, because a
-    conventional hostname has one shape and probing several would race two
-    fetches for the same cache file. It is the commonest stem, and the
-    earliest on the ladder among equals — a rule the deployments decide,
-    rather than the alphabetical accident of sorting the stems and taking the
-    first, which is what this did while reading as though it tried each.
+    libyaml's loader where it is installed: the infores catalog alone takes
+    0.14 s through the pure-Python one and 0.02 s through it.
     """
-    stems: list[tuple[str, str]] = []
-    for env in ENVIRONMENTS:
-        deployment = known.get(env)
-        if deployment is None:
-            continue
-        parts = urlsplit(deployment.url)
-        match = TRANSLTR_HOST.match(parts.hostname or "")
-        if match:
-            stems.append((match.group("stem"), parts.path.rstrip("/")))
-    if not stems:
-        return {}
-    seen = Counter(stem for stem, _ in stems)
-    # max() keeps the first of equals, and `stems` is in ladder order.
-    stem, path = max(stems, key=lambda pair: seen[pair[0]])
-    return {
-        env: Deployment(
-            env=env,
-            url=f"https://{template.format(stem=stem)}{path}/",
-            location="ITRB",
-        )
-        for env, template in DERIVABLE_HOSTS.items()
-        if env not in known
-    }
-
-
-def merge_deployments(
-    component: ComponentFile,
-    discovered: dict[str, Deployment],
-    derived: dict[str, Deployment] | None = None,
-) -> dict[str, Deployment]:
-    """Deployments for a component, best source first.
-
-    A recorded deployment wins over a registered one, which wins over a
-    derived one. Recorded entries exist precisely because the registry was
-    wrong or absent — node-annotator is recorded because SmartAPI registers it
-    at a host that does not serve its OpenAPI — so letting anything overwrite
-    them would reintroduce the bug they document.
-    """
-    merged = dict(derived or {})
-    merged.update(discovered)
-    merged.update(component.environments)
-    return {env: merged[env] for env in ENVIRONMENTS if env in merged}
+    try:
+        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
+    except (OSError, yaml.YAMLError, UnicodeDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
 
 
 def _parse_environments(raw: dict[str, Any]) -> dict[str, Deployment]:

@@ -4,14 +4,11 @@ import yaml
 
 from translator_diagram.components import (
     DEFAULT_ENDPOINT_PATHS,
-    ENVIRONMENTS,
     Deployment,
-    derive_deployments,
     endpoint_url_in,
     github_repo,
     index_by_id,
     load_components,
-    merge_deployments,
     parse_component,
 )
 
@@ -51,6 +48,25 @@ class TestParsing:
         component = _parse()
         assert component.infores is None and component.otel_services == []
 
+    def test_helm_charts_normalises_a_string_a_list_and_nothing(self):
+        # nodenorm-es is two charts, most components are one, and most files
+        # record nothing. `helm_chart` keeps returning a string either way,
+        # because it is a payload key with consumers.
+        one = _parse(identifiers={"helm_chart": "shepherd"})
+        assert one.helm_charts == ["shepherd"] and one.helm_chart == "shepherd"
+        two = _parse(identifiers={"helm_chart": [
+            "node-normalization-web-server", "node-normalization-loader"]})
+        assert two.helm_charts == [
+            "node-normalization-web-server", "node-normalization-loader"]
+        assert two.helm_chart == "node-normalization-web-server"
+        none = _parse()
+        assert none.helm_charts == [] and none.helm_chart is None
+
+    def test_the_wiki_page_is_a_name_not_a_url(self):
+        component = _parse(identifiers={"translator_all_wiki": "RTX-KG2"})
+        assert component.translator_all_wiki == "RTX-KG2"
+        assert _parse().translator_all_wiki is None
+
     def test_repository_selects_by_role(self):
         component = _parse(repositories=[
             {"url": "https://chart", "role": "helm-chart"},
@@ -81,6 +97,36 @@ class TestEdges:
         component = _parse(connections={"externals": [
             {"direction": "out", "name": "User"}]})
         assert not component.fed_by_external
+
+    def test_planned_and_implemented_edges_stay_apart(self):
+        # `upstream` flattens all four into one list because a data-flow
+        # ordering does not care how a call was made. The map does care: a
+        # planned edge is a claim about intent and is drawn differently.
+        component = _parse(connections={
+            "gets_results_from": ["a", "~b"], "calls": ["c", "~d"]})
+        assert component.connection_ids() == {
+            "gets_results_from": ["a"],
+            "calls": ["c"],
+            "planned_gets_results_from": ["b"],
+            "planned_calls": ["d"],
+        }
+
+    def test_the_tilde_is_not_part_of_the_id(self):
+        # node-annotator records `~jaeger`. Leaving the marker on the id means
+        # the reference resolves to nothing, and every consumer downstream —
+        # the edge builder, the privacy pruner — has to strip it again.
+        component = _parse(connections={"calls": ["~jaeger"]})
+        assert component.connection_ids()["planned_calls"] == ["jaeger"]
+
+    def test_an_absent_list_is_an_empty_one(self):
+        # All four keys, always: a consumer indexing `connections["calls"]`
+        # should not have to know which components happen to record any.
+        assert _parse().connection_ids() == {
+            "gets_results_from": [],
+            "calls": [],
+            "planned_gets_results_from": [],
+            "planned_calls": [],
+        }
 
 
 class TestEndpointUrls:
@@ -132,95 +178,6 @@ class TestEndpointUrls:
     def test_the_method_only_sees_recorded_environments(self):
         component = _parse(endpoints={"openapi": "openapi.json"})
         assert component.endpoint_url("ci", "openapi") is None
-
-
-class TestMergeDeployments:
-    def test_recorded_beats_discovered(self):
-        # _parse goes through parse_component, so environments arrive in the
-        # raw YAML shape rather than as Deployment objects.
-        component = _parse(environments={"ci": {"url": "https://right/"}})
-        merged = merge_deployments(
-            component, {"ci": Deployment(env="ci", url="https://wrong/")})
-        assert merged["ci"].url == "https://right/"
-
-    def test_discovered_fills_the_gaps(self):
-        component = _parse()
-        merged = merge_deployments(
-            component, {"prod": Deployment(env="prod", url="https://p/")})
-        assert set(merged) == {"prod"}
-
-    def test_the_result_is_in_ladder_order(self):
-        component = _parse()
-        merged = merge_deployments(component, {
-            env: Deployment(env=env, url=f"https://{env}/")
-            for env in reversed(ENVIRONMENTS)
-        })
-        assert list(merged) == list(ENVIRONMENTS)
-
-    def test_an_unknown_environment_name_is_dropped(self):
-        component = _parse()
-        merged = merge_deployments(
-            component, {"staging": Deployment(env="staging", url="https://s/")})
-        assert merged == {}
-
-
-class TestDeriveDeployments:
-    def test_the_other_maturities_follow_from_one(self):
-        # answer-appraiser registers only production, and is deployed to ci and
-        # test as well. Knowing one host is knowing where to look for the rest.
-        known = {"prod": Deployment(env="prod", url="https://answerappraiser.transltr.io")}
-        assert {e: d.url for e, d in derive_deployments(known).items()} == {
-            "ci": "https://answerappraiser.ci.transltr.io/",
-            "test": "https://answerappraiser.test.transltr.io/",
-        }
-
-    def test_a_path_on_the_base_survives(self):
-        # arax registers .../api/arax/v1.4; a sibling host without that path
-        # would 404 and be silently dropped.
-        known = {"ci": Deployment(env="ci", url="https://arax.ci.transltr.io/api/arax/v1.4")}
-        assert derive_deployments(known)["prod"].url == (
-            "https://arax.transltr.io/api/arax/v1.4/")
-
-    def test_known_environments_are_left_alone(self):
-        known = {
-            "ci": Deployment(env="ci", url="https://x.ci.transltr.io"),
-            "prod": Deployment(env="prod", url="https://x.transltr.io"),
-        }
-        assert set(derive_deployments(known)) == {"test"}
-
-    def test_dev_is_never_derived(self):
-        # Development deployments live at RENCI, at BioThings, and elsewhere.
-        # There is no convention, so there is nothing to derive.
-        known = {"prod": Deployment(env="prod", url="https://x.transltr.io")}
-        assert "dev" not in derive_deployments(known)
-
-    def test_the_commonest_stem_wins_when_hosts_disagree(self):
-        # Three known hosts under one namespace, one stem used twice: the odd
-        # one out is not the shape to derive the missing environment from,
-        # however early on the ladder it sits.
-        known = {
-            "dev": Deployment(env="dev", url="https://renamed.transltr.io/"),
-            "ci": Deployment(env="ci", url="https://svc.ci.transltr.io/"),
-            "test": Deployment(env="test", url="https://svc.test.transltr.io/"),
-        }
-        assert derive_deployments(known)["prod"].url == "https://svc.transltr.io/"
-
-    def test_a_tie_is_broken_by_the_ladder_not_the_alphabet(self):
-        # One each. Sorting the stems and taking the first made the choice by
-        # spelling; the environment nearer the start of the ladder is at least
-        # a property of the deployments.
-        known = {
-            "ci": Deployment(env="ci", url="https://zulu.ci.transltr.io/"),
-            "test": Deployment(env="test", url="https://alpha.test.transltr.io/"),
-        }
-        assert derive_deployments(known)["prod"].url == "https://zulu.transltr.io/"
-
-    def test_a_non_itrb_host_yields_nothing(self):
-        known = {"dev": Deployment(env="dev", url="https://x.renci.org/")}
-        assert derive_deployments(known) == {}
-
-    def test_nothing_known_derives_nothing(self):
-        assert derive_deployments({}) == {}
 
 
 class TestGithubRepo:

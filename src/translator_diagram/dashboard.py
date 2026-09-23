@@ -1,670 +1,264 @@
 """Turning the synced responses into one overview table.
 
-This module holds the judgement — which source a version came from, whether an
-environment is the odd one out — and returns plain dictionaries. It renders
-HTML from those dictionaries, but it never fetches and never reads the command
-line, so every decision it makes is testable from a fixture directory.
+This module is the top of the dashboard stack: it assembles the payload the
+page reads, builds the graph views over the rows, and renders the HTML. It
+never fetches and never reads the command line, so every decision it makes is
+testable from a fixture directory.
 
-The version-source chain is the point of the whole exercise: the question this
-dashboard exists to answer is whether the OpenAPI `info` block is a good
-enough source of version information, so the answer must be visible per cell
-rather than assumed.
+The judgement lives below it, one subject per module: `synced_data` reads the
+cache, `cells` resolves one cell, `rows` assembles one component's row, and
+`stages` orders them. `privacy.apply` runs inside `build_payload` — after
+`build_rows`, before the tallies — so a published build is the local build
+minus rows rather than a different page.
 """
 
+import base64
+import dataclasses
 import json
 from collections import Counter
-from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
-import click
-import yaml
-
-from .colors import load_owner_colors, text_color_for
-from .components import (
-    ENVIRONMENTS,
-    ComponentFile,
-    Deployment,
-    deployments_from_smartapi,
-    endpoint_url_in,
-    github_repo,
-    merge_deployments,
-)
-from .flow import flow_depths, in_flow_order, isolated
-from .privacy import Policy, Report
+from .cells import SOURCE_LABELS
+from .charts import unclaimed_charts
+from .colors import load_owner_colors, owner_styles
+from .components import ENVIRONMENTS, ComponentFile
+from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
+from .rows import UPDATED_LABELS, build_rows
+from .stages import load_stages, stage_blocks
+from .synced_data import SyncedData
 
-PACKAGED_ASSETS = ("translator_diagram.web", ("dashboard.css", "dashboard.js"))
+ASSET_PACKAGE = "translator_diagram.web"
 
-# Ordered best to worst, and the order `build_cell` actually asks in: two live
-# endpoints, then a registration someone filed by hand, then a chart that
-# describes what should have been deployed. This dict is only the badge
-# vocabulary, but writing it in a different order from the chain is how the
-# README came to document the precedence backwards.
-SOURCE_LABELS = {
-    "openapi": "OpenAPI",
-    "status": "status",
-    "smartapi": "SmartAPI",
-    "helm": "Helm",
-}
 
-# How many of a repository's newest releases the Repository column shows before
-# it starts adding the ones an environment is actually running. Three fits the
-# column at the width the table is read at; the deployed extras are what make
-# the list answer "where are the notes for the version in front of me?".
-RELEASES_SHOWN = 3
-
-# `*_version` keys in a /status body that name something other than the
-# software's own version. Babel and Biolink are *data* releases and TRAPI is a
-# spec, and a body is free to report any of them before it reports its own
-# version — at which point the first `*_version` key would become the
-# component's version, badged `status`, tinted for drift against its
-# neighbours, and matched against the repository's releases.
-NOT_SOFTWARE_VERSIONS = frozenset(
-    {"babel_version", "biolink_version", "biolink_model_version", "trapi_version"}
+# Order matters: earlier files define what later ones read. tokens.css holds
+# every custom property, and core.js the namespace and the pure helpers.
+CSS_FILES = (
+    "tokens.css",
+    "base.css",
+    "controls.css",
+    "table.css",
+    "map.css",
+    "drawer.css",
 )
 
-# Where a "last updated" date came from. A separate vocabulary from
-# SOURCE_LABELS on purpose: that one says where a version number came from,
-# this one says where a date did, and conflating them would put "OpenAPI" and
-# "release" in the same badge row meaning different kinds of thing.
-UPDATED_LABELS = {"release": "release", "registry": "registry"}
+
+JS_FILES = (
+    "core.js",
+    "controls.js",
+    "table.js",
+    "layout.js",
+    "map.js",
+    "drawer.js",
+    "app.js",
+)  # app.js runs last
 
 
-CONFIG_STAGES_PATH = Path("config/flow-steps.yaml")
+FAVICON_FILE = "favicon.ico"
+"""The real NCATS icon, 1150 bytes, inlined as a data URI.
 
-UNPLACED_TITLE = "Not yet placed"
+Not a `<link href="favicon.ico">`: the page is one file that has to open from
+file://, out of a mail attachment, from anywhere — and a relative href there
+asks for a second file that is not going to be beside it. A data URI is not an
+external resource, which is why the self-containment test allows it and allows
+nothing else.
+
+Not in CSS_FILES or JS_FILES either: those two are the concatenation, and
+`tests/test_web_assets.py` checks them against the `*.css` and `*.js` globs,
+which an `.ico` is not in the way of.
+"""
 
 
-def _find_stages() -> Path | None:
-    """config/flow-steps.yaml in the working directory or the nearest parent."""
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_STAGES_PATH
-        if candidate.exists():
-            return candidate
-    return None
+# --- Graph views over the rows ---------------------------------------------
 
+def build_edges(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every recorded connection between two kept rows, as the map draws it.
 
-def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
-    """The platform's stages, in the order the page shows them.
+    `results` edges are reversed and `calls` edges are not, which looks
+    inconsistent and is not: both keys are written from the caller's side, and
+    an edge on a map points the way data moves. A gets results from B means
+    the data leaves B and arrives at A; A calls B means the request leaves A.
+    Drawing both as written would have half the arrows pointing upstream.
 
-    This file is the row order, not a set of labels on a computed one. The
-    recorded `gets_results_from` / `calls` edges are too sparse to order 26
-    components — nothing records the UI calling Name Lookup, so Name Lookup
-    sorted near the sources, and nothing records the ARS calling Answer
-    Appraiser, so Answer Appraiser sorted above everything. A hand-written
-    order is more honest than a plausible-looking one derived from data that
-    is missing.
+    Built after the privacy policy runs, from the rows it left behind, so an
+    edge cannot name a withheld component: a target with no row is dropped
+    rather than drawn to nothing. That also means a published build shows a
+    genuinely smaller graph rather than the same graph with holes in it.
 
-    The trailing entry is the components no stage claims, named in the file's
-    `unplaced` block so a new component cannot quietly sort last.
-
-    With no path, the file is looked for in the working directory and every
-    directory above it — the same walk `load_owner_colors` and `load_policy`
-    do, so building from a subdirectory of the checkout behaves the same way.
-    A missing file is an error rather than an empty list: `in_stage_order`
-    falls back to data-flow order, which is the ordering this file exists to
-    replace, so degrading quietly would publish the wrong page and say
-    nothing. An empty file is still allowed — that one is somebody's decision.
+    An implemented and a planned edge between the same pair both survive. They
+    are different claims — this is wired, and this is meant to be — and the map
+    draws them differently.
     """
-    found = path if path is not None else _find_stages()
-    if found is None:
-        raise click.ClickException(
-            f"No stage file at {CONFIG_STAGES_PATH}. It sets the row order, "
-            f"and without it the page falls back to data-flow order. Run from "
-            f"the repository root."
+    canonical = {row["id"].lower(): row["id"] for row in rows}
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, bool]] = set()
+
+    def add(source: str, target: str, kind: str, planned: bool) -> None:
+        key = (source, target, kind, planned)
+        if key in seen:
+            return
+        seen.add(key)
+        edges.append(
+            {"from": source, "to": target, "kind": kind, "planned": planned}
         )
-    if not found.exists():
-        raise click.ClickException(f"Stage file not found: {found}")
-    loaded = _read_yaml(found)
-    if not loaded:
-        return []
-    stages = [
-        {
-            "title": stage.get("title") or "",
-            "description": stage.get("description") or "",
-            "components": list(stage.get("components") or []),
-        }
-        for stage in (loaded.get("stages") or [])
-    ]
-    unplaced = loaded.get("unplaced") or {}
-    stages.append(
-        {
-            "title": UNPLACED_TITLE,
-            "description": unplaced.get("description") or "",
-            "components": list(unplaced.get("components") or []),
-            "unplaced": True,
-        }
-    )
-    return stages
+
+    for row in rows:
+        cid = row["id"]
+        connections = row.get("connections") or {}
+        for key, kind, planned in (
+            ("gets_results_from", "results", False),
+            ("planned_gets_results_from", "results", True),
+            ("calls", "calls", False),
+            ("planned_calls", "calls", True),
+        ):
+            for ref in connections.get(key) or []:
+                # References resolve case-insensitively, the same way they do
+                # everywhere else in this repo, and the edge carries the id as
+                # the component file spells it.
+                other = canonical.get(str(ref).lower())
+                if other is None:
+                    continue
+                if kind == "results":
+                    add(other, cid, kind, planned)
+                else:
+                    add(cid, other, kind, planned)
+        for external in row.get("externals") or []:
+            name = external.get("name")
+            if not name:
+                continue
+            if external.get("direction") == "in":
+                add(name, cid, "external_in", False)
+            else:
+                add(cid, name, "external_out", False)
+    return edges
 
 
-def in_stage_order(
-    components: list[ComponentFile], stages: list[dict[str, Any]]
-) -> list[tuple[ComponentFile, int, dict[str, Any]]]:
-    """Each component with the stage it belongs to and that stage's number.
+def build_externals(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The things outside the platform that kept rows name, first seen first.
 
-    Components are shown in the order their stage lists them: within a stage
-    that order is a judgement too, and alphabetising it would throw the
-    judgement away. Anything no stage names falls to the end in data-flow
-    order, which is the best guess available for something nobody has placed.
+    An external is a name somebody typed, not an id, so two components naming
+    the same source are the same node on the map only because the strings
+    match. First-seen order rather than sorted: it follows the rows, which
+    follow the stages, so the sources appear in the order a reader meets them.
     """
-    if not stages:
-        return [(component, 1, {}) for component in in_flow_order(components)]
-    by_id = {component.id.lower(): component for component in components}
-    ordered: list[tuple[ComponentFile, int, dict[str, Any]]] = []
-    seen: set[str] = set()
-    for number, stage in enumerate(stages, 1):
-        for cid in stage["components"]:
-            component = by_id.get(cid.lower())
-            if component and component.id not in seen:
-                seen.add(component.id)
-                ordered.append((component, number, stage))
-    trailing = stages[-1]
-    for component in in_flow_order(components):
-        if component.id not in seen:
-            ordered.append((component, len(stages), trailing))
-    return ordered
+    found: dict[tuple[str, str], dict[str, str]] = {}
+    for row in rows:
+        for external in row.get("externals") or []:
+            name, direction = external.get("name"), external.get("direction")
+            if not name:
+                continue
+            found.setdefault(
+                (name, direction), {"name": name, "direction": direction}
+            )
+    return list(found.values())
 
 
-def _read_json(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        # A body saved from a 200 that was not actually JSON. Real: several
-        # Translator endpoints answer 200 with an HTML error page.
-        return None
+def build_catalog_edges(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The dataflow the infores catalog records, between components we show.
 
+    A second opinion on the graph, and deliberately a separate list from
+    `edges`: this one is knowledge flowing between resources, ours is API calls
+    between services, and merging them would let the catalog's opinion arrive
+    on the page as something this repository recorded. The map draws them
+    differently and can switch them off.
 
-def _read_json_list(path: Path) -> list[Any]:
-    """A JSON array, or an empty list for anything else.
+    Direction follows the data, the same way a `results` edge does: X in this
+    row's `consumes` means the data leaves X and arrives here. `consumed_by` is
+    the same statement from the other end and gives the mirror, which is why
+    the pair is deduped — the catalog records most of these twice.
 
-    GitHub answers a rate-limited request with a 200-shaped *object* carrying a
-    message, and `sync` saves whatever came back, so the shape has to be
-    checked rather than assumed.
+    Both ends must resolve to a kept row, so an infores naming a data source
+    with no component here is dropped rather than drawn to nothing, and a
+    withheld component cannot appear: it has no row to resolve to.
     """
-    loaded = _read_json(path)
-    return loaded if isinstance(loaded, list) else []
-
-
-def _read_yaml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError:
-        return None
-    return loaded if isinstance(loaded, dict) else None
-
-
-def _service_names(document: dict[str, Any] | None) -> list[str]:
-    """The service names one OpenTelemetry collector reported.
-
-    Strings only, and a list only. The tile that counts these is a footnote,
-    and a collector that answers with a `data` array of objects — or with no
-    array at all — must cost that tile its number rather than take the whole
-    build down on an unhashable name.
-    """
-    data = (document or {}).get("data")
-    if not isinstance(data, list):
-        return []
-    return [name for name in data if isinstance(name, str)]
-
-
-class SyncedData:
-    """Everything `sync` wrote, read back."""
-
-    def __init__(self, root: Path):
-        self.root = root
-        self.manifest = _read_json(root / "manifest.json") or {}
-        payload = _read_json(root / "smartapi.json") or {}
-        self.smartapi = {
-            hit["_id"]: hit for hit in payload.get("hits", []) if hit.get("_id")
-        }
-        self.derived = {
-            cid: {
-                env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
-                for env, spec in envs.items()
-            }
-            for cid, envs in (
-                (_read_json(root / "derived.json") or {}).get("confirmed") or {}
-            ).items()
-        }
-        self.otel = {
-            env: _service_names(_read_json(root / "otel" / f"{env}.json"))
-            for env in ("ci", "test", "prod")
-        }
-        self.statuses = {
-            fetch["path"]: fetch for fetch in self.manifest.get("fetches", [])
-        }
-
-    def openapi(self, component_id: str, env: str) -> dict[str, Any] | None:
-        return self._endpoint_body("openapi", component_id, env)
-
-    def status(self, component_id: str, env: str) -> dict[str, Any] | None:
-        return self._endpoint_body("status", component_id, env)
-
-    def _endpoint_body(
-        self, kind: str, component_id: str, env: str
-    ) -> dict[str, Any] | None:
-        """One endpoint's body, but only if this run's fetch of it succeeded.
-
-        `sync` writes a body on a 200 and leaves the previous one in place
-        otherwise, so a file on disk is not by itself evidence that the
-        endpoint answered. Without this a deployment that has gone away keeps
-        reporting the version it last served, and the cell says `reachable`
-        next to its own `http_status` of 404 — the one contradiction this page
-        must never print, because "was this endpoint up at 14:05" is the
-        question it exists to answer.
-
-        Only the endpoints are gated this way. A release list or a Helm chart
-        makes no claim about what is running right now, so dropping a cached
-        one when GitHub rate-limits a run would lose real information and say
-        nothing new in its place.
-        """
-        relative = f"{kind}/{component_id}/{env}.json"
-        fetch = self.statuses.get(relative)
-        if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
-            return None
-        return _read_json(self.root / relative)
-
-    def releases(self, repo: str | None) -> list[dict[str, Any]]:
-        """One repository's releases, newest first, as GitHub returned them."""
-        if not repo:
-            return []
-        return [
-            entry
-            for entry in _read_json_list(self.root / "releases" / f"{repo}.json")
-            if isinstance(entry, dict)
-        ]
-
-    def helm(self, chart: str, name: str) -> dict[str, Any] | None:
-        return _read_yaml(self.root / "helm" / chart / name)
-
-    def http_status(self, relative: str) -> int | None:
-        return (self.statuses.get(relative) or {}).get("status")
-
-
-def _openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
-    """The fields worth a column, out of an OpenAPI `info` block."""
-    if not document:
-        return {}
-    info = document.get("info") or {}
-    translator = info.get("x-translator") or {}
-    trapi = info.get("x-trapi") or {}
-    return {
-        "version": info.get("version"),
-        "trapi": trapi.get("version"),
-        "biolink": translator.get("biolink-version"),
-        "component_type": translator.get("component"),
-        "title": info.get("title"),
+    by_infores = {
+        row["infores"]: row["id"] for row in rows if row.get("infores")
     }
+    edges: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
 
+    def add(source: str, target: str) -> None:
+        # A resource that consumes itself is a statement about a knowledge
+        # source, not an edge a map can draw.
+        if source == target or (source, target) in seen:
+            return
+        seen.add((source, target))
+        edges.append({"from": source, "to": target, "kind": "catalog"})
 
-def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
-    """Version and data-release fields out of a /status body.
-
-    There is no Translator-wide /status schema — NameRes's shape is its own,
-    and its OpenAPI declares the response `additionalProperties: true`. So this
-    looks for conventions rather than parsing a schema: any `*_version` key
-    that is not one of the known data or spec releases, plus the Babel and
-    Biolink fields that carry the *data* release, which is a genuinely
-    separate axis from the software version and which nothing else exposes at
-    runtime.
-
-    Key order is the tie-break when a body reports several, which is why the
-    exclusions matter: a document that lists its Biolink version before its
-    own would otherwise have that reported as the software it is running.
-    """
-    if not document:
-        return {}
-    versions = {
-        key: value
-        for key, value in document.items()
-        if key.endswith("_version") and isinstance(value, str)
-    }
-    biolink = document.get("biolink_model")
-    release = []
-    if babel := document.get("babel_version"):
-        release.append(f"babel {babel}")
-    if isinstance(biolink, dict) and biolink.get("tag"):
-        release.append(f"biolink {biolink['tag']}")
-    return {
-        "version": next(
-            (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
-        ),
-        "data_release": " · ".join(release) or None,
-        "reported": document.get("status"),
-    }
-
-
-def _helm_facts(synced: SyncedData, chart: str | None) -> dict[str, Any]:
-    if not chart:
-        return {}
-    chart_yaml = synced.helm(chart, "Chart.yaml") or {}
-    images = synced.helm(chart, "ncats-images-meta.yaml") or {}
-    tags = [
-        f"{spec['image'].split('/')[-1]}:{spec['version']}"
-        for spec in images.values()
-        if isinstance(spec, dict) and spec.get("image") and spec.get("version")
-    ]
-    return {
-        "version": chart_yaml.get("appVersion"),
-        "chart_version": chart_yaml.get("version"),
-        "images": tags,
-    }
-
-
-def _first(*candidates: tuple[str, Any]) -> tuple[Any, str | None]:
-    """The first non-empty candidate, with the name of where it came from."""
-    for source, value in candidates:
-        if value:
-            return value, source
-    return None, None
-
-
-def build_cell(
-    component: ComponentFile,
-    env: str,
-    deployment: Deployment | None,
-    synced: SyncedData,
-    smartapi_record: dict[str, Any],
-    helm: dict[str, Any],
-) -> dict[str, Any]:
-    """One component in one environment."""
-    if deployment is None:
-        return {"deployed": False}
-
-    openapi = _openapi_facts(synced.openapi(component.id, env))
-    status = _status_facts(synced.status(component.id, env))
-    registered = _openapi_facts(smartapi_record)
-
-    version, source = _first(
-        ("openapi", openapi.get("version")),
-        ("status", status.get("version")),
-        ("smartapi", registered.get("version")),
-        ("helm", helm.get("version")),
-    )
-    trapi, trapi_source = _first(
-        ("openapi", openapi.get("trapi")), ("smartapi", registered.get("trapi"))
-    )
-    biolink, _ = _first(
-        ("openapi", openapi.get("biolink")), ("smartapi", registered.get("biolink"))
-    )
-
-    openapi_url = endpoint_url_in(component, deployment, "openapi")
-    relative = f"openapi/{component.id}/{env}.json"
-    return {
-        "deployed": True,
-        "url": deployment.url,
-        "location": deployment.location,
-        "openapi_url": openapi_url,
-        "status_url": endpoint_url_in(component, deployment, "status"),
-        "version": version,
-        "version_source": source,
-        "trapi": trapi,
-        "trapi_source": trapi_source,
-        "biolink": biolink,
-        "data_release": status.get("data_release"),
-        "http_status": synced.http_status(relative) if openapi_url else None,
-        "reachable": bool(openapi) or bool(status),
-    }
-
-
-def _instant(value: Any) -> datetime | None:
-    """One ISO timestamp as a comparable instant, or None.
-
-    Comparing the strings instead would be wrong in a way that shows up only
-    on close dates: GitHub writes `2026-08-01T09:00:00Z` and SmartAPI writes
-    `2026-08-01T09:00:00.5+00:00`, and `"Z" > "+"`, so a string sort hands
-    every tie to GitHub. A naive stamp is read as UTC — comparing naive with
-    aware raises, and it would raise inside the row loop, taking the whole
-    table with it.
-    """
-    if not isinstance(value, str):
-        return None
-    try:
-        # 3.11's fromisoformat takes the trailing Z that GitHub writes.
-        parsed = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
-
-
-def _last_updated(
-    entries: list[dict[str, Any]], record: dict[str, Any]
-) -> dict[str, Any] | None:
-    """The most recent date we can honestly claim for a component.
-
-    The newest of the two signals rather than the best of them: the question
-    is when anything about this component last changed, and a release and a
-    registration are answers to different halves of it. A tie goes to the
-    release, because a tag is a claim about the software and a registry stamp
-    is a claim about a document.
-
-    Reads the raw release entries rather than the chips, which are pruned to
-    the few worth showing and truncated to the day. Returns None where there
-    is no signal at all, which is the honest answer for 13 of 26 components:
-    they publish no releases and are in no registry.
-    """
-    candidates = []
-    for entry in entries:
-        tag = entry.get("tag_name")
-        moment = _instant(entry.get("published_at"))
-        if tag and moment and not entry.get("draft"):
-            candidates.append((moment, "release", tag))
-    registered = _instant((record.get("_meta") or {}).get("last_updated"))
-    if registered:
-        candidates.append((registered, "registry", None))
-    if not candidates:
-        return None
-    moment, source, tag = max(candidates, key=lambda c: c[0])
-    return {
-        "at": moment.isoformat(),
-        "date": moment.date().isoformat(),
-        "source": source,
-        "tag": tag,
-    }
-
-
-def _mark_running_release(
-    cells: dict[str, dict[str, Any]], chips: list[dict[str, Any]]
-) -> None:
-    """Date each environment by the release it is running, where one matches.
-
-    The other half of the Repository column: `_release_chips` keeps an older
-    release precisely because some environment is still on it, so the same
-    fact read from the cell's side says how old what is running here is. Ten
-    of twenty running versions match no release — a cell with no match simply
-    has no `released` key, rather than a null that would sort as a date.
-    """
-    for cell in cells.values():
-        version = cell.get("version")
-        if not cell.get("deployed") or not version:
+    for row in rows:
+        catalog = row.get("catalog")
+        if not isinstance(catalog, dict):
             continue
-        for chip in chips:
-            if _same_version(chip["tag"], version):
-                cell["released"] = chip["published"]
-                cell["release_tag"] = chip["tag"]
-                cell["release_url"] = chip["url"]
-                break
+        for infores in catalog.get("consumes") or []:
+            if (other := by_infores.get(infores)) is not None:
+                add(other, row["id"])
+        for infores in catalog.get("consumed_by") or []:
+            if (other := by_infores.get(infores)) is not None:
+                add(row["id"], other)
+    return edges
 
 
-def _same_version(a: str | None, b: str | None) -> bool:
-    """Whether a release tag and a reported version name the same release.
-
-    Only the `v` prefix is normalised away, because that is the only difference
-    that actually occurs here: NameResolution tags `v1.5.2` and reports
-    `1.5.2`. Anything cleverer — stripping suffixes, comparing as semver —
-    would start claiming matches that are not there, and a wrong release-notes
-    link is worse than none.
-    """
-    if not a or not b:
-        return False
-    return a.strip().lower().removeprefix("v") == b.strip().lower().removeprefix("v")
-
-
-def _release_chips(
-    entries: list[dict[str, Any]], deployed: set[str]
-) -> list[dict[str, Any]]:
-    """The releases worth showing for one component, newest first.
-
-    The newest few, plus any older release that some environment is running:
-    prod lags dev often enough that the newest three would miss the version the
-    reader is looking at, which is the one whose notes they want.
-
-    Drafts are dropped. They are invisible to an unauthenticated fetch, so they
-    appear only once someone sets a GITHUB_TOKEN — and a link that works for
-    the person who ran the sync and 404s for everyone else is a trap.
-    """
-    # GitHub orders /releases by when the release was *created*, which is not
-    # when it was published: NameResolution's v1.5.2 was published after
-    # v1.6.2. The dates are on the chips, so the order has to match them.
-    ordered = sorted(
-        entries, key=lambda entry: entry.get("published_at") or "", reverse=True
-    )
-    chips = []
-    shown = 0
-    for entry in ordered:
-        tag = entry.get("tag_name")
-        if not tag or entry.get("draft"):
-            continue
-        running = any(_same_version(tag, version) for version in deployed)
-        # Counted after the skips, not from the enumeration: a repository
-        # whose two newest entries are drafts showed one chip where it should
-        # show three, because the drafts spent two of the three places.
-        if shown >= RELEASES_SHOWN and not running:
-            continue
-        shown += 1
-        chips.append(
-            {
-                "tag": tag,
-                "name": entry.get("name") or tag,
-                "url": entry.get("html_url"),
-                "published": (entry.get("published_at") or "")[:10],
-                "prerelease": bool(entry.get("prerelease")),
-                "deployed": running,
-            }
-        )
-    return chips
-
-
-def _mark_drift(cells: dict[str, dict[str, Any]], key: str) -> None:
-    """Flag the environments whose value is in the minority.
-
-    Borrowed from babel-validation's dashboard, where it answers the same
-    shape of question. Only a genuine split is marked: when every environment
-    agrees, or only one reports at all, nothing is tinted — colouring every
-    row would teach the reader to ignore the colour.
-
-    A tie has no minority in it, so every reporting environment is marked
-    rather than one arbitrary side. `Counter.most_common` breaks a tie by
-    insertion order, which is the column order — so a two-against-two split
-    used to tint whichever pair happened to sit further right, and a
-    one-against-one split made the later environment the deviant. Marking the
-    whole row says what is true: these environments disagree, and none of them
-    is the odd one out.
-    """
-    values = [
-        cell.get(key) for cell in cells.values() if cell.get("deployed") and cell.get(key)
-    ]
-    if len(values) < 2 or len(set(values)) < 2:
-        return
-    ranked = Counter(values).most_common()
-    majority = ranked[0][0] if ranked[0][1] > ranked[1][1] else None
-    for cell in cells.values():
-        if cell.get("deployed") and cell.get(key) and cell[key] != majority:
-            cell.setdefault("drift", []).append(key)
-
-
-def build_rows(
+def build_unclaimed_charts(
     components: list[ComponentFile], synced: SyncedData
 ) -> list[dict[str, Any]]:
-    """One dictionary per component, in the stage order the config file sets."""
-    depths = flow_depths(components)
-    stranded = set(isolated(components))
-    rows = []
-    for component, step, stage in in_stage_order(components, load_stages()):
-        record = synced.smartapi.get(component.smartapi_id or "", {})
-        derived = synced.derived.get(component.id, {})
-        deployments = merge_deployments(
-            component, deployments_from_smartapi(record), derived
-        )
-        helm = _helm_facts(synced, component.helm_chart)
+    """The charts in translator-devops that no component file accounts for.
 
-        cells = {
-            env: build_cell(
-                component, env, deployments.get(env), synced, record, helm
-            )
-            for env in ENVIRONMENTS
-        }
-        # A gap in a registration that exists at all: this component is in
-        # SmartAPI, and this environment is not in its record. Computed from
-        # the registry rather than from how the URL was found, so it stays true
-        # once a discovered URL is written into the component file — which is
-        # exactly what happened to answer-appraiser's ci and test.
-        registered = set(deployments_from_smartapi(record))
-        for env, cell in cells.items():
-            if (
-                cell.get("deployed")
-                and component.smartapi_id
-                and registered
-                and env not in registered
-            ):
-                cell["unregistered"] = True
-        for key in ("version", "trapi", "biolink"):
-            _mark_drift(cells, key)
+    Run over *every* component rather than the kept rows, and that is a privacy
+    decision as much as a correctness one: a chart claimed by a withheld
+    component is claimed, and matching against the kept rows only would list
+    `jaeger` here by name on the published page — the one build that must not
+    say it. Nothing else in the entry names a component, so no further pass is
+    needed.
 
-        releases = synced.releases(github_repo(component.repository("source")))
-        chips = _release_chips(
-            releases,
-            {version for cell in cells.values() if (version := cell.get("version"))},
-        )
-        _mark_running_release(cells, chips)
-
-        uptime = ((record.get("_status") or {}).get("uptime_status")) or None
-        rows.append(
+    Sorted by name, because this is a list somebody reads down looking for
+    something they recognise rather than a list in any meaningful order.
+    """
+    names = synced.chart_index()
+    unclaimed = []
+    for name in unclaimed_charts(
+        names, {name: synced.chart_meta(name) for name in names}, components
+    ):
+        meta = synced.chart_meta(name).get("chart") or {}
+        description = meta.get("description")
+        unclaimed.append(
             {
-                "id": component.id,
-                "name": component.name,
-                "owner": component.owner,
-                "type": component.component_type
-                or _openapi_facts(record).get("component_type"),
-                "layer": component.layer,
-                "depth": depths[component.id],
-                "isolated": component.id in stranded,
-                "refactor_status": component.refactor_status,
-                "infores": component.infores,
-                "smartapi": component.smartapi_id,
-                "helm_chart": component.helm_chart,
-                "otel_services": component.otel_services,
-                "repository": component.repository("source"),
-                "releases": chips,
-                "last_updated": _last_updated(releases, record),
-                "step": step,
-                "step_label": (
-                    stage.get("title") or ""
-                    if stage.get("unplaced")
-                    else f"Step {step}"
+                "name": name,
+                # Usually `helm create`'s unedited default; still the only
+                # sentence about the chart that exists.
+                "description": (
+                    description.strip() or None
+                    if isinstance(description, str)
+                    else None
                 ),
-                "step_title": stage.get("title") or "",
-                "step_description": stage.get("description") or "",
-                "documentation": (component.documentation or [{}])[0].get("url"),
-                "uptime": uptime,
-                "helm_version": helm.get("version"),
-                "helm_images": helm.get("images") or [],
-                "notes": component.notes,
-                "externals": [
-                    {"direction": d, "name": n} for d, n in component.externals
-                ],
-                "environments": cells,
             }
         )
-    return rows
+    return unclaimed
+
+
+def build_smartapi_suggestions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Registry records we attached by infores, as pointers to record by hand.
+
+    The data PR this asks for is one line in a component file — the record's
+    id under `identifiers.smartapi` — after which the match is somebody's
+    decision rather than ours and stops depending on the registry keeping its
+    infores in step. Built from the kept rows, so a suggestion cannot name a
+    withheld component.
+    """
+    suggestions = []
+    for row in rows:
+        record = row.get("smartapi_record")
+        if not isinstance(record, dict) or record.get("matched_by") != "infores":
+            continue
+        suggestions.append(
+            {
+                "component": row["id"],
+                "smartapi_id": record.get("id"),
+                "title": record.get("title"),
+            }
+        )
+    return suggestions
 
 
 def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -681,6 +275,8 @@ def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
             tally[cell.get("version_source") or "none"] += 1
     return dict(tally)
 
+
+# --- The payload -----------------------------------------------------------
 
 def build_payload(
     components: list[ComponentFile],
@@ -701,18 +297,43 @@ def build_payload(
     components *before* that would let a withheld component change where
     everyone else sits, and the two builds would disagree about the shape of
     the platform rather than about how much of it is shown.
+
+    The same position does one more job. `stages`, `edges`, `externals`,
+    `catalog_edges` and `smartapi_suggestions` are built *below* the policy, out
+    of the rows it left behind, so none of them can name a component that was
+    withheld — a band cannot roster a row that is gone, and an edge to a missing
+    row is dropped. That is why `privacy.apply` does not walk them: there is
+    nothing in them to walk that did not come from a kept row.
+
+    `unclaimed_charts` is the exception and reads the full component list on
+    purpose: "no component claims this chart" is only true if the withheld ones
+    do not either, and asking the kept rows would publish the withheld
+    components' charts under their own names.
     """
-    rows = build_rows(components, synced)
+    stages = load_stages()
+    rows = build_rows(components, synced, stages=stages)
     report = Report()
+    unclaimed = build_unclaimed_charts(components, synced)
     if policy is not None:
         rows, report = apply_policy(rows, policy)
+        report = dataclasses.replace(
+            report,
+            mentions=report.mentions
+            + scrub(unclaimed, UNCLAIMED_CHART_FREE_TEXT, patterns_for(policy)),
+        )
     manifest = synced.manifest
+    colors = load_owner_colors()
     return {
         "generated_at": manifest.get("finished_at") or "",
         "synced_at": manifest.get("finished_at") or "",
         "sync_counts": manifest.get("counts") or {},
         "environments": list(ENVIRONMENTS),
-        "owner_colors": load_owner_colors(),
+        "owner_colors": colors,
+        # The same colours with everything derived from them worked out once:
+        # the text colour that reads on each, and the four gradient stops the
+        # metal is drawn with. Two renderers deriving the same gradient
+        # separately is how a page and a legend come to disagree about a team.
+        "owner_styles": owner_styles(colors),
         "source_labels": SOURCE_LABELS,
         "updated_labels": UPDATED_LABELS,
         "source_tally": source_tally(rows),
@@ -733,23 +354,51 @@ def build_payload(
         # Absent when nothing was withheld, so the page says nothing rather
         # than announcing an empty redaction on a full build.
         **({"redacted": report.for_payload()} if report else {}),
+        # All three read the kept rows, and are therefore withheld-free by
+        # construction rather than by a second filter that could fall behind.
+        "stages": stage_blocks(stages, rows),
+        "edges": build_edges(rows),
+        "externals": build_externals(rows),
+        "catalog_edges": build_catalog_edges(rows),
+        # The one list here built from every component rather than the kept
+        # rows, and it has to be: a chart is unclaimed only if *nobody* claims
+        # it, and a withheld component still claims its chart. See
+        # `build_unclaimed_charts`.
+        "unclaimed_charts": unclaimed,
+        "smartapi_suggestions": build_smartapi_suggestions(rows),
         "rows": rows,
     }
 
 
-def _css_string(value: str) -> str:
-    """Escape a string for a double-quoted CSS attribute selector.
+# --- The page --------------------------------------------------------------
 
-    Not html.escape: a <style> element's contents are not HTML-decoded, so an
-    entity there stays literal and the selector matches nothing. Only the
-    backslash and the quote need escaping inside a CSS string.
+def _assets(names: tuple[str, ...]) -> str:
+    """The named files from web/, concatenated in the order given.
+
+    The order is these tuples, not the directory: a tokens sheet defines the
+    custom properties the others read, and the boot script must come last.
+
+    Concatenated into one block rather than loaded as modules, because the page
+    must open from file:// and `import` there needs a server. So every file
+    shares one top-level scope -- a `const` declared twice is a SyntaxError
+    that `node --check` on each file separately cannot see, which is why
+    tests/test_web_assets.py also checks the concatenation.
     """
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return "\n".join(
+        (resources.files(ASSET_PACKAGE) / name).read_text(encoding="utf-8")
+        for name in names
+    )
 
 
-def _asset(name: str) -> str:
-    package, _ = PACKAGED_ASSETS
-    return (resources.files(package) / name).read_text(encoding="utf-8")
+def _favicon_data_uri() -> str:
+    """The packaged icon as a data URI, read through `resources.files`.
+
+    The same reader the CSS and the JS go through, so an installed wheel with
+    no checkout to look at finds it in the package the way it finds everything
+    else in web/.
+    """
+    raw = (resources.files(ASSET_PACKAGE) / FAVICON_FILE).read_bytes()
+    return "data:image/x-icon;base64," + base64.b64encode(raw).decode("ascii")
 
 
 def render_html(payload: dict[str, Any]) -> str:
@@ -761,12 +410,6 @@ def render_html(payload: dict[str, Any]) -> str:
     scheduled job would publish; keeping both means the page never has to
     choose between being shareable and being automatable.
     """
-    colors = load_owner_colors()
-    owner_css = "\n".join(
-        f'.owner[data-owner="{_css_string(owner)}"] '
-        f"{{ background: {color}; color: {text_color_for(color)}; }}"
-        for owner, color in colors.items()
-    )
     data = json.dumps(payload, indent=None, separators=(",", ":"))
     # </script> inside a JSON string would close the tag early.
     data = data.replace("</", "<\\/")
@@ -781,9 +424,9 @@ def render_html(payload: dict[str, Any]) -> str:
      /private split in issue #7 is settled. -->
 <meta name="robots" content="noindex, nofollow">
 <title>Translator components overview</title>
+<link rel="icon" type="image/x-icon" href="{_favicon_data_uri()}">
 <style>
-{_asset("dashboard.css")}
-{owner_css}
+{_assets(CSS_FILES)}
 </style>
 <script>
 // Applied before the body renders, or the page flashes the wrong theme.
@@ -805,7 +448,7 @@ def render_html(payload: dict[str, Any]) -> str:
 <div id="app"></div>
 <script type="application/json" id="payload">{data}</script>
 <script>
-{_asset("dashboard.js")}
+{_assets(JS_FILES)}
 </script>
 </body>
 """

@@ -1,7 +1,7 @@
 """config/flow-steps.yaml — the stages, and the row order they define.
 
 Named for the file rather than for a module, like test_component_files.py.
-`load_stages` is tested in test_dashboard.py; what is checked here is the data:
+`load_stages` is tested in test_stages.py; what is checked here is the data:
 that the stages still account for every component, and in a way that fails
 loudly rather than quietly.
 
@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 from translator_diagram.components import load_components
-from translator_diagram.dashboard import UNPLACED_TITLE, in_stage_order, load_stages
+from translator_diagram.stages import UNPLACED_TITLE, in_stage_order, load_stages
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGES_PATH = ROOT / "config" / "flow-steps.yaml"

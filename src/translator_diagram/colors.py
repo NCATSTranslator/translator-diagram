@@ -85,6 +85,156 @@ def text_color_for(fill_hex: str) -> str:
     return "black" if luminance > 0.5 else "white"
 
 
+def metallic_stops(fill_hex: str) -> tuple[str, str, str, str]:
+    """The four gradient stops every renderer of an owner colour draws with.
+
+    Owner colours reach the page as brushed-metal coins and rails rather than
+    flat swatches, and a brushed finish is four stops: a highlight, the colour
+    itself, a shadow, and a softer second highlight where the light comes back
+    round. All four are derived from the single hex in
+    `config/owner-colors.csv`, and that is the point of the function. The
+    alternative is a hand-written gradient per owner in the CSS and a matching
+    set in the SVG legend — two files nobody edits together, whose failure mode
+    is silent: the page and the diagram end up disagreeing about what colour a
+    team is, and each looks fine on its own. Here the CSV stays the one source
+    and a colour change is still a one-line edit.
+
+    Lightness moves in HSL percentage points: +26 for the highlight, −10 for
+    the shadow, +14 for the return. Every stop is held inside 4–96, so a
+    nearly-white or nearly-black owner colour still yields a gradient with a
+    visible direction rather than four copies of white. At the very ends the
+    two highlights clamp to the same stop, which is the honest outcome: there
+    is no headroom left above white to put one in.
+    """
+    hue, saturation, lightness = _to_hsl(fill_hex)
+    return (
+        _from_hsl(hue, saturation, lightness + 26),
+        "#" + fill_hex.lstrip("#").upper(),
+        _from_hsl(hue, saturation, lightness - 10),
+        _from_hsl(hue, saturation, lightness + 14),
+    )
+
+
+def owner_styles(colors: dict[str, str]) -> dict[str, dict]:
+    """Every owner's colour, its text colour and its metal, in one mapping.
+
+    A renderer that needs an owner's appearance asks once and gets all of it,
+    instead of each caller remembering to run `text_color_for` and
+    `metallic_stops` over the same hex. That is what keeps the derivations in
+    one place as new renderers appear.
+    """
+    return {
+        owner: {
+            "base": color,
+            "text": text_color_for(color),
+            "metal": list(metallic_stops(color)),
+        }
+        for owner, color in colors.items()
+    }
+
+
+def delta_e(hex_a: str, hex_b: str) -> float:
+    """CIE76 colour difference between two hexes, for the palette test.
+
+    Owner chips are read side by side, so two colours can each clear the
+    contrast rule and still be the same colour to a reader. Distance in RGB
+    does not answer that question — the space is not perceptual, and green
+    swamps blue. Lab is roughly perceptually uniform, so one number in it means
+    "how different do these look", which is what the palette floor is about.
+
+    CIE76 rather than CIEDE2000: the floor being enforced is far above the
+    region where the two formulas disagree, and the later one is a page of
+    arithmetic that would not move any answer here.
+    """
+    la, aa, ba = _to_lab(hex_a)
+    lb, ab, bb = _to_lab(hex_b)
+    return ((la - lb) ** 2 + (aa - ab) ** 2 + (ba - bb) ** 2) ** 0.5
+
+
+def _channels(fill_hex: str) -> tuple[float, float, float]:
+    """The three sRGB channels of a hex colour, each 0–1. `#` optional."""
+    h = fill_hex.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return r, g, b
+
+
+def _to_hsl(fill_hex: str) -> tuple[float, float, float]:
+    """Hex to (hue 0–360, saturation 0–100, lightness 0–100).
+
+    Written out here rather than pulled in from a colour library: this module
+    imports nothing from the package by design, and the diagram half would have
+    to carry the dependency too. Half a screen of arithmetic is the cheaper
+    side of that trade.
+    """
+    r, g, b = _channels(fill_hex)
+    high, low = max(r, g, b), min(r, g, b)
+    lightness = (high + low) / 2
+    if high == low:  # grey: hue is undefined, and saturation is what says so
+        return 0.0, 0.0, lightness * 100
+    span = high - low
+    saturation = (
+        span / (2 - high - low) if lightness > 0.5 else span / (high + low)
+    )
+    if high == r:
+        hue = ((g - b) / span) % 6
+    elif high == g:
+        hue = (b - r) / span + 2
+    else:
+        hue = (r - g) / span + 4
+    return hue * 60, saturation * 100, lightness * 100
+
+
+def _from_hsl(hue: float, saturation: float, lightness: float) -> str:
+    """(hue, saturation, lightness) back to `#RRGGBB`, lightness clamped 4–96.
+
+    The clamp lives here rather than at each call site so no caller can ask for
+    a stop outside the range and get `#FFFFFF` four times over.
+    """
+    h = (hue / 360) % 1.0
+    s = min(max(saturation, 0.0), 100.0) / 100
+    light = min(max(lightness, 4.0), 96.0) / 100
+    if s == 0:
+        channels = (light, light, light)
+    else:
+        q = light * (1 + s) if light < 0.5 else light + s - light * s
+        p = 2 * light - q
+        channels = tuple(
+            _hue_to_channel(p, q, h + offset) for offset in (1 / 3, 0, -1 / 3)
+        )
+    return "#" + "".join(f"{round(c * 255):02X}" for c in channels)
+
+
+def _hue_to_channel(p: float, q: float, t: float) -> float:
+    """One channel of an HSL colour: the standard piecewise hue ramp."""
+    t = t % 1.0
+    if t < 1 / 6:
+        return p + (q - p) * 6 * t
+    if t < 1 / 2:
+        return q
+    if t < 2 / 3:
+        return p + (q - p) * (2 / 3 - t) * 6
+    return p
+
+
+def _to_lab(fill_hex: str) -> tuple[float, float, float]:
+    """Hex to CIE L*a*b* through XYZ under D65, the white point sRGB is defined at."""
+    linear = [
+        c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+        for c in _channels(fill_hex)
+    ]
+    r, g, b = linear
+    x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047
+    y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883
+    fx, fy, fz = (_lab_f(t) for t in (x, y, z))
+    return 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+
+
+def _lab_f(t: float) -> float:
+    """The Lab transfer function, linear near black so the curve stays finite."""
+    return t ** (1 / 3) if t > 216 / 24389 else (841 / 108) * t + 4 / 29
+
+
 def load_owner_colors(path: Path | None = None) -> dict[str, str]:
     """Load the owner→color mapping from a CSV with columns owner,color.
 

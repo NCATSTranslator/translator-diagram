@@ -19,6 +19,12 @@ that are not visible from the line you are changing.
 One module per subject, and one test file per module. No line numbers here on
 purpose — they rot within a commit or two.
 
+A test belongs to the module whose *decision* it pins, not to the function it
+happens to call. Most of the dashboard's tests reach their assertion through
+`build_rows` or `build_payload`, so sorting them by call graph would pile
+almost all of them into `tests/test_rows.py` and leave the other files empty —
+which is how a 2000-line test file grows back.
+
 | Module | What's there |
 |---|---|
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
@@ -35,13 +41,21 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` (one `components/<id>.yaml`), `endpoint_url_in`, `merge_deployments`, `deployments_from_smartapi`, `github_repo`, `DEFAULT_ENDPOINT_PATHS` |
+| `components.py` | `ComponentFile` and `Deployment` (one `components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
+| `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
-| `sync.py` | The fetchers and the manifest. Takes an injected `Fetcher`, so tests never reach the network |
+| `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
+| `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the two waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
-| `dashboard.py` | The version-source chain, drift detection, and the rendered page. Returns plain dicts; no CLI, no network |
+| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
+| `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
+| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `config/flow-steps.yaml`, hand-written rather than computed |
+| `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
+| `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
+| `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/dashboard.css`, `web/dashboard.js` | The browser half of the dashboard, inlined into the generated page |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged
@@ -58,12 +72,31 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {flow, sync, dashboard}
-flow → dashboard
+components → {charts, deployments, fetch, flow, sync, synced_data, stages, cells, rows, dashboard}
+charts → {sync, synced_data, dashboard}
+deployments → {sync, cells, rows}
+fetch → sync
+synced_data → {cells, rows, dashboard}
+flow → {stages, rows}
+stages → {rows, dashboard}
+cells → {rows, dashboard}
+rows → dashboard
 colors → dashboard
 privacy → dashboard
+payload_details → rows
 dashboard_cli → everything above
 ```
+
+The dashboard stack reads downward and only downward: `synced_data` reads the
+cache, `cells` resolves one cell out of it, `rows` assembles one component's
+row, `stages` says what order the rows go in, and `dashboard` assembles the
+payload and renders the page. Two edges are the reason it is shaped this way
+rather than any other: `build_rows` calls `load_stages`, so `stages` has to sit
+below `rows` rather than beside `build_payload`; and `SyncedData.chart_commit`
+needs `_commit_facts`, which is why that one shaper lives in `synced_data.py`
+next to its only caller instead of with the other fact extractors in
+`cells.py`. Getting either wrong is a cycle, and
+`tests/test_package_layout.py` fails on it.
 
 Nothing imports either CLI. The palette constants live in `colors.py` rather
 than `render.py` for exactly this reason: `render` and `legend` both need
@@ -206,9 +239,9 @@ data-model table above, and the CSV-format table in the README.
 matching parameter in the `main` signature, plus the options block in the
 README (it is a hand-maintained paraphrase of `--help`, not generated).
 
-**Add a column to the dashboard** → `build_cell` or `build_rows` in
-`dashboard.py` for the value, then **one entry in the `COLUMNS` table** in
-`web/dashboard.js`, and `web/dashboard.css` if it needs a style. That entry
+**Add a column to the dashboard** → `build_cell` in `cells.py` or `build_rows`
+in `rows.py` for the value, then **one entry in the `COLUMNS` table** in
+`web/table.js`, and the matching `table.css` rule if it needs a style. That entry
 owns the header, the body cell, the `drop-*` class that hides both at narrow
 widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
@@ -218,7 +251,15 @@ The payload keys are independent of the YAML keys they happen to be spelled
 like: `layer` and `refactor_status` moved out of `diagram:` in the component
 files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
-breaks `web/dashboard.js`.
+breaks `web/table.js`.
+
+**Add a field to the drawer** → the value in `build_rows` (`rows.py`) or
+`payload_details.py` if it needs sync data, then the tab renderer in
+`web/drawer.js`. Per-environment fields that come from a live document must
+respect the same 200 gate as the table: `SyncedData` only reads bodies this
+run fetched successfully. Chart facts are labelled as intent, not deployment.
+`privacy.verify` runs on the finished payload, so a field added to the drawer
+must survive it — a withheld id in a new string aborts the published build.
 
 `type` and `layer` are the exception in the other direction: the page no
 longer shows either — neither told a reader anything the stage bands and the
@@ -247,7 +288,7 @@ would fail every published build the day someone withholds a component called
 false alarm is to stop running the check.
 
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
-version-source chain in `dashboard.build_cell`. Order that chain by how close
+version-source chain in `cells.build_cell`. Order that chain by how close
 the source is to what is actually running: a live endpoint, then a manual
 registration, then a chart describing what should have been deployed. Whatever
 you add must appear in `SOURCE_LABELS` so the badge names it — a version whose
@@ -258,9 +299,10 @@ budget: 60 calls an hour per address unauthenticated, 5000 with a
 `GITHUB_TOKEN` in the environment, which `_headers` sends to api.github.com and
 nowhere else. Release lists are keyed by repository rather than by component so
 the three shepherds cost one call, and a throttled 403 is reported by name at
-the end of wave one — a silent one reads as "this repository has no releases",
-which is a different and wrong finding. Nothing here fails the run: the
-dashboard shows fewer tags, and the next sync picks them up.
+the end of wave one (the waves are listed in `sync`'s docstring) — a silent one
+reads as "this repository has no releases", which is a different and wrong
+finding. Nothing here fails the run: the dashboard shows fewer tags, and the
+next sync picks them up.
 
 **Only a `source` repository whose URL names a whole repository gets releases.**
 `github_repo` rejects `.../translator-devops/tree/develop/helm/<chart>`, which
@@ -310,10 +352,47 @@ rendering, and says something that is not true.
 - **Attempts it did not record.** Every probe reaches `report.fetches`,
   including the ones that fail, which is why the Fetches tile counts more than
   the endpoints — the manifest promises every attempt.
+- **A host it never contacted.** `reachable` is three states, not two. Every
+  deployment gets a root probe of its own URL — `fetch.probe_to`, which saves a
+  `{status, content_type, error}` summary rather than the page — and the cell
+  is reachable if the root or any document answered 2xx/3xx, not reachable if
+  every probe failed, and *null* if nothing was probed. Before the root probe
+  it meant "an API document parsed", so the four UI environments, which record
+  `openapi: null` and were therefore never fetched, were drawn as down with no
+  HTTP status beside them. `root_status` and `http_status` are separate keys
+  for the same reason: a host serving its app at `/` and nothing at
+  `openapi.json` is two facts.
+- **An empty cell with no explanation.** A cell with no version carries a
+  `reason` from `CELL_REASONS` — the one place the vocabulary lives, so the
+  page and this module cannot come to disagree about it. The distinctions it
+  draws are the ones that were being lost: an endpoint that 404s against one
+  that was never recorded, a host that does not resolve against one that
+  answers as another service, a 200 that was HTML against a 200 with no
+  version in it. `SyncedData.openapi_outcome` is what makes the last of those
+  visible: `synced.openapi` answers None for "not fetched", "not JSON" and
+  "fetch failed" alike, which is three findings wearing one face.
+- **A maturity read off a hostname.** `deployments_from_smartapi` will infer an
+  environment from a server's prose `description` when the record declares no
+  `x-maturity` — smartapi's own registration describes a production and a
+  development server and declares neither, and used to yield an empty row. It
+  never reads the URL: `dev.smart-api.info` and `x.ci.transltr.io` look like
+  they name a maturity, and a production host containing "test" would be filed
+  as test on the strength of a substring. What it infers is marked `inferred`
+  all the way to the cell, because a field somebody filled in and a sentence
+  somebody wrote are two strengths of claim.
 - **A leak that is not one.** `privacy.verify` matches a withheld id bounded by
   non-alphanumerics. As a substring it would abort every published build the day
   someone withholds `ars` or `ui`, and a false alarm nobody can clear ends with
   the check switched off.
+- **Live operations where only a registration exists.** OpenAPI `operations`
+  and SmartAPI `paths` are read only from bodies this run fetched with a 200.
+  A stale registration that lists endpoints the live host no longer serves is
+  not shown as current.
+- **Per-environment uptime.** OpenTelemetry service counts are a platform-wide
+  tile, not a per-cell claim about whether one deployment is healthy.
+- **Free text as fact.** Repository descriptions, SmartAPI prose, and Helm
+  `description` fields are scrubbed for withheld ids and shown as context, not
+  as version or deployment truth.
 
 Two more of the same family live in the code because they are local: a
 malformed OpenTelemetry answer costs its tile rather than the run, and a
@@ -341,17 +420,6 @@ least about. `FUTURE.md` records what it would cost to fill them in.
 the older question. `sync` now carries the previous manifest's path-to-URL map
 and re-fetches anything whose URL moved. If you add a fetcher, give it a stable
 destination path and let that map do the work.
-
-**Environment columns sort by the age of the release running there**, not by
-version string: comparing `2.10.2` against `1.0` across two different
-components means nothing. Cells rank in tiers — running a release we can date,
-running something no release names, not deployed — and the tiers hold in both
-directions.
-
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
 
 **The privacy filter is about reach, not secrecy.** Everything the dashboard
 shows is read from public services, this repository is public, and
@@ -382,23 +450,14 @@ than showing as an empty header. Step numbers come from the stage's position
 in `config/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
-**The dashboard opens on every component**, having once opened on
-`Environments disagree` — which showed 7 rows of 24 and hid the platform to
-make a point about drift, so someone looking up one component found it missing
-from a page that never said it was filtered. Drift is still the first thing the
-page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `web/dashboard.js`, listed in that
-order so the default reads first, with `DEFAULT_VIEW` naming it. `differ` means
-any of the three tinted axes, not versions alone. It replaced a "Drift only"
-toggle rather than joining it: two controls that select the same rows cannot be
-told apart by a reader.
+**`edges` and `stages` are built after `privacy.apply`.** The map reads the
+published payload, so withheld components must disappear from the graph as well
+as the table. Building the graph before redaction would leave ghost nodes a
+published build must not name.
 
-**The theme cycle starts by moving away from the system**, not at light: the
-page defaults to following the operating system, so `auto → light → dark`
-would spend the first click repainting a light machine light and read as a
-dead button. `nextTheme` therefore reads `prefers-color-scheme` to decide
-which way to go first, and the one click that does not change the appearance
-is the trip back to auto, which says so in the button's title.
+**OpenTelemetry joins are case-sensitive.** A service name in the OTel answer
+must match the deployment record exactly; normalising case would merge two
+different services and over-count.
 
 **`newrank="true"`** in `build_graph` is required for `rank=same` to work
 across cluster boundaries — the legend clusters rely on it.

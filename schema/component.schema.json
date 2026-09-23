@@ -106,10 +106,24 @@
           "pattern": "^[0-9a-f]{32}$"
         },
         "helm_chart": {
-          "description": "Chart directory name, e.g. under helxplatform/translator-devops.",
-          "type": [
-            "string",
-            "null"
+          "description": "Chart directory name(s) under helxplatform/translator-devops/helm; a list when one component is deployed by several charts, e.g. a web server and its loader.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "translator_all_wiki": {
