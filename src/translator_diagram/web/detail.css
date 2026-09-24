@@ -310,6 +310,35 @@
 .dw-t tbody td:last-child,
 .dw-t thead th:last-child { padding-right: 0; }
 
+/* The environment matrix: the same facts the drawer lists per environment,
+   with the environments as columns so a reader compares across rather than
+   scrolls between. Row headers take the definition list's label treatment,
+   because they are the same labels. The caption row under the header holds
+   the sentence each environment would otherwise have over its list (why
+   there is no version, or that a deployment was inferred), and is muted so
+   it reads as context for the column rather than as a fact in it. */
+.dw-matrix tbody th {
+  padding: 6px 10px 6px 0;
+  text-align: left;
+  vertical-align: top;
+  font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: 1.5;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.dw-matrix thead th { font-family: var(--mono); text-transform: none; letter-spacing: 0; }
+.dw-matrix thead th:first-child { width: 132px; }
+.dw-matrix tbody td { font-size: var(--fs-table); min-width: 120px; }
+.dw-matrix tbody td .dot { vertical-align: baseline; margin-right: 5px; display: inline-block; }
+.dw-matrix .dw-matrix-cap td { padding-top: 4px; padding-bottom: 2px; }
+.dw-matrix .dw-matrix-cap p { margin: 0; font-size: var(--fs-meta); }
+/* The sub-line under a host (its full URL) is a block in the list; in a
+   120px column it is a wrap too many, so it goes back to being the hover. */
+.dw-matrix .dw-sub { display: none; }
+
 /* --- Releases ------------------------------------------------------------- */
 
 /* Ten releases once meant ten hairlines. The tag is bold mono and the meta

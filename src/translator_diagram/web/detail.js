@@ -388,16 +388,15 @@
     version: "carries a version",
   };
 
-  function envBlock(row, env) {
+  /* One environment's facts as a list of rows, in the order they are read.
+     The drawer draws them as a definition list under the environment's
+     name and the component page draws the four environments side by side
+     as a matrix; both come from here, so the two cannot disagree about what
+     an environment has to say. An empty cell — not deployed — gives an
+     empty list, and `reason` (below) is the sentence for that. */
+  function envFields(row, env) {
     const cell = (row.environments || {})[env];
-    // `reason` is the payload's own sentence for why there is no version —
-    // "no such host", "up · no version endpoint", "not in registry for ci".
-    // It is a better first line than "Not deployed", which says less and is
-    // sometimes wrong: a service can be up and still report no version.
-    const reason = cell && cell.reason ? muted(cell.reason) : "";
-    if (!cell || !cell.deployed) {
-      return `${heading(env)}${reason || muted("Not deployed.")}`;
-    }
+    if (!cell || !cell.deployed) return [];
 
     const drift = list(cell.drift);
     // No glyph: the tint carries it, the sentence is one hover away, and
@@ -453,38 +452,91 @@
     const document = cell.document && cell.document !== "version"
       ? (DOCUMENT_WORDS[cell.document] || cell.document) : "";
 
-    // A deployment nothing probed directly: the registry named this maturity
-    // in a server description. Said under the environment name, because it
-    // qualifies every row beneath it rather than any one of them.
-    const inferred = cell.inferred
-      ? caption("inferred from the registry server's description") : "";
-
-    return heading(env) + inferred + (cell.version ? "" : reason) + dl([
-      drow("Version", `${version}${source}${unregistered}`, true),
-      drow("TRAPI", cell.trapi
+    const field = (label, html, always) => ({ label, html: html || "", always: !!always });
+    return [
+      field("Version", `${version}${source}${unregistered}`, true),
+      field("TRAPI", cell.trapi
         ? `${esc(cell.trapi)}${cell.trapi_source ? ` <span class="src" data-src="${
           esc(cell.trapi_source)}">${esc(sourceLabel(cell.trapi_source))}</span>` : ""}` : ""),
-      drow("Biolink", cell.biolink ? esc(cell.biolink) : ""),
-      drow("Data release", cell.data_release ? esc(cell.data_release) : ""),
-      drow("Released", cell.released
+      field("Biolink", cell.biolink ? esc(cell.biolink) : ""),
+      field("Data release", cell.data_release ? esc(cell.data_release) : ""),
+      field("Released", cell.released
         ? `${esc(cell.released)}${cell.release_tag
           ? ` ${cell.release_url ? ext(cell.release_url, cell.release_tag, "dw-link dw-mono")
             : mono(cell.release_tag)}` : ""}` : ""),
-      drow("Host", host),
-      drow("HTTP status", httpRow),
-      drow("Root", rootRow),
-      drow("Reachable", reachRow),
-      drow("Document", document ? esc(document) : ""),
-      drow("Status endpoint", cell.status_url
+      field("Host", host),
+      field("HTTP status", httpRow),
+      field("Root", rootRow),
+      field("Reachable", reachRow),
+      field("Document", document ? esc(document) : ""),
+      field("Status endpoint", cell.status_url
         ? ext(cell.status_url, TD.fmt.host(cell.status_url)) : ""),
-      drow("Location", cell.location ? esc(cell.location) : ""),
-      drow("OpenAPI title", cell.openapi_title ? esc(cell.openapi_title) : ""),
-      drow("Paths", filled(cell.paths_count) ? esc(cell.paths_count) : ""),
-      drow("Async query", yesNo(cell.asyncquery)),
-      drow("Status message", cell.status_message ? esc(cell.status_message) : ""),
-      drow("Recent queries", queries),
-      drow("TRAPI operations", opsHtml),
-    ]);
+      field("Location", cell.location ? esc(cell.location) : ""),
+      field("OpenAPI title", cell.openapi_title ? esc(cell.openapi_title) : ""),
+      field("Paths", filled(cell.paths_count) ? esc(cell.paths_count) : ""),
+      field("Async query", yesNo(cell.asyncquery)),
+      field("Status message", cell.status_message ? esc(cell.status_message) : ""),
+      field("Recent queries", queries),
+      field("TRAPI operations", opsHtml),
+    ];
+  }
+
+  /* The sentence over an environment's facts, or in place of them. `reason`
+     is the payload's own line for why there is no version — "no such host",
+     "up · no version endpoint", "not in registry for ci" — and is a better
+     first line than "Not deployed", which says less and is sometimes wrong:
+     a service can be up and still report no version. An inferred deployment
+     is one nothing probed directly: the registry named this maturity in a
+     server description, which qualifies every row beneath it. */
+  function envCaption(row, env) {
+    const cell = (row.environments || {})[env];
+    if (!cell || !cell.deployed) {
+      return cell && cell.reason ? muted(cell.reason) : muted("Not deployed.");
+    }
+    const inferred = cell.inferred
+      ? caption("inferred from the registry server's description") : "";
+    return inferred + (cell.version || !cell.reason ? "" : muted(cell.reason));
+  }
+
+  function envBlock(row, env) {
+    const fields = envFields(row, env);
+    if (!fields.length) return heading(env) + envCaption(row, env);
+    return heading(env) + envCaption(row, env)
+      + dl(fields.map((f) => drow(f.label, f.html, f.always)));
+  }
+
+  /* The four environments side by side: one row per fact, one column per
+     environment, a dash wherever an environment has nothing to say. The
+     drawer's per-environment list hides an absent fact by design; this is
+     the layout for a page whose job is to show the gaps, so every fact any
+     environment reports gets a row and every environment gets a cell in it.
+     The caption row under the header carries what `envBlock` says above its
+     list: the reason there is no version, or that a deployment was inferred. */
+  function envMatrix(row) {
+    const names = envs();
+    if (!names.length) return muted("This build names no environments.");
+    const perEnv = names.map((env) => envFields(row, env));
+    const labels = [];
+    for (const fields of perEnv) {
+      for (const f of fields) if (labels.indexOf(f.label) < 0) labels.push(f.label);
+    }
+    if (!labels.length) {
+      return `<div class="dw-tscroll"><table class="dw-t dw-matrix"><thead><tr><th></th>${
+        names.map((env) => `<th>${esc(env)}</th>`).join("")}</tr></thead><tbody><tr><th scope="row"></th>${
+        names.map((env) => `<td>${envCaption(row, env)}</td>`).join("")}</tr></tbody></table></div>`;
+    }
+    const head = `<tr><th></th>${names.map((env) => `<th>${esc(env)}</th>`).join("")}</tr>`;
+    const captions = `<tr class="dw-matrix-cap"><th scope="row"></th>${
+      names.map((env) => `<td>${envCaption(row, env)}</td>`).join("")}</tr>`;
+    const body = labels.map((label) => {
+      const cells = perEnv.map((fields) => {
+        const hit = fields.find((f) => f.label === label);
+        return `<td>${hit && hit.html ? hit.html : DASH}</td>`;
+      });
+      return `<tr><th scope="row">${esc(label)}</th>${cells.join("")}</tr>`;
+    }).join("");
+    return `<div class="dw-tscroll"><table class="dw-t dw-matrix"><thead>${head}</thead><tbody>${
+      captions}${body}</tbody></table></div>` + rejectedHtml(row);
   }
 
   function rejectedHtml(row) {
@@ -831,6 +883,8 @@
   detail.header = headerHtml;
   detail.links = headerLinks;
   detail.panels = PANELS;
+  detail.envFields = envFields;
+  detail.envMatrix = envMatrix;
   detail.rowById = rowById;
   // The building blocks, for a surface that lays the same facts out another
   // way (the component page's environment matrix) without restyling them.

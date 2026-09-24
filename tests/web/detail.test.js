@@ -204,3 +204,45 @@ test(`every panel renders every row of ${real ? path.relative(ROOT, real.file) :
     }
     TD.boot(PAYLOAD);
   });
+
+/* The drawer's per-environment list and the page's matrix are two layouts of
+   `envFields`, so what one shows the other must show. */
+test("envFields is empty for an environment with no deployment", () => {
+  assert.deepEqual(TD.detail.envFields(FULL, "dev"), []);
+  assert.deepEqual(TD.detail.envFields(EMPTY, "prod"), []);
+});
+
+test("the environments panel is envFields laid out per environment", () => {
+  const panel = TD.detail.panels.environments(FULL);
+  for (const field of TD.detail.envFields(FULL, "ci")) {
+    if (field.html) assert.match(panel, new RegExp(`<dt>${field.label}</dt>`), field.label);
+  }
+  // Version is `always`: the environment with no version still gets the row.
+  const prod = TD.detail.envFields(FULL, "prod").find((f) => f.label === "Version");
+  assert.equal(prod.always, true);
+});
+
+test("the matrix has a column per environment and a row per fact any of them reports", () => {
+  const html = TD.detail.envMatrix(FULL);
+  for (const env of ["dev", "ci", "test", "prod"]) assert.match(html, new RegExp(`<th>${env}</th>`));
+  const labels = new Set();
+  for (const env of ["ci", "test", "prod"]) {
+    for (const f of TD.detail.envFields(FULL, env)) if (f.html) labels.add(f.label);
+  }
+  for (const label of labels) {
+    const hits = html.split(`<th scope="row">${label}</th>`).length - 1;
+    assert.equal(hits, 1, `${label} appears ${hits} times`);
+  }
+  // The undeployed environment's reason is in the caption row, not lost.
+  assert.match(html, /not in registry for dev/);
+  // An environment with nothing to say on a row gets a dash, not a blank.
+  assert.match(html, /<span class="dash">—<\/span>/);
+  // The probed-not-confirmed hosts travel with the matrix.
+  assert.match(html, /Probed, not confirmed/);
+});
+
+test("the matrix over a row with nothing deployed still names every environment", () => {
+  const html = TD.detail.envMatrix(EMPTY);
+  for (const env of ["dev", "ci", "test", "prod"]) assert.match(html, new RegExp(`<th>${env}</th>`));
+  assert.match(html, /Not deployed\./);
+});
