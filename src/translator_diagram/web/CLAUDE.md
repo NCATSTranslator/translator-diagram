@@ -100,11 +100,6 @@ components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
 
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
-
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a
