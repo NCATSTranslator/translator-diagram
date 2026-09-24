@@ -22,6 +22,9 @@ from .synced_data import SyncedData
 DEFAULT_COMPONENTS = Path("components")
 DEFAULT_SYNC_DIR = Path("data/sync")
 DEFAULT_OUTPUT_DIR = Path("data/dashboard")
+# A full build gets its own directory, so it cannot overwrite the publishable
+# one and then be served, zipped or shared from the place people look for it.
+PRIVATE_OUTPUT_DIR = Path("data/dashboard-private")
 
 
 def _load(components_dir: Path):
@@ -86,8 +89,9 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
               default=DEFAULT_SYNC_DIR, show_default=True,
               help="Cache written by sync-components.")
 @click.option("--output-dir", type=click.Path(path_type=Path),
-              default=DEFAULT_OUTPUT_DIR, show_default=True,
-              help="Where to write index.html and overview.json.")
+              help="Where to write index.html and overview.json. "
+                   f"[default: {DEFAULT_OUTPUT_DIR}, or {PRIVATE_OUTPUT_DIR} "
+                   "with --include-private]")
 @click.option("--include-private", is_flag=True,
               help="Skip config/privacy.yaml and build the full page. For "
                    "local use: the result is not safe to publish.")
@@ -106,6 +110,8 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         )
     synced = SyncedData(sync_dir)
     policy = None if include_private else load_policy()
+    if output_dir is None:
+        output_dir = PRIVATE_OUTPUT_DIR if include_private else DEFAULT_OUTPUT_DIR
     payload = build_payload(components, synced, policy)
     if policy is not None:
         # Read back what is about to be written, rather than trusting that the

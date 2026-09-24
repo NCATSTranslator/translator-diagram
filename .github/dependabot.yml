@@ -1,0 +1,10 @@
+# The workflows pin every action to a commit SHA, so a moved tag cannot run new
+# code with Pages deploy permission. Dependabot is what keeps those pins from
+# going stale: it proposes the new SHA, with the version in the comment beside
+# it, as a pull request someone reviews.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
