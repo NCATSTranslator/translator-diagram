@@ -221,7 +221,7 @@ input[type="search"]:focus { border-color: var(--accent); }
 .tip .title { font-weight: 600; font-family: var(--mono); font-size: var(--fs-table); }
 .tip .note { color: var(--muted); }
 
-/* --- Tabs (the drawer's, once it lands) ----------------------------------- */
+/* --- Tabs (the drawer's) -------------------------------------------------- */
 
 .tabs {
   display: flex;

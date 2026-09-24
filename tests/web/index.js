@@ -17,3 +17,4 @@ require("./urlstate.test.js");
 require("./sort.test.js");
 require("./layout.test.js");
 require("./map.test.js");
+require("./detail.test.js");

@@ -41,6 +41,7 @@ CSS_FILES = (
     "controls.css",
     "table.css",
     "map.css",
+    "detail.css",  # the shared detail vocabulary, before the two sheets that lay it out
     "drawer.css",
 )
 
@@ -51,6 +52,7 @@ JS_FILES = (
     "table.js",
     "layout.js",
     "map.js",
+    "detail.js",  # the renderers; drawer.js reads TD.detail at definition time
     "drawer.js",
     "app.js",
 )  # app.js runs last
