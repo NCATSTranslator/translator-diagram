@@ -300,16 +300,12 @@
 
   /* --- Measurement ------------------------------------------------------------ */
 
-  /* The filter strip is not a constant height: it wraps at the widths where the
-     controls and the order label no longer fit on one line. Measured rather
-     than guessed, because a wrong offset hides the first row under the bar. */
+  /* The view switch's indicator is positioned from the width of the button
+     under it, which changes with the font, so it is measured after layout and
+     again on resize. (A `--filters-height` custom property used to be set
+     here as well; nothing read it — the table's header is sticky inside its
+     own scrollport, not under the filter bar — so it is gone.) */
   function measure() {
-    const root = document.documentElement;
-    const bar = $(".filters");
-    if (bar) {
-      root.style.setProperty("--filters-height",
-        `${Math.round(bar.getBoundingClientRect().height)}px`);
-    }
     if (viewSwitch) viewSwitch.measure();
   }
 
@@ -333,13 +329,7 @@
   function renderView() {
     if (TD.state.view === "map") {
       const container = document.getElementById("view-map");
-      // The map lands in a later step. Until then the switch is honest about
-      // it rather than showing an empty frame that looks like a failure.
-      if (TD.map && TD.map.render) TD.map.render(container);
-      else if (!container.querySelector(".empty-view")) {
-        container.innerHTML =
-          '<p class="empty-view">Map view is not built into this page yet.</p>';
-      }
+      TD.map.render(container);
       const shown = TD.table.visibleRows().length;
       setStatus(shown, (DATA.rows || []).length);
       return;
