@@ -3,9 +3,14 @@
   own elements. It reads the payload, builds the shell, owns the shared state
   and the URL, and hands the views a container each.
 
-  Everything a reader changes goes through `TD.commit`, which is the one place
-  that writes the URL — so a view can be pasted into Slack and arrive as the
-  sender saw it, and no control can quietly diverge from the address bar.
+  Everything a reader changes goes through `TD.commit` or `TD.navigate`, the
+  two places that write the URL — so a view can be pasted into Slack and
+  arrive as the sender saw it, and no control can quietly diverge from the
+  address bar. The difference between the two is the browser's history:
+  `commit` replaces the entry (a filter, a sort, a drawer tab) and `navigate`
+  pushes one (a change of view, a component page), so Back leaves a view
+  rather than undoing a keystroke. This file is also the only popstate
+  listener; two listeners was two renders and an ordering dependency.
 */
 
 (() => {
@@ -26,17 +31,40 @@
   // rewrite the URL and discard the state a shared link asked for.
   let urlReady = false;
 
-  function writeUrl() {
+  function writeUrl(push) {
     if (!urlReady) return;
     const query = TD.url.serialize(TD.state);
-    history.replaceState(null, "", query ? `?${query}${location.hash}` : location.pathname + location.hash);
+    // The `#c-<id>` fragment scrolls the table to a row, and means nothing on
+    // any other view; carrying it along would leave a component page reading
+    // "#c-arax" beside its own section anchors.
+    const hash = TD.state.view !== "overview" && /^#c-/.test(location.hash) ? "" : location.hash;
+    const url = query ? `?${query}${hash}` : location.pathname + hash;
+    history[push ? "pushState" : "replaceState"](null, "", url);
   }
 
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
-    writeUrl();
+    writeUrl(false);
     if (!(options && options.silent)) refresh();
   };
+
+  /* A change of view is a place the reader can come back to, so it is pushed.
+     Never silent: the whole point is that the page changes. */
+  TD.navigate = function navigate(patch) {
+    Object.assign(TD.state, patch);
+    writeUrl(true);
+    showView(true);
+  };
+
+  /* Back and forward: the URL is the state, so re-read it and repaint. The
+     controls are told separately because they keep their own value and would
+     otherwise show the search the reader just left. */
+  function onPopState() {
+    Object.assign(TD.state, TD.url.parse(location.search));
+    syncControls();
+    showView(false);
+    TD.drawer.sync();
+  }
 
   /* --- Theme ----------------------------------------------------------------- */
 
@@ -209,6 +237,14 @@
   let ownerBox = null;
   let versionBox = null;
 
+  function syncControls() {
+    if (viewSwitch && viewSwitch.value !== TD.state.view) viewSwitch.set(TD.state.view);
+    if (ownerBox) ownerBox.set(TD.state.owner);
+    if (versionBox) versionBox.set(TD.state.versions);
+    const search = document.getElementById("q");
+    if (search && search.value !== TD.state.q) search.value = TD.state.q;
+  }
+
   function uniqueOwners() {
     return [...new Set((DATA.rows || []).map((row) => row.owner).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b));
@@ -219,7 +255,7 @@
       label: "View",
       items: [{ value: "overview", label: "Overview" }, { value: "map", label: "Map" }],
       value: TD.state.view,
-      onChange: (value) => { TD.commit({ view: value }); showView(true); },
+      onChange: (value) => TD.navigate({ view: value }),
     });
     document.getElementById("viewswitch").append(viewSwitch.el);
 
@@ -394,6 +430,7 @@
   countUp();
 
   addEventListener("resize", measure);
+  addEventListener("popstate", onPopState);
 
   // A deep link arrives before the table exists, so the browser's own fragment
   // scroll finds nothing; this is the second attempt, once there are rows.

@@ -1029,6 +1029,7 @@
   function open(id, tab, options) {
     const row = rowById(id);
     if (!row) return;
+    if (TD.state && TD.state.view === "component") return;
     build();
 
     const opts = options || {};
@@ -1119,6 +1120,12 @@
 
   function sync() {
     const state = TD.state || {};
+    // A component page is not a drawer: a `sel` that survived in memory, or
+    // arrived on a hand-written link, must not open one over the page.
+    if (state.view === "component") {
+      if (drawer.isOpen()) close();
+      return;
+    }
     if (state.sel && rowById(state.sel)) {
       // From the URL, so no focus steal: the reader asked for a page, not for
       // the caret to land in a close button they did not press.
@@ -1138,15 +1145,13 @@
 
   addEventListener("resize", () => { if (drawer.isOpen()) measureTabs(); });
 
-  addEventListener("popstate", () => {
-    if (!TD.state) return;
-    Object.assign(TD.state, TD.url.parse(location.search));
-    TD.commit({});
-    sync();
-  });
+  // No popstate listener here: app.js owns history and calls `sync` after it
+  // has re-read the URL and repainted the view.
 
   /* --- Public API ---------------------------------------------------------- */
 
   drawer.open = open;
+  drawer.close = close;
+  drawer.sync = sync;
   drawer.isOpen = () => !!root && !root.hidden;
 })();
