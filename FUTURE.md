@@ -73,3 +73,50 @@ unauthenticated address, 5000 with a `GITHUB_TOKEN` in the environment (see
 `_headers` in `sync.py`). One full sync currently spends 19. Release lists are
 already keyed by repository rather than by component, so the three shepherds
 cost one call between them; anything added here should be keyed the same way.
+
+## A platform-wide Gaps view
+
+The component page shows one file's gaps: the fields nobody has recorded,
+the environments no host answers for, the OpenTelemetry names nothing reports
+under. The same list across every component is the maintenance to-do for the
+whole platform, and the payload now carries what it needs (`recorded`,
+`component_schema`, `otel_presence`, `derived_rejected`, the cell `reason`s).
+
+The shape: a `findings.py` below `rows` that computes a `findings` list per
+row — unrecorded schema fields, cells with a `reason`, OTel services not
+reporting, derived hosts rejected, an unplaced stage, an unclaimed SmartAPI
+candidate, an unclaimed Helm chart — each with a kind, a sentence and the
+section of the component page it points at. A third list view, `?view=gaps`,
+groups them by kind with a link per finding to `?component=<id>#<section>`,
+and the component page gains a Findings section that shows the same list for
+one component, from the same data. Kept out of the component-page PR so that
+review stayed on the page itself.
+
+## A mini-map on the component page
+
+The page's Connections section lists the one-hop neighbourhood; a small map
+of it — this node and its neighbours, the same layout engine — would show the
+shape as well as the names. `map.js` is a singleton (one host, one scene, one
+camera at module level), so a second instance means turning about 1300 lines
+into a factory first. Until then the page's **Show on map** button is the
+answer: it selects the component on the full map, which flies to it.
+
+## Report a problem from the component page
+
+The page has Copy link and Edit on GitHub. A third affordance — a prefilled
+new-issue link (`/issues/new?title=<id>: …&body=<permalink>`) — was left out
+so the page does not open with three ways to say the same thing before anyone
+has used one. Worth adding once it is clear which of the two existing links
+the non-technical readers actually reach for, and whether a per-section link
+(title prefilled with the section) earns its chrome.
+
+## Path-shaped component URLs
+
+`?component=<id>` is a query parameter on the one self-contained page. If a
+path-shaped address (`/component/<id>`) turns out to matter — for a chat
+client's link preview, say — the cheap version is one tiny
+`component/<id>.html` per component in the Pages artifact, each a
+`<meta http-equiv="refresh">` to `../?component=<id>`, written by
+`write_dashboard` from the rows the policy kept. No second copy of the
+payload, and a withheld component gets no stub. Not done because nothing has
+asked for it yet.

@@ -205,7 +205,7 @@ shows what a fetcher builds from one of them.
 
 ## The components dashboard
 
-A single self-contained HTML page with two views over the same payload:
+A single self-contained HTML page with three views over the same payload:
 
 - **Overview** — one row per component, in stages (data coming in at the top,
   the people who use it at the bottom), with a column per environment showing
@@ -213,10 +213,14 @@ A single self-contained HTML page with two views over the same payload:
 - **Map** — an interactive SVG diagram of which component connects to what,
   laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
   export, and the same detail drawer as the table.
+- **A page per component**, at `index.html?component=<id>` — everything the
+  dashboard knows about one component, laid out to be read top to bottom and
+  sent as a link.
 
 Click a row or a map node to open the drawer (Overview · Environments ·
 Releases · Helm · SmartAPI · Connections). Expand a row inline with the
-chevron for a side-by-side environment read without leaving the table.
+chevron for a side-by-side environment read without leaving the table. The
+drawer's **Open full page** link goes to the component's page.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
@@ -324,6 +328,59 @@ arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
 which inlines its own data and so works straight from disk, and
 `overview.json`, the same payload as a file for anything that wants to consume
 it.
+
+### The component page
+
+`index.html?component=name-lookup` is one component on its own page: the same
+six sections the drawer shows as tabs, with room to read them, plus two the
+drawer has no space for.
+
+- **Environments side by side.** One row per fact, one column per
+  environment, a dash wherever an environment has nothing to say — so "prod
+  is on an older TRAPI" is a glance across a row rather than four tabs.
+- **Recorded.** The component's own `components/<id>.yaml` against every
+  field the schema allows, each marked *recorded*, *checked: none* (an
+  explicit `null` or `[]`: someone looked and there is nothing) or *not
+  recorded* (nobody has written it down yet). The count at the top —
+  "19 of 32 fields recorded" — is the to-do list for that file. Hover a field
+  name for what it holds.
+
+The header has **Copy link**, **Show on map** (the map with this component
+selected), and **View file** / **Edit on GitHub**, which open the YAML file
+in this repository — the edit link walks a signed-in reader through a fork
+and a pull request, so "field X is wrong" can become a fix without anyone
+opening an editor. The crumb in the top bar goes back to whichever list view
+you came from, and the browser's Back button does the same.
+
+An id nobody has a file for gets a page that says so and offers what it can:
+components whose id, name, infores, OpenTelemetry service name, ITRB app or
+Helm chart resemble it; what [`unknown.yaml`](unknown.yaml) records about
+that identifier; and, on a published build, how many components the privacy
+policy left out (never which). References resolve case-insensitively here as
+everywhere else, so `?component=ARAX` lands on `arax`.
+
+### What travels in the URL
+
+Every control writes its state to the query string, so a link says what the
+sender saw and nothing else: only values that differ from the default are
+written. Parsed and written by `web/core.js`.
+
+| Parameter | Values | What it does |
+|---|---|---|
+| `view` | `overview` (default), `map` | Which list view is open |
+| `component` | a component id | Opens that component's page. Names the view as well as the row, so nothing else is written beside it |
+| `q` | text | The search box |
+| `owner` | comma-separated owners | The owner filter |
+| `versions` | `all` (default), `differ`, `known`, `none` | The dropdown beside the owner filter |
+| `sort`, `dir` | a column key; `asc` or `desc` | The sort, always written as a pair |
+| `expand` | comma-separated ids | Rows expanded inline |
+| `sel`, `tab` | a component id; a drawer tab | The drawer, open on that component and tab |
+| `edges` | comma-separated edge kinds | Which edge kinds the map shows |
+
+A `#c-<id>` fragment scrolls the Overview to a row; on the component page the
+fragment is a section (`#environments`, `#recorded`). Changing view or opening
+a component page adds a history entry; filters, sort and the drawer replace
+the current one, so Back leaves a view rather than undoing a keystroke.
 
 **Map controls:** `f` fits the diagram, `+`/`-` zoom, arrow keys pan when the
 map has focus, `Esc` clears selection. Edge kinds can be toggled in the legend.
@@ -467,14 +524,14 @@ translator-diagram/
 │   ├── stages.py           # The bands, from config/flow-steps.yaml
 │   ├── cells.py            # The version-source chain, one cell at a time
 │   ├── rows.py             # One row per component: drift, dates, releases
-│   ├── dashboard.py        # The payload, the graph views, the rendered page
+│   ├── dashboard.py        # The payload, the graph views, the reference check, the rendered page
 │   ├── dashboard_cli.py    # sync-components and build-dashboard
 │   ├── web/                # The page's CSS and JS, inlined into it
 │   │   └── CLAUDE.md       # How to look at the page, and its non-obvious decisions
 │   └── CLAUDE.md           # The module map and the non-obvious decisions
 ├── components/             # One YAML file per component — see docs/
 │   └── CLAUDE.md           # What a component file must contain
-├── unknown.yaml            # Identifiers no component file claims yet
+├── unknown.yaml            # Identifiers no component file claims yet; shown on the not-found page
 ├── config/                 # The data files, edited by hand
 │   ├── owner-colors.csv    # Owner → fill colour
 │   ├── flow-steps.yaml     # The dashboard's stages, in page order
