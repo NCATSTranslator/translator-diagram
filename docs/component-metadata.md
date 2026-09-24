@@ -133,10 +133,11 @@ endpoints:                       # paths relative to an environment's base URL
   docs: docs
 ```
 
-There is no `diagram:` block, and there is none in any of the 26 files. It
+There is no `diagram:` block, and there is none in most of the files. It
 holds `ubiquitous` and `hide` — the two fields that really are about the
 picture rather than the component — and both default to `false`, which is what
-every component is. The block appears the first time one of them is `true`.
+nearly every component is. The block appears only where one of them is `true`:
+`jaeger` (ubiquitous) and `ploverdb` (hidden from the map) today.
 
 ### `unknown.yaml`
 
@@ -267,8 +268,8 @@ the component *is*, and the data flow is one of the four jobs this repo
 exists to do — so filing it under drawing was backwards.
 
 They are now top-level fields, `connections:` and a `diagram:` block holding
-the two flags that earned it. That block is absent from all 26 files, because
-both flags default to `false` and every component is. The eight files whose
+the two flags that earned it. That block is absent from every file that does
+not set one of them, because both default to `false`. The eight files whose
 `identifiers:` block turned out to hold nothing but `itrb_app` and
 `itrb_group` are why ITRB moved out at the same time: a group is not a name
 for a component, it is a namespace around an application.
