@@ -225,12 +225,6 @@ code {
   to { opacity: 1; transform: none; }
 }
 
-.empty-view {
-  padding: var(--sp-6) 0;
-  color: var(--muted);
-  font-size: var(--fs-body);
-}
-
 /* --- Responsive ----------------------------------------------------------- */
 
 /* The columns leave by priority, never an environment column: losing "prod"

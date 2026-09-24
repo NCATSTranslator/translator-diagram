@@ -41,7 +41,7 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` and `Deployment` (one `components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `components.py` | `ComponentFile` and `Deployment` (one `components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, the `read_json`/`read_yaml` readers the modules above it share, and `load_schema`/`load_unknown` — the two repository files the component page reads beside the component files. `ComponentFile.raw` is the file as parsed, before defaults |
 | `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
 | `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
@@ -52,10 +52,10 @@ The dashboard is a second, parallel stack over the same components:
 | `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
 | `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `config/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
-| `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
-| `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
+| `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make; and `recorded`, a deep copy of the file as written |
+| `dashboard.py` | The top of the stack: the graph builders, `build_payload`, `verify_references` (every id the payload names must be a row it carries) and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `detail.js` (the renderers) before `drawer.js` and `component.js` (the two surfaces that show them); `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged
@@ -253,13 +253,42 @@ files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
 breaks `web/table.js`.
 
-**Add a field to the drawer** → the value in `build_rows` (`rows.py`) or
-`payload_details.py` if it needs sync data, then the tab renderer in
-`web/drawer.js`. Per-environment fields that come from a live document must
-respect the same 200 gate as the table: `SyncedData` only reads bodies this
-run fetched successfully. Chart facts are labelled as intent, not deployment.
-`privacy.verify` runs on the finished payload, so a field added to the drawer
-must survive it — a withheld id in a new string aborts the published build.
+**Add a field to the drawer or the component page** → the value in
+`build_rows` (`rows.py`) or `payload_details.py` if it needs sync data, then
+the panel renderer in `web/detail.js`. Both surfaces render through the same
+function — the drawer as a tab, the page as a section — so one edit reaches
+both and they cannot come to disagree. A per-environment field goes in
+`envFields`, which the drawer lays out as a list and the page as a matrix.
+Per-environment fields that come from a live document must respect the same
+200 gate as the table: `SyncedData` only reads bodies this run fetched
+successfully. Chart facts are labelled as intent, not deployment.
+`privacy.verify` runs on the finished payload, so a field added here must
+survive it — a withheld id in a new string aborts the published build.
+
+**Add a field to a component file** → `schema/component.schema.json`, and
+nothing else for the page: the payload carries the schema as
+`component_schema` and each row's file as `recorded`, and the Recorded
+section lists every field the schema allows, so a new field appears there —
+marked *not recorded* on every file that lacks it — the day it enters the
+schema. The schema's `description` is what the reader sees on hover, and it
+is our own prose, so it is not scrubbed: a description that names a withheld
+component fails `verify`, and the fix is to reword it.
+
+**`recorded` is the row, in the file's vocabulary.** `privacy.apply` prunes
+its `connections` of withheld ids, scrubs its `notes`, `description` and
+per-link `note`s, and empties a withheld `fields:` entry spelled like one of
+its keys. It is a deep copy of `ComponentFile.raw`, because `apply` mutates
+rows in place and a shared dict would let a published build edit the file the
+next build reads. `unknown` is filtered of entries that name or are a
+withheld component; everything else about it is one click away in the file,
+which is why the payload carries no `evidence` or `note` prose from it.
+
+**Every id the payload names must be a row it carries.** `verify_references`
+walks `edges`, `catalog_edges`, the stage rosters and every row's
+`connections` after the policy has run, and `build-dashboard` fails on a
+dangling one. Today they cannot dangle by construction; the check exists
+because the component page is addressed by id, so a dangling reference is a
+"no such component" page on the published site rather than a quiet gap.
 
 `type` and `layer` are the exception in the other direction: the page no
 longer shows either — neither told a reader anything the stage bands and the

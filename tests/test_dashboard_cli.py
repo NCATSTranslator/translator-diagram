@@ -7,11 +7,14 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from translator_diagram.dashboard_cli import build_main
+
+REPO = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture
@@ -58,6 +61,25 @@ def workspace(tmp_path):
         "  - name: notes\n"
         "    reason: Free text.\n"
     )
+    # The component page reads the schema and unknown.yaml from the checkout
+    # too, by the same upward walk, so a workspace needs both. The real schema
+    # rather than a stub: a build that ships a made-up field list is not the
+    # build under test.
+    schema = tmp_path / "schema"
+    schema.mkdir()
+    (schema / "component.schema.json").write_bytes(
+        (REPO / "schema" / "component.schema.json").read_bytes()
+    )
+    (tmp_path / "unknown.yaml").write_text(
+        "otel_services:\n"
+        "  - name: mystery\n"
+        "    status: unattributed\n"
+        "    first_seen: '2026-01-01'\n"
+        "  - name: secret-worker\n"
+        "    status: not-recorded\n"
+        "    first_seen: '2026-01-01'\n"
+        "    component: secret\n"
+    )
     return tmp_path
 
 
@@ -89,6 +111,17 @@ class TestTheFlagDefaultsToWithholding:
         assert [row["id"] for row in payload["rows"]] == ["keeper"]
         assert payload["redacted"]["components"] == 1
         assert "secret" not in json.dumps(payload)
+        # The unknown.yaml entry that names the withheld component went too;
+        # the one that does not is still there for the not-found page.
+        assert [entry["name"] for entry in payload["unknown"]] == ["mystery"]
+
+    def test_the_page_carries_what_the_component_view_needs(self, workspace):
+        result, payload = _run(workspace, "--include-private")
+        assert result.exit_code == 0, result.output
+        assert payload["repo_url"].startswith("https://github.com/")
+        assert "id" in payload["component_schema"]["properties"]
+        assert {e["name"] for e in payload["unknown"]} == {"mystery", "secret-worker"}
+        assert payload["rows"][0]["recorded"]["owner"] == "DOGSLED"
 
     def test_include_private_builds_everything(self, workspace):
         result, payload = _run(workspace, "--include-private")

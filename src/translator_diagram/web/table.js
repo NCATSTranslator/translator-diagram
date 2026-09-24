@@ -752,9 +752,7 @@
         for (const row of body.querySelectorAll("tr.row")) {
           row.classList.toggle("sel", row.dataset.id === id);
         }
-        // The drawer lands in a later step; until it does, selecting a
-        // component records itself in the URL and does nothing else.
-        if (TD.drawer && TD.drawer.open) TD.drawer.open(id);
+        TD.drawer.open(id);
       }
     });
 

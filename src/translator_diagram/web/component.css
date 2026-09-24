@@ -1,0 +1,156 @@
+/*
+  The component page: how detail.js's panels sit when they have a whole view
+  to themselves. The vocabulary — labels, values, notes, small tables — is
+  detail.css; this file only decides the column, the header, the section
+  rhythm and the Recorded table's three states.
+
+  Same page, same rules. No cards: a section is a hairline and some air. The
+  one line of chrome is the sticky section nav, which is the tab strip the
+  drawer could not fit, laid flat.
+*/
+
+/* The view is a flex child of .page, which does not scroll (html and body
+   are overflow:hidden), so the page needs a scroller of its own — the same
+   arrangement as .tablewrap. The section nav's `sticky` resolves against it. */
+#view-component .cp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The finding, the stats line and the filter strip are about the platform,
+   and the view switch is a choice this page has already made; the crumb
+   stands where the switch was. */
+html[data-view="component"] .finding,
+html[data-view="component"] .stats,
+html[data-view="component"] .filters,
+html[data-view="component"] #viewswitch { display: none; }
+
+.topcenter {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-size: var(--fs-meta);
+}
+.crumb[hidden] { display: none; }
+.crumb a { color: var(--muted); white-space: nowrap; }
+.crumb a:hover { color: var(--text); text-decoration: none; }
+.crumb-sep { color: var(--hairline-strong); }
+.crumb-name {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- The column ------------------------------------------------------------- */
+
+.cp {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-bottom: var(--sp-6);
+  font-size: var(--fs-table);
+}
+
+.cp-head { padding: var(--sp-2) 0 var(--sp-4); }
+.cp .dw-name h1 { font-size: 22px; line-height: 1.25; }
+.cp .dw-blurb { white-space: normal; }   /* room for the whole sentence here */
+.cp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-4);
+}
+.cp-actions .btn { text-decoration: none; }
+
+.cp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-4);
+  padding: var(--sp-2) 0;
+  background: var(--page);
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+.cp-nav a { color: var(--muted); padding: 4px 0; }
+.cp-nav a:hover { color: var(--text); text-decoration: none; }
+
+.cp-sec {
+  padding: var(--sp-5) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.cp-sec:last-child { border-bottom: 0; }
+.cp-h {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+/* Wider labels than the drawer's 116px: there is room, and "ITRB app / group"
+   on one line reads better than on two. */
+.cp .dw-r { grid-template-columns: 180px minmax(0, 1fr); }
+/* The panels' own first heading sits under the section's; no double gap. */
+.cp-sec .dw-sec:first-child .dw-h:first-child { margin-top: 0; }
+
+/* --- Recorded ---------------------------------------------------------------- */
+
+.cp-count { margin: 0 0 var(--sp-2); font-size: var(--fs-table); }
+.cp-count strong { font-weight: 600; }
+.cp-rec th[scope="row"] {
+  font-family: var(--mono);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px 5px 0;
+  white-space: nowrap;
+  color: var(--text);
+}
+.cp-rec thead th:first-child { width: 220px; }
+.cp-rec thead th:nth-child(2) { width: 120px; }
+.cp-rec td { padding-top: 5px; padding-bottom: 5px; }
+.cp-state { font-size: var(--fs-meta); white-space: nowrap; }
+/* Three states, three treatments, none of them colour alone: the word is
+   there in every row. Absent is the one the section exists to show, so it
+   is the one that stands out — the field name dims and the state does not. */
+.cp-f-recorded .cp-state { color: var(--muted); }
+.cp-f-none .cp-state { color: var(--muted); font-style: italic; }
+.cp-f-absent th[scope="row"] { color: var(--muted); }
+.cp-f-absent .cp-state { color: var(--drift-ink); font-weight: 600; }
+.cp-value { overflow-wrap: anywhere; }
+.cp-value .dw-key { margin-right: 2px; }
+
+/* --- Not found --------------------------------------------------------------- */
+
+.cp-title {
+  margin: var(--sp-2) 0 var(--sp-2);
+  font-size: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.cp-notfound .dw-conns { margin-top: var(--sp-2); }
+.cp-notfound a.dw-conn { text-decoration: none; color: inherit; }
+
+/* --- Narrow ------------------------------------------------------------------ */
+
+@media (max-width: 800px) {
+  .cp .dw-r { grid-template-columns: 110px minmax(0, 1fr); }
+  .cp-rec thead th:first-child { width: auto; }
+  .cp-rec th[scope="row"] { white-space: normal; }
+  .crumb-name { max-width: 40vw; }
+}

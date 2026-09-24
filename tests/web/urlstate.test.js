@@ -25,7 +25,7 @@ test("an empty query gives every default", () => {
   const state = TD.url.parse("");
   assert.deepEqual(state, {
     view: "overview", q: "", owner: [], versions: "all", sort: "", dir: "asc",
-    expand: [], sel: "", tab: "", edges: [],
+    expand: [], sel: "", tab: "", edges: [], component: "",
   });
 });
 
@@ -50,8 +50,48 @@ test("every field round-trips", () => {
     sel: "arax",
     tab: "environments",
     edges: ["calls", "catalog"],
+    component: "",
   };
   assert.deepEqual(TD.url.parse(TD.url.serialize(state)), state);
+});
+
+/* A component page's address is `component=<id>` and nothing else. It is a
+   key of its own rather than a reuse of `sel`: `sel` means the drawer is open,
+   and the drawer opens itself at boot on any `sel` that names a row. */
+test("component= names the view as well as the row", () => {
+  const state = TD.url.parse("component=arax");
+  assert.equal(state.view, "component");
+  assert.equal(state.component, "arax");
+  assert.equal(TD.url.serialize(state), "component=arax");
+});
+
+test("component= overrules a view= beside it", () => {
+  assert.equal(TD.url.parse("view=map&component=arax").view, "component");
+});
+
+test("view=component with no component is the table", () => {
+  const state = TD.url.parse("view=component");
+  assert.equal(state.view, "overview");
+  assert.equal(state.component, "");
+  assert.equal(TD.url.serialize(state), "");
+});
+
+test("a component page's link carries no filters, selection or tab", () => {
+  const state = {
+    ...defaults(), component: "arax", q: "ar", owner: ["CATRAX"], versions: "differ",
+    sort: "env-prod", dir: "desc", expand: ["ars"], sel: "ars", tab: "helm", edges: ["calls"],
+  };
+  assert.equal(TD.url.serialize(state), "component=arax");
+  // ...but they are still read off a link that has them, so the crumb back to
+  // the table can land where a hand-written link asked.
+  const parsed = TD.url.parse("component=arax&q=ar&sel=ars&tab=helm");
+  assert.equal(parsed.q, "ar");
+  assert.equal(parsed.sel, "ars");
+  assert.equal(parsed.tab, "helm");
+});
+
+test("component is truncated rather than trusted", () => {
+  assert.equal(TD.url.parse(`component=${"x".repeat(500)}`).component.length, 100);
 });
 
 test("a leading question mark is accepted", () => {

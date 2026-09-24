@@ -5,6 +5,9 @@ import json
 import re
 from pathlib import Path
 
+import click
+import pytest
+
 from tests.dashboard_helpers import _comp, _row
 from translator_diagram import dashboard
 from translator_diagram.dashboard import (
@@ -14,6 +17,7 @@ from translator_diagram.dashboard import (
     build_payload,
     render_html,
     source_tally,
+    verify_references,
     write_dashboard,
 )
 from translator_diagram.rows import build_rows
@@ -117,6 +121,77 @@ class TestPayload:
         row = build_payload([component], synced)["rows"][0]
         for key in ("step", "step_label", "step_title", "step_description"):
             assert key in row
+
+
+    def test_the_component_page_gets_the_schema_the_repo_url_and_unknown(
+        self, component, synced
+    ):
+        payload = build_payload([component], synced)
+        assert payload["repo_url"] == dashboard.REPO_URL
+        assert "properties" in payload["component_schema"]
+        assert isinstance(payload["unknown"], list)
+        assert "recorded" in payload["rows"][0]
+
+
+class TestVerifyReferences:
+    """Every id the payload points at must be a row it carries."""
+
+    def _payload(self, **overrides):
+        payload = {
+            "rows": [
+                {"id": "a", "connections": {"calls": ["B"], "gets_results_from": []}},
+                {"id": "b", "connections": {}},
+            ],
+            "edges": [
+                {"from": "a", "to": "b", "kind": "calls", "planned": False},
+                {"from": "Source", "to": "a", "kind": "external_in", "planned": False},
+                {"from": "b", "to": "User", "kind": "external_out", "planned": False},
+            ],
+            "externals": [
+                {"name": "Source", "direction": "in"},
+                {"name": "User", "direction": "out"},
+            ],
+            "catalog_edges": [{"from": "a", "to": "b", "kind": "catalog"}],
+            "stages": [{"step": 1, "title": "One", "components": ["a", "b"]}],
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_a_consistent_payload_passes(self):
+        verify_references(self._payload())
+
+    def test_references_resolve_case_insensitively_and_through_the_tilde(self):
+        payload = self._payload()
+        payload["rows"][0]["connections"]["calls"] = ["~B"]
+        verify_references(payload)
+
+    def test_a_dangling_edge_is_an_error(self):
+        payload = self._payload()
+        payload["edges"].append({"from": "a", "to": "ghost", "kind": "calls", "planned": False})
+        with pytest.raises(click.ClickException, match="'ghost' in edges"):
+            verify_references(payload)
+
+    def test_an_external_name_is_not_an_id(self):
+        # The external end of an external edge is a name, and is skipped; the
+        # component end is still checked.
+        payload = self._payload()
+        payload["edges"].append(
+            {"from": "Elsewhere", "to": "ghost", "kind": "external_in", "planned": False}
+        )
+        with pytest.raises(click.ClickException, match="'ghost'"):
+            verify_references(payload)
+
+    def test_a_dangling_stage_roster_or_connection_is_an_error(self):
+        payload = self._payload()
+        payload["stages"][0]["components"].append("nobody")
+        payload["rows"][1]["connections"] = {"calls": ["nobody"]}
+        with pytest.raises(click.ClickException) as raised:
+            verify_references(payload)
+        assert "stage 'One'" in str(raised.value)
+        assert "b.connections.calls" in str(raised.value)
+
+    def test_the_real_build_has_no_dangling_reference(self, component, synced):
+        verify_references(build_payload([component], synced))
 
 
 class TestCatalogEdges:

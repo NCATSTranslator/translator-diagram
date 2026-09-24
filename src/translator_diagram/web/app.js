@@ -3,9 +3,14 @@
   own elements. It reads the payload, builds the shell, owns the shared state
   and the URL, and hands the views a container each.
 
-  Everything a reader changes goes through `TD.commit`, which is the one place
-  that writes the URL — so a view can be pasted into Slack and arrive as the
-  sender saw it, and no control can quietly diverge from the address bar.
+  Everything a reader changes goes through `TD.commit` or `TD.navigate`, the
+  two places that write the URL — so a view can be pasted into Slack and
+  arrive as the sender saw it, and no control can quietly diverge from the
+  address bar. The difference between the two is the browser's history:
+  `commit` replaces the entry (a filter, a sort, a drawer tab) and `navigate`
+  pushes one (a change of view, a component page), so Back leaves a view
+  rather than undoing a keystroke. This file is also the only popstate
+  listener; two listeners was two renders and an ordering dependency.
 */
 
 (() => {
@@ -25,18 +30,48 @@
   // Watchers fire during setup too; without this guard the first render would
   // rewrite the URL and discard the state a shared link asked for.
   let urlReady = false;
+  // The list view the reader came from, so the component page's crumb goes
+  // back to the Map when that is where they clicked.
+  let lastListView = "overview";
 
-  function writeUrl() {
+  function writeUrl(push) {
     if (!urlReady) return;
     const query = TD.url.serialize(TD.state);
-    history.replaceState(null, "", query ? `?${query}${location.hash}` : location.pathname + location.hash);
+    // The `#c-<id>` fragment scrolls the table to a row, and means nothing on
+    // any other view; carrying it along would leave a component page reading
+    // "#c-arax" beside its own section anchors.
+    const hash = TD.state.view !== "overview" && /^#c-/.test(location.hash) ? "" : location.hash;
+    const url = query ? `?${query}${hash}` : location.pathname + hash;
+    history[push ? "pushState" : "replaceState"](null, "", url);
   }
 
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
-    writeUrl();
+    writeUrl(false);
     if (!(options && options.silent)) refresh();
   };
+
+  /* A change of view is a place the reader can come back to, so it is pushed.
+     Never silent: the whole point is that the page changes. */
+  TD.navigate = function navigate(patch) {
+    Object.assign(TD.state, patch);
+    // The same rule the URL parser applies: a component names its own view,
+    // and a component view with no component is the list the reader left.
+    if (TD.state.component) TD.state.view = "component";
+    else if (TD.state.view === "component") TD.state.view = lastListView;
+    writeUrl(true);
+    showView(true);
+  };
+
+  /* Back and forward: the URL is the state, so re-read it and repaint. The
+     controls are told separately because they keep their own value and would
+     otherwise show the search the reader just left. */
+  function onPopState() {
+    Object.assign(TD.state, TD.url.parse(location.search));
+    syncControls();
+    showView(false);
+    TD.drawer.sync();
+  }
 
   /* --- Theme ----------------------------------------------------------------- */
 
@@ -176,7 +211,8 @@
     document.getElementById("app").innerHTML = `
       <div class="topbar">
         <div class="brandmark">${BRAND_MARK}<span class="name">Translator components</span></div>
-        <div id="viewswitch"></div>
+        <div class="topcenter"><div id="viewswitch"></div><nav id="crumb" class="crumb"
+          aria-label="Where this page is" hidden></nav></div>
         <div class="topright"><span class="synced" title="${esc(DATA.synced_at || "")}"
           >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
       </div>
@@ -200,6 +236,7 @@
         </div>
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
+        <div class="view" id="view-component"></div>
       </main>`;
   }
 
@@ -208,6 +245,14 @@
   let viewSwitch = null;
   let ownerBox = null;
   let versionBox = null;
+
+  function syncControls() {
+    if (viewSwitch && viewSwitch.value !== TD.state.view) viewSwitch.set(TD.state.view);
+    if (ownerBox) ownerBox.set(TD.state.owner);
+    if (versionBox) versionBox.set(TD.state.versions);
+    const search = document.getElementById("q");
+    if (search && search.value !== TD.state.q) search.value = TD.state.q;
+  }
 
   function uniqueOwners() {
     return [...new Set((DATA.rows || []).map((row) => row.owner).filter(Boolean))]
@@ -219,7 +264,7 @@
       label: "View",
       items: [{ value: "overview", label: "Overview" }, { value: "map", label: "Map" }],
       value: TD.state.view,
-      onChange: (value) => { TD.commit({ view: value }); showView(true); },
+      onChange: (value) => TD.navigate({ view: value }),
     });
     document.getElementById("viewswitch").append(viewSwitch.el);
 
@@ -279,6 +324,13 @@
       if (currentTheme() === "auto") applyTheme("auto");
     });
 
+    document.getElementById("crumb").addEventListener("click", (event) => {
+      const back = event.target.closest("#crumb-back");
+      if (!back) return;
+      event.preventDefault();
+      TD.navigate({ view: lastListView, component: "" });
+    });
+
     // The order label's ✕ is the only way back to stage order when a narrow
     // window has hidden the column whose header would complete the cycle.
     document.getElementById("order").addEventListener("click", (event) => {
@@ -300,29 +352,33 @@
 
   /* --- Measurement ------------------------------------------------------------ */
 
-  /* The filter strip is not a constant height: it wraps at the widths where the
-     controls and the order label no longer fit on one line. Measured rather
-     than guessed, because a wrong offset hides the first row under the bar. */
+  /* The view switch's indicator is positioned from the width of the button
+     under it, which changes with the font, so it is measured after layout and
+     again on resize. (A `--filters-height` custom property used to be set
+     here as well; nothing read it — the table's header is sticky inside its
+     own scrollport, not under the filter bar — so it is gone.) */
   function measure() {
-    const root = document.documentElement;
-    const bar = $(".filters");
-    if (bar) {
-      root.style.setProperty("--filters-height",
-        `${Math.round(bar.getBoundingClientRect().height)}px`);
-    }
     if (viewSwitch) viewSwitch.measure();
   }
 
   /* --- Views ------------------------------------------------------------------- */
 
   function showView(animate) {
-    const overview = document.getElementById("view-overview");
-    const map = document.getElementById("view-map");
-    const onMap = TD.state.view === "map";
-    overview.classList.toggle("on", !onMap);
-    map.classList.toggle("on", onMap);
-    const shown = onMap ? map : overview;
-    if (animate && TD.motion.enabled) {
+    const view = TD.state.view;
+    const root = document.documentElement;
+    root.dataset.view = view;
+    if (view !== "component") lastListView = view;
+    // The drawer is a peer of the table and the map, not of the page: closed
+    // here so its 440px of page padding and its shifted breakpoints go too.
+    if (view === "component" && TD.drawer.isOpen()) TD.drawer.close();
+    let shown = null;
+    for (const name of ["overview", "map", "component"]) {
+      const el = document.getElementById(`view-${name}`);
+      el.classList.toggle("on", view === name);
+      if (view === name) shown = el;
+    }
+    crumb();
+    if (animate && TD.motion.enabled && shown) {
       shown.classList.remove("enter");
       void shown.offsetWidth;
       shown.classList.add("enter");
@@ -330,16 +386,34 @@
     renderView();
   }
 
+  /* In place of the view switch while a component page is open: the way
+     back, and the name of where the reader is. A third segment would need a
+     "nothing selected" state the control does not have, and would read as a
+     view a reader can choose without saying which component. */
+  function crumb() {
+    const nav = document.getElementById("crumb");
+    if (!nav) return;
+    if (TD.state.view !== "component") {
+      nav.hidden = true;
+      nav.innerHTML = "";
+      return;
+    }
+    const back = lastListView === "map" ? "Map" : "Overview";
+    const name = TD.component.title() || TD.state.component;
+    nav.innerHTML = `<a href="?view=${lastListView === "map" ? "map" : "overview"}" id="crumb-back"
+        >‹ ${back}</a><span class="crumb-sep" aria-hidden="true">/</span><span class="crumb-name">${esc(name)}</span>`;
+    nav.hidden = false;
+  }
+
   function renderView() {
+    if (TD.state.view === "component") {
+      TD.component.render(document.getElementById("view-component"));
+      crumb();  // the name is known only once the id has resolved
+      return;
+    }
     if (TD.state.view === "map") {
       const container = document.getElementById("view-map");
-      // The map lands in a later step. Until then the switch is honest about
-      // it rather than showing an empty frame that looks like a failure.
-      if (TD.map && TD.map.render) TD.map.render(container);
-      else if (!container.querySelector(".empty-view")) {
-        container.innerHTML =
-          '<p class="empty-view">Map view is not built into this page yet.</p>';
-      }
+      TD.map.render(container);
       const shown = TD.table.visibleRows().length;
       setStatus(shown, (DATA.rows || []).length);
       return;
@@ -404,6 +478,7 @@
   countUp();
 
   addEventListener("resize", measure);
+  addEventListener("popstate", onPopState);
 
   // A deep link arrives before the table exists, so the browser's own fragment
   // scroll finds nothing; this is the second attempt, once there are rows.
@@ -413,4 +488,8 @@
 
   // Only now: everything above can set state without the URL fighting it back.
   urlReady = true;
+  // A component page's first render may have resolved `?component=ARAX` to
+  // its canonical id, or been handed a link with a stray `sel=` on it; the
+  // rewrite was refused above, so it is written once here.
+  if (TD.state.view === "component") writeUrl(false);
 })();

@@ -187,7 +187,7 @@
 
   /* --- URL state --------------------------------------------------------- */
 
-  const VIEWS = ["overview", "map"];
+  const VIEWS = ["overview", "map", "component"];
   const VERSIONS = ["all", "differ", "known", "none"];
   const BASE_SORTS = ["name", "owner", "repo", "updated"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
@@ -203,6 +203,7 @@
     sel: "",
     tab: "",
     edges: [],
+    component: "",  // the id a component page is open on; implies view=component
   };
 
   const defaults = () => ({ ...DEFAULTS, owner: [], expand: [], edges: [] });
@@ -259,6 +260,17 @@
     state.tab = (params.get("tab") ?? "").slice(0, 40);
     state.edges = commaList(params.get("edges"), 120)
       .filter((kind) => v.edges.indexOf(kind) >= 0);
+    // `component=<id>` is the whole address of a component page: it names the
+    // view as well as the row, so `view=` is never written beside it and is
+    // overruled if a hand-edited link carries both. The reverse also holds —
+    // `view=component` with nothing to show is not a page, and falls back to
+    // the table rather than to an empty frame. It is a key of its own rather
+    // than a reuse of `sel`, because `sel` means "the drawer is open on this
+    // row" to the table, the map and the drawer's own boot, and a page is not
+    // a drawer.
+    state.component = (params.get("component") ?? "").slice(0, 100);
+    if (state.component) state.view = "component";
+    else if (state.view === "component") state.view = DEFAULTS.view;
     return state;
   }
 
@@ -273,6 +285,16 @@
     const owner = (state.owner ?? []).join(",").slice(0, 100);
     const expand = (state.expand ?? []).join(",");
     const edges = (state.edges ?? []).join(",");
+
+    // A component page's address is the id and nothing else. The filters, the
+    // sort and the drawer selection stay in memory, so the crumb back to the
+    // table lands where the reader left it, but none of them travel: a link
+    // to one component that also carried the sender's search box would arrive
+    // as noise, and a pasted `sel=` would re-arm the drawer over the page.
+    if (state.component) {
+      params.set("component", state.component.slice(0, 100));
+      return params.toString();
+    }
 
     if (state.view && state.view !== d.view) params.set("view", state.view);
     if (q && q !== (d.q ?? "").trim()) params.set("q", q);

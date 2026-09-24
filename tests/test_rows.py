@@ -524,3 +524,28 @@ class TestTheMetadataBlock:
         # Different from a record whose fields are blank, and the drawer says
         # so: "not registered" is a finding the page already counts.
         assert build_rows([_comp("svc")], synced)[0]["smartapi_record"] is None
+
+
+class TestTheFileAsWritten:
+    def test_recorded_is_the_parsed_file(self, tmp_path):
+        from translator_diagram.components import parse_component
+
+        (tmp_path / "manifest.json").write_text(json.dumps({"counts": {}}))
+        data = {
+            "id": "svc", "name": "Service", "owner": "DOGSLED",
+            "refactor_status": "New in Refactor",
+            "connections": {"calls": ["other"], "gets_results_from": []},
+            "endpoints": {"status": None},
+        }
+        component = parse_component(data)
+        row = build_rows([component], SyncedData(tmp_path))[0]
+        assert row["recorded"] == data
+        # A copy: privacy.apply prunes rows in place, and the ComponentFile
+        # must not see that on the next build.
+        assert row["recorded"] is not component.raw
+        assert row["recorded"]["connections"] is not component.raw["connections"]
+
+    def test_a_component_built_in_code_records_nothing(self, tmp_path):
+        (tmp_path / "manifest.json").write_text(json.dumps({"counts": {}}))
+        row = build_rows([_comp("svc")], SyncedData(tmp_path))[0]
+        assert row["recorded"] is None

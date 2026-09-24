@@ -329,7 +329,7 @@
       }
     },
     "diagram": {
-      "description": "Flags that change how the picture is drawn and say nothing about the component itself. Omit the block when both are at their defaults, which is every file today.",
+      "description": "Flags that change how the picture is drawn and say nothing about the component itself. Omit the block when both are at their defaults, which is every file but the one or two that set a flag.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
