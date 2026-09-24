@@ -39,7 +39,7 @@ function realPayload() {
 // reads off it are stubbed before core.js runs, which keeps `TD` as the same
 // object core.js then extends.
 globalThis.TD = { ui: { CHEVRON: "<svg/>", CARET_DOWN: "<svg/>" } };
-for (const name of ["core.js", "detail.js"]) {
+for (const name of ["core.js", "detail.js", "component.js"]) {
   vm.runInThisContext(fs.readFileSync(path.join(WEB, name), "utf8"), { filename: name });
 }
 const TD = globalThis.TD;
@@ -108,11 +108,29 @@ const OTHER = { id: "other", name: "Other", owner: "Team", connections: { calls:
 const THIRD = { id: "third", name: "Third", owner: "Team", connections: {}, environments: {} };
 const EMPTY = { id: "bare" };
 
+const SCHEMA = JSON.parse(fs.readFileSync(path.join(ROOT, "schema", "component.schema.json"), "utf8"));
+
+FULL.recorded = {
+  id: "svc", name: "Service", owner: "Team", refactor_status: "Continues into Refactor",
+  identifiers: { infores: "infores:svc", smartapi: "abc" },
+  connections: { gets_results_from: ["other"], calls: ["third"], externals: [] },
+  endpoints: { openapi: "openapi.json", status: null, extra: "x" },
+  repositories: [{ url: "https://github.com/org/svc", role: "source", visibility: "public" }],
+  environments: { ci: { url: "https://svc.ci.transltr.io/", location: "ITRB" } },
+};
+
 const PAYLOAD = {
   environments: ["dev", "ci", "test", "prod"],
   owner_styles: {},
   updated_labels: { release: "release", registry: "registry" },
   catalog_edges: [{ from: "other", to: "svc", kind: "catalog" }],
+  component_schema: SCHEMA,
+  unknown: [
+    { kind: "otel_services", name: "svc-legacy", status: "not-recorded", component: "svc" },
+    { kind: "otel_services", name: "mystery", status: "unattributed", component: null },
+  ],
+  redacted: { components: 2, fields: [], environment_fields: [], mentions: 0 },
+  repo_url: "https://github.com/org/repo",
   rows: [FULL, OTHER, THIRD, EMPTY],
 };
 TD.boot(PAYLOAD);
@@ -245,4 +263,92 @@ test("the matrix over a row with nothing deployed still names every environment"
   const html = TD.detail.envMatrix(EMPTY);
   for (const env of ["dev", "ci", "test", "prod"]) assert.match(html, new RegExp(`<th>${env}</th>`));
   assert.match(html, /Not deployed\./);
+});
+
+/* --- The component page (component.js) ---------------------------------- */
+
+test("the schema flattens to one row per field, nested blocks one level deep", () => {
+  const fields = TD.component.schemaFields(SCHEMA, FULL.recorded);
+  const labels = fields.map((f) => f.label);
+  for (const expected of ["id", "identifiers.infores", "itrb.app", "connections.calls",
+    "endpoints.openapi", "environments.prod", "diagram.hide", "notes", "repositories"]) {
+    assert.ok(labels.includes(expected), expected);
+  }
+  // A key the file has under a block the schema leaves open (endpoints).
+  assert.ok(labels.includes("endpoints.extra"));
+  // No block appears as a row of its own beside its keys.
+  assert.ok(!labels.includes("identifiers"));
+  assert.ok(!labels.includes("environments"));
+  assert.equal(fields.find((f) => f.label === "id").required, true);
+  assert.equal(fields.find((f) => f.label === "notes").required, false);
+  // Schema order, so the page reads like the file.
+  assert.ok(labels.indexOf("id") < labels.indexOf("identifiers.infores"));
+  assert.ok(labels.indexOf("identifiers.infores") < labels.indexOf("notes"));
+});
+
+test("absent, null and empty are three different states", () => {
+  const r = FULL.recorded;
+  assert.equal(TD.component.fieldState(r, ["id"]).state, "recorded");
+  assert.equal(TD.component.fieldState(r, ["endpoints", "status"]).state, "none");
+  assert.equal(TD.component.fieldState(r, ["connections", "externals"]).state, "none");
+  assert.equal(TD.component.fieldState(r, ["description"]).state, "absent");
+  assert.equal(TD.component.fieldState(r, ["environments", "prod"]).state, "absent");
+  assert.equal(TD.component.fieldState(r, ["environments", "ci"]).state, "recorded");
+});
+
+test("the Recorded section counts, marks and links", () => {
+  const html = TD.component.recordedSection(FULL);
+  assert.match(html, /cp-f-absent/);
+  assert.match(html, /cp-f-none/);
+  assert.match(html, /cp-f-recorded/);
+  assert.match(html, /of \d+ fields recorded/);
+  assert.match(html, /not recorded/);
+  assert.match(html, /checked: none/);
+  assert.match(html, /components\/svc\.yaml/);
+  // Values render, URLs as links, and are escaped.
+  assert.match(html, /href="https:\/\/github\.com\/org\/svc"/);
+  assert.equal(TD.component.recordedSection(EMPTY), TD.detail.helpers.muted("This build did not carry the component file."));
+});
+
+test("the page has every section and the file links", () => {
+  const html = TD.component.page(FULL);
+  for (const id of ["identity", "environments", "releases", "helm", "smartapi", "connections", "recorded"]) {
+    assert.match(html, new RegExp(`<section class="cp-sec" id="${id}"`), id);
+  }
+  assert.match(html, /<h1>Service<\/h1>/);
+  assert.match(html, /https:\/\/github\.com\/org\/repo\/blob\/main\/components\/svc\.yaml/);
+  assert.match(html, /https:\/\/github\.com\/org\/repo\/edit\/main\/components\/svc\.yaml/);
+  assert.match(html, /data-copy="svc"/);
+  assert.match(html, /data-map="svc"/);
+  assert.doesNotMatch(html, /dw-close/);
+});
+
+test("an unknown id resolves case-insensitively or not at all", () => {
+  assert.equal(TD.component.resolve("SVC").id, "svc");
+  assert.equal(TD.component.resolve("nope"), null);
+  assert.equal(TD.component.resolve(""), null);
+});
+
+test("near matches reach through every naming space a row carries", () => {
+  const ids = (q) => TD.component.nearMatches(q).map((r) => r.id);
+  assert.deepEqual(ids("svc-worker"), ["svc"]);      // an OTel service name
+  assert.deepEqual(ids("infores:svc"), ["svc"]);     // the infores CURIE
+  assert.deepEqual(ids("abc"), ["svc"]);             // the SmartAPI id
+  assert.deepEqual(ids("serv"), ["svc"]);            // part of the name
+  assert.deepEqual(ids("zzz"), []);
+});
+
+test("the not-found page offers what it knows and names no withheld component", () => {
+  const html = TD.component.notFound("svc-legacy");
+  assert.match(html, /No component with the id/);
+  assert.match(html, /Seen in the platform/);
+  assert.match(html, /not-recorded/);
+  // The entry's component resolves, so it is a link to the page.
+  assert.match(html, /data-go="svc"/);
+  assert.match(html, /leaves out 2 components/);
+  assert.match(html, /components\/ on GitHub/);
+  const nothing = TD.component.notFound("<script>x</script>");
+  assert.doesNotMatch(nothing, /<script>/);
+  assert.match(nothing, /&lt;script&gt;/);
+  assert.doesNotMatch(nothing, /Did you mean/);
 });

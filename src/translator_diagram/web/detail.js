@@ -171,8 +171,13 @@
     return `background: ${TD.owner.metal(owner, "90deg") || "var(--hairline-strong)"}`;
   }
 
-  function headerLinks(row) {
+  function headerLinks(row, options) {
     const links = [];
+    // First, not last: the drawer's one way to a page with room in it.
+    if (options && options.page) {
+      links.push(`<a class="dw-link dw-page" href="?component=${esc(encodeURIComponent(row.id))}"
+        data-page="${esc(row.id)}">Open full page</a>`);
+    }
     if (row.repository) links.push(ext(row.repository, "Repository"));
     const doc = list(row.docs)[0];
     if (doc && doc.url) links.push(ext(doc.url, "Docs"));
@@ -195,9 +200,11 @@
   /* The name, id, blurb, owner rule, meta line and links: the top of the
      drawer and the top of the component page, from one function so the two
      cannot come to describe a component differently. `close` adds the
-     drawer's ✕; a page has nothing to close. */
+     drawer's ✕ (a page has nothing to close), `page` adds the drawer's link
+     to the page, and `level: 1` makes the name the page's <h1>. */
   function headerHtml(row, options) {
     const opts = options || {};
+    const tag = opts.level === 1 ? "h1" : "h2";
     // GitHub's own one-liner for the repository. It is the shortest true
     // sentence about what this thing is, and it costs one line.
     const blurb = (row.repository_meta || {}).description || "";
@@ -206,14 +213,14 @@
       .map(esc)
       .join(" · ");
     return `<div class="dw-headtop">
-        <div class="dw-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
+        <div class="dw-name">${TD.owner.coin(row.owner)}<${tag}>${esc(row.name || row.id)}</${tag}></div>
         ${opts.close ? CLOSE_BUTTON : ""}
       </div>
       <div class="dw-id">${esc(row.id)}</div>
       ${blurb ? `<div class="dw-blurb">${esc(blurb)}</div>` : ""}
       <div class="dw-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
       ${meta ? `<div class="dw-metaline">${meta}</div>` : ""}
-      ${headerLinks(row)}`;
+      ${headerLinks(row, opts)}`;
   }
 
   /* --- Overview tab -------------------------------------------------------- */

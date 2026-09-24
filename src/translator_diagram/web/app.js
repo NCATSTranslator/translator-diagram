@@ -30,6 +30,9 @@
   // Watchers fire during setup too; without this guard the first render would
   // rewrite the URL and discard the state a shared link asked for.
   let urlReady = false;
+  // The list view the reader came from, so the component page's crumb goes
+  // back to the Map when that is where they clicked.
+  let lastListView = "overview";
 
   function writeUrl(push) {
     if (!urlReady) return;
@@ -52,6 +55,10 @@
      Never silent: the whole point is that the page changes. */
   TD.navigate = function navigate(patch) {
     Object.assign(TD.state, patch);
+    // The same rule the URL parser applies: a component names its own view,
+    // and a component view with no component is the list the reader left.
+    if (TD.state.component) TD.state.view = "component";
+    else if (TD.state.view === "component") TD.state.view = lastListView;
     writeUrl(true);
     showView(true);
   };
@@ -204,7 +211,8 @@
     document.getElementById("app").innerHTML = `
       <div class="topbar">
         <div class="brandmark">${BRAND_MARK}<span class="name">Translator components</span></div>
-        <div id="viewswitch"></div>
+        <div class="topcenter"><div id="viewswitch"></div><nav id="crumb" class="crumb"
+          aria-label="Where this page is" hidden></nav></div>
         <div class="topright"><span class="synced" title="${esc(DATA.synced_at || "")}"
           >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
       </div>
@@ -228,6 +236,7 @@
         </div>
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
+        <div class="view" id="view-component"></div>
       </main>`;
   }
 
@@ -315,6 +324,13 @@
       if (currentTheme() === "auto") applyTheme("auto");
     });
 
+    document.getElementById("crumb").addEventListener("click", (event) => {
+      const back = event.target.closest("#crumb-back");
+      if (!back) return;
+      event.preventDefault();
+      TD.navigate({ view: lastListView, component: "" });
+    });
+
     // The order label's ✕ is the only way back to stage order when a narrow
     // window has hidden the column whose header would complete the cycle.
     document.getElementById("order").addEventListener("click", (event) => {
@@ -348,13 +364,21 @@
   /* --- Views ------------------------------------------------------------------- */
 
   function showView(animate) {
-    const overview = document.getElementById("view-overview");
-    const map = document.getElementById("view-map");
-    const onMap = TD.state.view === "map";
-    overview.classList.toggle("on", !onMap);
-    map.classList.toggle("on", onMap);
-    const shown = onMap ? map : overview;
-    if (animate && TD.motion.enabled) {
+    const view = TD.state.view;
+    const root = document.documentElement;
+    root.dataset.view = view;
+    if (view !== "component") lastListView = view;
+    // The drawer is a peer of the table and the map, not of the page: closed
+    // here so its 440px of page padding and its shifted breakpoints go too.
+    if (view === "component" && TD.drawer.isOpen()) TD.drawer.close();
+    let shown = null;
+    for (const name of ["overview", "map", "component"]) {
+      const el = document.getElementById(`view-${name}`);
+      el.classList.toggle("on", view === name);
+      if (view === name) shown = el;
+    }
+    crumb();
+    if (animate && TD.motion.enabled && shown) {
       shown.classList.remove("enter");
       void shown.offsetWidth;
       shown.classList.add("enter");
@@ -362,7 +386,31 @@
     renderView();
   }
 
+  /* In place of the view switch while a component page is open: the way
+     back, and the name of where the reader is. A third segment would need a
+     "nothing selected" state the control does not have, and would read as a
+     view a reader can choose without saying which component. */
+  function crumb() {
+    const nav = document.getElementById("crumb");
+    if (!nav) return;
+    if (TD.state.view !== "component") {
+      nav.hidden = true;
+      nav.innerHTML = "";
+      return;
+    }
+    const back = lastListView === "map" ? "Map" : "Overview";
+    const name = TD.component.title() || TD.state.component;
+    nav.innerHTML = `<a href="?view=${lastListView === "map" ? "map" : "overview"}" id="crumb-back"
+        >‹ ${back}</a><span class="crumb-sep" aria-hidden="true">/</span><span class="crumb-name">${esc(name)}</span>`;
+    nav.hidden = false;
+  }
+
   function renderView() {
+    if (TD.state.view === "component") {
+      TD.component.render(document.getElementById("view-component"));
+      crumb();  // the name is known only once the id has resolved
+      return;
+    }
     if (TD.state.view === "map") {
       const container = document.getElementById("view-map");
       TD.map.render(container);
@@ -440,4 +488,8 @@
 
   // Only now: everything above can set state without the URL fighting it back.
   urlReady = true;
+  // A component page's first render may have resolved `?component=ARAX` to
+  // its canonical id, or been handed a link with a stray `sel=` on it; the
+  // rewrite was refused above, so it is written once here.
+  if (TD.state.view === "component") writeUrl(false);
 })();

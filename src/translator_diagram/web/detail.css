@@ -15,8 +15,28 @@
 
 /* --- Header content ------------------------------------------------------- */
 
-/* The name row itself (.dw-name, .dw-headtop) and the close button stay in
-   drawer.css: the page sets its own heading size. */
+/* The close button stays in drawer.css; the name's size is the drawer's here
+   and the page's in component.css. */
+.dw-headtop {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+.dw-name {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.dw-name h1,
+.dw-name h2 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
 .dw-id {
   margin-top: 2px;
   font-family: var(--mono);

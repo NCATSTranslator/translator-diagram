@@ -19,7 +19,7 @@
 
   const { TABS, TAB_IDS, DEFAULT_TAB, rowById } = TD.detail;
   const PANELS = TD.detail.panels;
-  const headerHtml = (row) => TD.detail.header(row, { close: true });
+  const headerHtml = (row) => TD.detail.header(row, { close: true, page: true });
   const esc = (value) => TD.fmt.esc(value);
 
   /* --- The element --------------------------------------------------------- */
@@ -126,6 +126,14 @@
     if (disc) {
       const expanded = disc.getAttribute("aria-expanded") === "true";
       disc.setAttribute("aria-expanded", expanded ? "false" : "true");
+      return;
+    }
+    const toPage = event.target.closest("[data-page]");
+    if (toPage) {
+      // In-page navigation, not a load: the href is there for a middle click
+      // and for a reader with scripting off. showView closes this drawer.
+      event.preventDefault();
+      TD.navigate({ component: toPage.dataset.page, sel: "", tab: "" });
       return;
     }
     const go = event.target.closest("[data-go]");
