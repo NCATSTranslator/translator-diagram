@@ -20,10 +20,17 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import click
+
 from .cells import SOURCE_LABELS
 from .charts import unclaimed_charts
 from .colors import load_owner_colors, owner_styles
-from .components import ENVIRONMENTS, ComponentFile
+from .components import (
+    ENVIRONMENTS,
+    ComponentFile,
+    load_schema,
+    load_unknown,
+)
 from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
 from .rows import UPDATED_LABELS, build_rows
@@ -31,6 +38,14 @@ from .stages import load_stages, stage_blocks
 from .synced_data import SyncedData
 
 ASSET_PACKAGE = "translator_diagram.web"
+
+REPO_URL = "https://github.com/NCATSTranslator/translator-diagram"
+"""Where the component files live, for the page's "view file" and "edit" links.
+
+In the payload as `repo_url` rather than typed into the JS, so overview.json
+stays a complete contract for anything else that reads it and so a fork
+builds a page that points at itself once it changes this line.
+"""
 
 
 # Order matters: earlier files define what later ones read. tokens.css holds
@@ -263,6 +278,58 @@ def build_smartapi_suggestions(rows: list[dict[str, Any]]) -> list[dict[str, Any
     return suggestions
 
 
+def verify_references(payload: dict[str, Any]) -> None:
+    """Every component id the payload points at must be a row it carries.
+
+    The component page is addressed by id, so a dangling reference anywhere in
+    the payload becomes a link to a "no such component" page on the published
+    site. This is the build-time check that turns that into an error here
+    instead: `edges`, `catalog_edges`, `stages` and every row's `connections`
+    are walked, and an id with no row fails the build.
+
+    Today every one of these is built from the kept rows and cannot dangle by
+    construction, so this passes trivially — it exists for the next builder
+    that is not, and for `connections`, which is pruned rather than built.
+    Externals are names, not ids, and are skipped on the external end of an
+    external edge. `unknown[].component` is not checked: a `not-recorded`
+    entry names a component that has no file yet, which is the point of it.
+    """
+    known = {row["id"].lower() for row in payload.get("rows", [])}
+    externals = {entry.get("name") for entry in payload.get("externals", [])}
+    dangling: dict[str, set[str]] = {}
+
+    def check(ref: Any, where: str) -> None:
+        if isinstance(ref, str) and ref.lstrip("~").lower() not in known:
+            dangling.setdefault(ref, set()).add(where)
+
+    for edge in payload.get("edges", []):
+        kind = edge.get("kind") or ""
+        if not (kind == "external_in" and edge.get("from") in externals):
+            check(edge.get("from"), "edges")
+        if not (kind == "external_out" and edge.get("to") in externals):
+            check(edge.get("to"), "edges")
+    for edge in payload.get("catalog_edges", []):
+        check(edge.get("from"), "catalog_edges")
+        check(edge.get("to"), "catalog_edges")
+    for stage in payload.get("stages", []):
+        for ref in stage.get("components") or []:
+            check(ref, f"stage {stage.get('title')!r}")
+    for row in payload.get("rows", []):
+        for key, refs in (row.get("connections") or {}).items():
+            for ref in refs or []:
+                check(ref, f"{row['id']}.connections.{key}")
+    if dangling:
+        detail = "; ".join(
+            f"{ref!r} in {', '.join(sorted(where))}"
+            for ref, where in sorted(dangling.items())
+        )
+        raise click.ClickException(
+            f"The payload names components it does not carry: {detail}. "
+            f"Every id on the page must resolve, or the component page for it "
+            f"is a broken link."
+        )
+
+
 def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
     """How many deployments each source supplied a version for.
 
@@ -316,6 +383,7 @@ def build_payload(
     rows = build_rows(components, synced, stages=stages)
     report = Report()
     unclaimed = build_unclaimed_charts(components, synced)
+    unknown = load_unknown()
     if policy is not None:
         rows, report = apply_policy(rows, policy)
         report = dataclasses.replace(
@@ -323,6 +391,16 @@ def build_payload(
             mentions=report.mentions
             + scrub(unclaimed, UNCLAIMED_CHART_FREE_TEXT, patterns_for(policy)),
         )
+        # An unattributed identifier that names a withheld component, or is
+        # one, goes with it: the not-found page would otherwise say "this
+        # belongs to jaeger" about an id the build does not carry.
+        withheld = {name.lower() for name in policy.component_ids}
+        unknown = [
+            entry
+            for entry in unknown
+            if str(entry.get("component") or "").lower() not in withheld
+            and entry["name"].lower() not in withheld
+        ]
     manifest = synced.manifest
     colors = load_owner_colors()
     return {
@@ -368,6 +446,15 @@ def build_payload(
         # `build_unclaimed_charts`.
         "unclaimed_charts": unclaimed,
         "smartapi_suggestions": build_smartapi_suggestions(rows),
+        # For the component page. The schema is what lets it list the fields
+        # a file does *not* carry, and `unknown` is what lets the not-found
+        # page say an id was seen in the platform even though no file claims
+        # it. Both are our own files, not third-party prose, so neither is
+        # scrubbed: a withheld id in a schema description or an unknown.yaml
+        # name fails `verify`, and the fix is to edit the file.
+        "component_schema": load_schema(),
+        "unknown": unknown,
+        "repo_url": REPO_URL,
         "rows": rows,
     }
 

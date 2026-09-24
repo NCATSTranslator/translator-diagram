@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import click
 import yaml
 
 # Our environment ladder, in the order a change travels along it. Also the
@@ -33,6 +34,14 @@ ENVIRONMENTS = ("dev", "ci", "test", "prod")
 # itself a finding. `status` has no such convention — defaulting it would
 # manufacture a hundred 404s and call them data.
 DEFAULT_ENDPOINT_PATHS = {"openapi": "openapi.json"}
+
+# The two repository files the component page reads beside components/*.yaml:
+# the schema, which is the authoritative list of fields a file may carry (so
+# the page can say which ones a file does *not* carry), and the holding pen
+# for identifiers no component claims. Both are found by the same upward walk
+# `load_owner_colors`, `load_policy` and `load_stages` use.
+SCHEMA_PATH = Path("schema") / "component.schema.json"
+UNKNOWN_PATH = Path("unknown.yaml")
 
 # A URL naming a whole GitHub repository, and nothing inside it. The capture
 # groups are the two halves of the `owner/name` slug the API is addressed by.
@@ -80,6 +89,12 @@ class ComponentFile:
     # live here -- the status, the layer, the edges -- are fields above.
     diagram: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
+    # The file as parsed, before any of the defaults above were applied. The
+    # component page shows it field by field against the schema, so a reader
+    # can tell "nobody wrote this down" from "checked, there is none" — the
+    # absent-versus-null distinction the format is built on, which the typed
+    # fields above flatten. None for a ComponentFile built in code.
+    raw: dict[str, Any] | None = None
 
     # -- identifiers ------------------------------------------------------
 
@@ -349,6 +364,7 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
         environments=_parse_environments(data.get("environments") or {}),
         diagram=dict(data.get("diagram") or {}),
         notes=data.get("notes"),
+        raw=data,
     )
 
 
@@ -368,3 +384,74 @@ def load_components(directory: Path) -> list[ComponentFile]:
 def index_by_id(components: list[ComponentFile]) -> dict[str, ComponentFile]:
     """Case-insensitive lookup, matching how references resolve."""
     return {c.id.lower(): c for c in components}
+
+
+# --- The repository files beside components/ --------------------------------
+
+def _find_upward(relative: Path) -> Path | None:
+    """`relative` in the working directory or the nearest parent that has it."""
+    cwd = Path.cwd()
+    for directory in (cwd, *cwd.parents):
+        candidate = directory / relative
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_schema(path: Path | None = None) -> dict[str, Any]:
+    """schema/component.schema.json, the authoritative list of fields.
+
+    The page ships the whole schema rather than a list of field names derived
+    from it, so a field appears on the component page the day it enters the
+    schema and the descriptions the schema already carries are the ones the
+    reader sees. A missing file is an error for the same reason a missing
+    stage file is: the page would render a component with no gaps in it, which
+    is the one thing the section exists to show.
+    """
+    found = path if path is not None else _find_upward(SCHEMA_PATH)
+    if found is None or not found.exists():
+        raise click.ClickException(
+            f"No component schema at {SCHEMA_PATH}. The component page lists "
+            f"every field a file may carry from it. Run from the repository root."
+        )
+    schema = read_json(found)
+    if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
+        raise click.ClickException(f"{found} is not a JSON Schema with properties.")
+    return schema
+
+
+def load_unknown(path: Path | None = None) -> list[dict[str, Any]]:
+    """unknown.yaml as a flat list: one `{kind, name, status, component}` each.
+
+    `kind` is the file's top-level key (`otel_services`, `helm_charts`, `urls`)
+    so the page can say what sort of thing an identifier is. The `evidence`
+    and `note` prose is deliberately left behind: it is one click away in the
+    file, and every prose field the payload carries is one more the privacy
+    policy has to scrub.
+
+    Absent file, error: the page's not-found view names what this file knows
+    about an id, and a build that quietly knew nothing would tell a reader an
+    identifier was never seen when it has an entry.
+    """
+    found = path if path is not None else _find_upward(UNKNOWN_PATH)
+    if found is None or not found.exists():
+        raise click.ClickException(
+            f"No {UNKNOWN_PATH} beside components/. Run from the repository root."
+        )
+    loaded = read_yaml(found) or {}
+    out = []
+    for kind, entries in loaded.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict) or not entry.get("name"):
+                continue
+            out.append(
+                {
+                    "kind": str(kind),
+                    "name": str(entry["name"]),
+                    "status": entry.get("status"),
+                    "component": entry.get("component"),
+                }
+            )
+    return out

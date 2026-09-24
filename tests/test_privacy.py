@@ -163,6 +163,39 @@ class TestApply:
         kept, _ = apply(rows, _policy(components=["jaeger"]))
         assert kept[0]["connections"]["planned_calls"] == ["~other"]
 
+    def test_the_file_as_written_is_pruned_scrubbed_and_emptied_too(self):
+        """`recorded` is the component file itself, so everything the policy
+        does to a row it does to the file's own vocabulary as well."""
+        rows = [
+            {
+                "id": "keep",
+                "notes": "calls jaeger on boot",
+                "connections": {"calls": ["jaeger", "other"]},
+                "recorded": {
+                    "id": "keep",
+                    "notes": "calls jaeger on boot",
+                    "connections": {"calls": ["jaeger", "other"], "gets_results_from": []},
+                    "repositories": [{"url": "https://example.org", "note": "mirrors jaeger"}],
+                    "documentation": [{"url": "https://example.org", "note": "see jaeger"}],
+                },
+                "environments": {},
+            },
+            {"id": "jaeger", "connections": {}, "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["jaeger"], fields=["notes"]))
+        recorded = kept[0]["recorded"]
+        assert recorded["connections"]["calls"] == ["other"]
+        assert recorded["notes"] is None  # the withheld field, in the file's vocabulary too
+        assert kept[0]["notes"] is None
+        assert recorded["repositories"][0]["note"] == "mirrors …"
+        assert recorded["documentation"][0]["note"] == "see …"
+        assert "jaeger" not in json.dumps(kept)
+
+    def test_a_row_with_no_recorded_file_is_left_alone(self):
+        rows = [{"id": "keep", "recorded": None, "connections": {}, "environments": {}}]
+        kept, _ = apply(rows, _policy(components=[]))
+        assert kept[0]["recorded"] is None
+
     def test_a_mention_in_free_text_is_scrubbed_and_counted(self):
         """Third-party prose we cannot edit at the source: a note, a registry
         description, a release title. A withheld id as a word there must not

@@ -276,8 +276,15 @@ def apply(
     kept = [row for row in rows if row.get("id") not in withheld_ids]
     mentions = 0
     for row in kept:
+        recorded = row.get("recorded")
         for name in policy.field_names:
             row[name] = _emptied(row.get(name))
+            # `recorded` is the component file as written, and a policy field
+            # spelled like one of its keys (`notes`, say) is withheld there
+            # too. The payload keys are still the ones the policy names; this
+            # is the same field showing up in the file's own vocabulary.
+            if isinstance(recorded, dict) and name in recorded:
+                recorded[name] = _emptied(recorded[name])
         _prune_ids(row, folded)
         mentions += scrub(row, ROW_FREE_TEXT, patterns)
         for cell in row.get("environments", {}).values():
@@ -307,19 +314,25 @@ def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
 
     Every list under `connections` is walked rather than the four keys being
     named, so a fifth edge kind added later is pruned without anyone
-    remembering to come back to this function.
+    remembering to come back to this function. The file's own `connections`
+    block under `recorded` is walked the same way: it is the same claim in the
+    file's vocabulary, and the component page shows it.
     """
-    connections = row.get("connections")
-    if not isinstance(connections, dict):
-        return
-    for key, refs in connections.items():
-        if not isinstance(refs, list):
+    recorded = row.get("recorded")
+    blocks = [row.get("connections")]
+    if isinstance(recorded, dict):
+        blocks.append(recorded.get("connections"))
+    for connections in blocks:
+        if not isinstance(connections, dict):
             continue
-        connections[key] = [
-            ref
-            for ref in refs
-            if not (isinstance(ref, str) and ref.lstrip("~").lower() in withheld)
-        ]
+        for key, refs in connections.items():
+            if not isinstance(refs, list):
+                continue
+            connections[key] = [
+                ref
+                for ref in refs
+                if not (isinstance(ref, str) and ref.lstrip("~").lower() in withheld)
+            ]
 
 
 def _word(name: str) -> re.Pattern[str]:
@@ -362,6 +375,11 @@ ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("helm_charts", "last_changed"), ("subject",)),
     (("catalog",), ("name", "description")),
     (("environments", "*"), ("status_message", "openapi_title")),
+    # The component file as written. Its prose is ours, but it is prose: a
+    # note saying "calls jaeger on boot" is a mention, not a reference.
+    (("recorded",), ("notes", "description")),
+    (("recorded", "repositories"), ("note",)),
+    (("recorded", "documentation"), ("note",)),
 )
 
 # `unclaimed_charts` names no component, but its descriptions are still prose.

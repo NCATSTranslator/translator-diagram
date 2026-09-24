@@ -1,5 +1,7 @@
 """Parsing components/*.yaml into ComponentFile."""
 
+import click
+import pytest
 import yaml
 
 from translator_diagram.components import (
@@ -9,6 +11,8 @@ from translator_diagram.components import (
     github_repo,
     index_by_id,
     load_components,
+    load_schema,
+    load_unknown,
     parse_component,
 )
 
@@ -245,3 +249,76 @@ def test_the_real_files_fill_the_fields_the_dashboard_reads():
     }
     half = len(components) // 2
     assert all(n > half for n in populated.values()), populated
+
+
+class TestTheFileAsWritten:
+    def test_raw_is_the_parsed_file_before_defaults(self):
+        component = _parse(identifiers={"infores": "infores:svc"}, endpoints={"openapi": None})
+        # `raw` keeps the absent-versus-null distinction the typed fields
+        # flatten: `endpoints.openapi` is null here (checked, none), and
+        # `notes` is absent (not recorded), and both must survive.
+        assert component.raw["endpoints"] == {"openapi": None}
+        assert "notes" not in component.raw
+        assert component.raw["identifiers"]["infores"] == "infores:svc"
+
+    def test_a_component_built_in_code_has_no_raw(self):
+        from translator_diagram.components import ComponentFile
+
+        assert ComponentFile(id="x", name="x", owner="o").raw is None
+
+    def test_the_real_files_keep_their_raw(self):
+        from pathlib import Path
+
+        for component in load_components(Path(__file__).resolve().parent.parent / "components"):
+            assert component.raw["id"] == component.id
+
+
+class TestLoadingTheSchemaAndUnknown:
+    def test_the_repositorys_schema_loads(self):
+        schema = load_schema()
+        assert "properties" in schema
+        for key in ("id", "identifiers", "connections", "environments", "diagram"):
+            assert key in schema["properties"], key
+
+    def test_a_missing_schema_is_an_error(self, tmp_path):
+        with pytest.raises(click.ClickException, match="No component schema"):
+            load_schema(tmp_path / "absent.json")
+
+    def test_a_schema_without_properties_is_an_error(self, tmp_path):
+        path = tmp_path / "s.json"
+        path.write_text("[]")
+        with pytest.raises(click.ClickException, match="not a JSON Schema"):
+            load_schema(path)
+
+    def test_unknown_is_flattened_with_its_kind(self, tmp_path):
+        path = tmp_path / "unknown.yaml"
+        path.write_text(
+            "otel_services:\n"
+            "  - name: shepherd-server\n"
+            "    status: unattributed\n"
+            "    first_seen: '2026-08-31'\n"
+            "    component: null\n"
+            "    evidence: long prose that must not travel\n"
+            "helm_charts:\n"
+            "  - name: old-chart\n"
+            "    status: not-recorded\n"
+            "    first_seen: '2026-08-31'\n"
+            "    component: some-component\n"
+            "urls: []\n"
+        )
+        entries = load_unknown(path)
+        assert entries == [
+            {"kind": "otel_services", "name": "shepherd-server",
+             "status": "unattributed", "component": None},
+            {"kind": "helm_charts", "name": "old-chart",
+             "status": "not-recorded", "component": "some-component"},
+        ]
+
+    def test_the_repositorys_unknown_file_loads(self):
+        entries = load_unknown()
+        assert entries
+        assert all(set(e) == {"kind", "name", "status", "component"} for e in entries)
+
+    def test_a_missing_unknown_file_is_an_error(self, tmp_path):
+        with pytest.raises(click.ClickException, match="unknown.yaml"):
+            load_unknown(tmp_path / "absent.yaml")

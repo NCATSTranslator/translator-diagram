@@ -12,7 +12,7 @@ from pathlib import Path
 import click
 
 from .components import load_components
-from .dashboard import build_payload, write_dashboard
+from .dashboard import build_payload, verify_references, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -111,6 +111,9 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         # Read back what is about to be written, rather than trusting that the
         # step which removed it covered every place it could appear.
         verify_policy(payload, policy)
+    # Every id the page links to must be a row it carries; a dangling one is
+    # a "no such component" page on the published site.
+    verify_references(payload)
 
     deployments = sum(
         1
