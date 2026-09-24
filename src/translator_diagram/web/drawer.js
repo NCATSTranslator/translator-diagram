@@ -355,11 +355,11 @@
       drow("Last updated", updatedHtml(row), true),
       drow("Uptime", uptime),
       drow("Isolated?", row.isolated ? "no recorded connections" : ""),
-      // The map draws a ubiquitous component beside each caller instead of
-      // once in a lane, so the picture has no node bearing this id; saying so
+      // The map puts a ubiquitous component on a rail at the right, outside
+      // the stage rows, with its edges off by default (layout.js); saying so
       // here is what stops that reading as a missing node.
       drow("On the map", (row.diagram || {}).ubiquitous
-        ? `drawn beside each caller ${note("ubiquitous")}` : ""),
+        ? `on the rail at the right, edges hidden by default ${note("ubiquitous")}` : ""),
     ]);
 
     const meta = repoMetaHtml(row);
