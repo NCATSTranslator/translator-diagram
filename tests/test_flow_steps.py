@@ -1,4 +1,4 @@
-"""config/flow-steps.yaml — the stages, and the row order they define.
+"""catalog/flow-steps.yaml — the stages, and the row order they define.
 
 Named for the file rather than for a module, like test_component_files.py.
 `load_stages` is tested in test_stages.py; what is checked here is the data:
@@ -65,7 +65,7 @@ def test_every_listed_component_exists(components, listed):
     # A typo here is invisible on the page: the id simply never matches, and
     # the component it meant to place falls to the bottom instead.
     unknown = sorted(set(listed) - {c.id for c in components})
-    assert not unknown, f"Ids with no components/<id>.yaml: {unknown}"
+    assert not unknown, f"Ids with no catalog/components/<id>.yaml: {unknown}"
 
 
 def test_the_stages_are_the_page_order(components, stages):

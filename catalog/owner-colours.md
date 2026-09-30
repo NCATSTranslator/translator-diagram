@@ -1,6 +1,6 @@
 # Choosing an owner colour
 
-Owner-to-colour mappings live in [`config/owner-colors.csv`](../config/owner-colors.csv),
+Owner-to-colour mappings live in [`owner-colors.csv`](owner-colors.csv),
 two columns: `owner`, `color`. Adding a team is a one-line edit to that file and
 needs no code change — row order is legend order, and an owner not listed there
 gets a fallback colour automatically.
@@ -11,8 +11,8 @@ an owner.
 
 ## Where the file is read from
 
-`load_owner_colors` takes `config/owner-colors.csv` from the working directory or
-the nearest directory above it, and falls back to the copy inside the installed
+`load_owner_colors` takes `catalog/owner-colors.csv` from the working directory
+or the nearest directory above it, and falls back to the copy inside the installed
 package so that an install with no checkout still has colours. There is only one
 copy in the repository; the wheel build maps this file to
 `translator_diagram/owner-colors.csv` rather than a second file being kept in

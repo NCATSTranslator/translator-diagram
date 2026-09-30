@@ -76,8 +76,8 @@ actually offers today, and where each one falls short.
 
 ## The format
 
-One file per component, `components/<id>.yaml`. The filename stem **is** the
-id — a test enforces it. Each team edits its own file, `git log` gives
+One file per component, `catalog/components/<id>.yaml`. The filename stem
+**is** the id — a test enforces it. Each team edits its own file, `git log` gives
 per-component history, and a future `CODEOWNERS` can route review.
 
 YAML rather than TOML because every neighbour in this ecosystem is YAML — the
@@ -85,8 +85,8 @@ infores catalog, SmartAPI specs, Helm charts, mkdocs, GitHub Actions — and
 because the data is nested and list-heavy in ways TOML renders awkwardly.
 Both support comments, so that was not the deciding factor.
 
-`schema/component.schema.json` is the authoritative field list.
-`components/name-lookup.yaml` is the worked example; here it is in full:
+`catalog/schema/component.schema.json` is the authoritative field list.
+`catalog/components/name-lookup.yaml` is the worked example; here it is in full:
 
 ```yaml
 id: name-lookup
@@ -146,7 +146,7 @@ that are Shepherd *operations* rather than components, twelve that belong to
 components with no file yet, two that wait on a maintainer's decision, and one
 we cannot place. The Helm chart index has the same problem with more entries.
 
-Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
+Those go in [`unknown.yaml`](../catalog/unknown.yaml) rather than being dropped, with
 the evidence for whatever we do believe. Entries leave it in one of two ways:
 
 - **promoted** — we learn which component it belongs to, so the identifier
@@ -321,7 +321,7 @@ the grounds that a wrong answer is worse than a missing one.
 
 Not in this pull request. The order after it:
 
-1. A fetcher reads `components/*.yaml`, queries SmartAPI once, fetches each
+1. A fetcher reads `catalog/components/*.yaml`, queries SmartAPI once, fetches each
    `openapi` and `status` endpoint, and writes an enriched `components.json`
    into the gitignored `data/`. It caches, and a component being down never
    fails the diagram.

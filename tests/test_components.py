@@ -1,4 +1,4 @@
-"""Parsing components/*.yaml into ComponentFile."""
+"""Parsing catalog/components/*.yaml into ComponentFile."""
 
 import yaml
 
@@ -32,7 +32,7 @@ class TestParsing:
 
     def test_owner_falls_back_to_none(self):
         # Matches loading.py, so both sides of the repo agree on the key that
-        # config/owner-colors.csv is looked up by.
+        # catalog/owner-colors.csv is looked up by.
         assert parse_component({**MINIMAL, "owner": ""}).owner == "None"
 
     def test_identifier_accessors(self):

@@ -111,7 +111,7 @@
   /* --- Owner colour ------------------------------------------------------ */
 
   /* Base colour, readable text colour and the four metallic stops, all
-     derived by colors.py from the one hex in config/owner-colors.csv. The
+     derived by colors.py from the one hex in catalog/owner-colors.csv. The
      payload is inlined into the same page as this script, so owner_styles is
      always there; an owner missing from it has no style. */
   function ownerStyle(name) {

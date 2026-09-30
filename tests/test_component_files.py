@@ -1,4 +1,4 @@
-"""The components/*.yaml data files, and the schema they must satisfy.
+"""The catalog/components/*.yaml data files, and the schema they must satisfy.
 
 Named for the files rather than for a module: `tests/test_components.py` tests
 `components.py`, which parses them. This one asserts the data is well formed
@@ -270,7 +270,7 @@ class TestUnknown:
             name = entry["name"]
             assert name not in owners, (
                 f"OTel service {name!r} is in unknown.yaml but is already "
-                f"claimed by components/{owners[name]}.yaml — promote it by "
+                f"claimed by catalog/components/{owners[name]}.yaml — promote it by "
                 f"deleting the unknown.yaml entry"
             )
             owners[name] = "unknown.yaml"
@@ -298,7 +298,7 @@ class TestUnknown:
                 continue
             assert entry["component"] not in claimed_charts.get(entry["name"], []), (
                 f"unknown.yaml: chart {entry['name']!r} is marked not-recorded "
-                f"but components/{entry['component']}.yaml now claims it — "
+                f"but catalog/components/{entry['component']}.yaml now claims it — "
                 f"delete the entry"
             )
 
@@ -311,7 +311,7 @@ class TestUnknown:
                 continue
             assert entry["component"] not in components, (
                 f"unknown.yaml: {entry['name']!r} is marked not-recorded but "
-                f"components/{entry['component']}.yaml exists — move the name "
+                f"catalog/components/{entry['component']}.yaml exists — move the name "
                 f"into that file's identifiers.otel_services"
             )
 
@@ -326,5 +326,5 @@ class TestEnrichedExample:
         component = _load(COMPONENTS_DIR / "name-lookup.yaml")
         assert example == component, (
             "docs/examples/name-lookup-enriched.yaml's `recorded:` block is no "
-            "longer components/name-lookup.yaml verbatim"
+            "longer catalog/components/name-lookup.yaml verbatim"
         )

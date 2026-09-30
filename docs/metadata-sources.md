@@ -375,8 +375,8 @@ and `docmetadata.transltr.io` both answer, because the stem is the component
 minus the `-api`. Nothing derives that, and nothing should: a rule that
 strips suffixes until something resolves would attach hosts to components on
 the strength of a truncation. Both are recorded in
-`components/docmetadata-api.yaml` by hand, with a note saying they were found
-by observation and confirmed by no infores, because none is registered.
+`catalog/components/docmetadata-api.yaml` by hand, with a note saying they were
+found by observation and confirmed by no infores, because none is registered.
 
 ## Helm charts
 

@@ -1,4 +1,4 @@
-"""Reading components/*.yaml — the per-component metadata files.
+"""Reading catalog/components/*.yaml — the per-component metadata files.
 
 Deliberately separate from `model.Component`, which is one row of the sheet
 CSV. These files carry what the sheet cannot: a component's name in each of
@@ -58,7 +58,7 @@ class Deployment:
 
 @dataclass
 class ComponentFile:
-    """One components/<id>.yaml, parsed."""
+    """One catalog/components/<id>.yaml, parsed."""
 
     id: str
     name: str
@@ -353,7 +353,7 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
 
 
 def load_components(directory: Path) -> list[ComponentFile]:
-    """Every components/*.yaml, sorted by lowercased id.
+    """Every catalog/components/*.yaml, sorted by lowercased id.
 
     Sorted for the same reason `load_components` in loading.py sorts: so the
     generated output does not churn when a file is added.

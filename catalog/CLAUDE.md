@@ -18,7 +18,7 @@ Rules the tests enforce, so a change that breaks one fails CI rather than
 sitting there wrong: the filename stem equals `id`; ids are unique
 case-insensitively; every id in `connections.gets_results_from`/`calls` has a
 file (which is why `docmetadata-api` has one — `ui` calls it); every `owner`
-appears in `config/owner-colors.csv`; `endpoints` values are relative paths,
+appears in `owner-colors.csv`; `endpoints` values are relative paths,
 never URLs; and no file writes a `diagram:` flag at its default, which is what
 keeps that block absent rather than 26 copies of `ubiquitous: false`.
 

@@ -183,7 +183,7 @@ class TestPaletteSeparation:
         worst, owner_a, owner_b = distances[0]
         assert worst >= self.FLOOR, (
             f"{owner_a} and {owner_b} are {worst:.1f} dE apart, below the "
-            f"{self.FLOOR} floor in docs/owner-colours.md. Two owner chips "
+            f"{self.FLOOR} floor in catalog/owner-colours.md. Two owner chips "
             f"that close read as the same team."
         )
 

@@ -1,4 +1,4 @@
-"""Ordering the overview by `config/flow-steps.yaml`.
+"""Ordering the overview by `catalog/flow-steps.yaml`.
 
 `test_flow_steps.py` is the companion to this file: it checks the shipped data
 file, while this checks the code that reads it -- the same split as

@@ -1,7 +1,7 @@
 # The stages of the platform, in the order the dashboard shows them, and what
 # each one is for. Edit this file rather than any Python: it is prose about the
 # platform and the order it is read in, and the people who know both should not
-# have to open a module. Same rule as config/owner-colors.csv.
+# have to open a module. Same rule as owner-colors.csv.
 #
 # **This file is the row order.** It used to be a set of labels on an order
 # computed from the recorded `gets_results_from` / `calls` edges, and that

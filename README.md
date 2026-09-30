@@ -11,8 +11,8 @@ platform, built from the same set of components:
   which services call each other.
 
 They are two commands over two sources that are converging: the dashboard reads
-`components/*.yaml`, which are committed here; the diagram still reads a Google
-Sheet. Merging them is
+`catalog/components/*.yaml`, which are committed here; the diagram still reads a
+Google Sheet. Merging them is
 [issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
 
 The platform comprises many components maintained by different teams, and both
@@ -29,7 +29,7 @@ dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 
 ```bash
 uv sync                    # first-time setup; creates .venv/
-uv run sync-components     # follow what components/*.yaml points at -> data/sync/
+uv run sync-components     # follow what catalog/components/*.yaml points at -> data/sync/
 uv run build-dashboard     # compile that into a page      -> data/dashboard/
 open data/dashboard/index.html
 ```
@@ -69,9 +69,9 @@ on what is currently relevant.
 
 | If you want to | Look at |
 |---|---|
-| change what a component records | `components/<id>.yaml`, and [`schema/component.schema.json`](schema/component.schema.json) for the field reference |
-| change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
-| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
+| change what a component records | `catalog/components/<id>.yaml`, and [`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) for the field reference |
+| change the dashboard's row order or its stage descriptions | [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml) |
+| change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colours.md`](catalog/owner-colours.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
 | change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
 | know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
@@ -175,19 +175,19 @@ the second gets a `_2` suffix and a warning.
 
 ## Component metadata files
 
-`components/<id>.yaml` records one file per component: what it is (owner,
+`catalog/components/<id>.yaml` records one file per component: what it is (owner,
 refactor status, layer, where it runs), its identifier in each of the naming
 spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
 ITRB's own `app` and `group`, links to its repositories and documentation, and
 the `connections:` edges between components.
-[`schema/component.schema.json`](schema/component.schema.json) is the field
+[`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) is the field
 reference; `tests/test_component_files.py` validates every file against it, and
 `tests/test_components.py` covers the parser.
 
 These files are the dashboard's only input, and they are committed — which is
 why the dashboard needs no credentials to run.
 
-[`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
+[`catalog/unknown.yaml`](catalog/unknown.yaml) is the holding pen for identifiers seen in the
 platform that no component file claims yet — currently OpenTelemetry service
 names and Helm chart directories. Entries leave it by being promoted
 into a component file or confirmed out of use.
@@ -236,7 +236,7 @@ is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
 A service being down is recorded rather than fatal, so the run still succeeds
 and the page shows what was reachable.
 
-It exists to test whether the metadata in `components/` is worth keeping. Two
+It exists to test whether the metadata in `catalog/` is worth keeping. Two
 things it reports are the answer:
 
 - **Where each version came from.** A version is read from the live OpenAPI
@@ -298,7 +298,7 @@ stage — each band naming what that stage is for — and sorting by owner bands
 them by owner instead.
 
 The stages, their order, and the components in each are
-[`config/flow-steps.yaml`](config/flow-steps.yaml), edited by hand. The
+[`catalog/flow-steps.yaml`](catalog/flow-steps.yaml), edited by hand. The
 recorded dependency edges are too sparse to order twenty-six components: with
 nothing recording that the UI calls Name Lookup, a computed order put Name
 Lookup up beside the data sources. A written order is more honest than a
@@ -335,7 +335,7 @@ browser blocks downloads from `file://`.
 ### Node colours (by Owner)
 
 Owner-to-colour mappings live in
-[`config/owner-colors.csv`](config/owner-colors.csv) (two columns: `owner`,
+[`catalog/owner-colors.csv`](catalog/owner-colors.csv) (two columns: `owner`,
 `color`). Edit that file to add a new owner, re-order the legend, or change a
 colour — no Python edit required.
 
@@ -429,7 +429,7 @@ uv run generate-diagram [OPTIONS]
                                    Write the legends as separate PNGs rather than
                                    embedding them  [default: split-legends]
   --owner-colors FILE              Owner-colour CSV to use instead of
-                                   config/owner-colors.csv
+                                   catalog/owner-colors.csv
   --layer-column TEXT              Column to drive per-layer sub-figures, with
                                    in-layer nodes bold-bordered and their
                                    neighbours from other layers at normal
@@ -445,7 +445,7 @@ translator-diagram/
 ├── src/translator_diagram/
 │   │                       # shared by both stacks
 │   ├── colors.py           # Owner colours and the palette
-│   ├── components.py       # Reads components/<id>.yaml
+│   ├── components.py       # Reads catalog/components/<id>.yaml
 │   ├── privacy.py          # What a published dashboard withholds
 │   │                       # the diagram
 │   ├── model.py            # Component, index_by_id (one sheet row)
@@ -464,7 +464,7 @@ translator-diagram/
 │   ├── flow.py             # Data-flow depths, and the stage-order check
 │   ├── synced_data.py      # Reads the sync cache; where the 200 gate lives
 │   ├── payload_details.py  # Pure shapers over the cache and component files
-│   ├── stages.py           # The bands, from config/flow-steps.yaml
+│   ├── stages.py           # The bands, from catalog/flow-steps.yaml
 │   ├── cells.py            # The version-source chain, one cell at a time
 │   ├── rows.py             # One row per component: drift, dates, releases
 │   ├── dashboard.py        # The payload, the graph views, the rendered page
@@ -472,15 +472,17 @@ translator-diagram/
 │   ├── web/                # The page's CSS and JS, inlined into it
 │   │   └── CLAUDE.md       # How to look at the page, and its non-obvious decisions
 │   └── CLAUDE.md           # The module map and the non-obvious decisions
-├── components/             # One YAML file per component — see docs/
-│   └── CLAUDE.md           # What a component file must contain
-├── unknown.yaml            # Identifiers no component file claims yet
-├── config/                 # The data files, edited by hand
-│   ├── owner-colors.csv    # Owner → fill colour
+├── catalog/                # Everything a curator edits, by hand
+│   ├── components/         # One YAML file per component
+│   ├── unknown.yaml        # Identifiers no component file claims yet
 │   ├── flow-steps.yaml     # The dashboard's stages, in page order
+│   ├── owner-colors.csv    # Owner → fill colour
+│   ├── owner-colours.md    # The rules for choosing a new colour
+│   ├── schema/             # JSON Schema for components/*.yaml and unknown.yaml
+│   └── CLAUDE.md           # What a component file must contain
+├── config/
 │   └── privacy.yaml        # What a published build leaves out
-├── schema/                 # JSON Schema for components/*.yaml and unknown.yaml
-├── docs/                   # The metadata case, its research, owner colours
+├── docs/                   # The metadata case and its research
 ├── tests/                  # One test file per module
 ├── tools/                  # replay_sync.py: sync() offline, from a recorded cache
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
