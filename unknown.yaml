@@ -18,7 +18,7 @@
 #   not-recorded  a known component that has no file yet, named by `component`
 #   not-in-use    confirmed retired
 #
-# Validated by schema/unknown.schema.json; see tests/test_components.py.
+# Validated by schema/unknown.schema.json; see tests/test_component_files.py.
 # New kinds of unattributed identifier get a new top-level key (`helm_charts:`
 # and `urls:` are already in the schema; `urls:` is still empty because
 # nothing has needed it yet).

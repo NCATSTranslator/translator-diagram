@@ -154,7 +154,7 @@ the evidence for whatever we do believe. Entries leave it in one of two ways:
 - **retired** — someone confirms it is out of use, so it stays with
   `status: not-in-use` and nobody investigates it twice.
 
-`tests/test_components.py` enforces the part that would otherwise rot: no
+`tests/test_component_files.py` enforces the part that would otherwise rot: no
 identifier may be claimed by a component *and* sit in `unknown.yaml`, no two
 components may claim the same one, and a `not-recorded` entry naming a
 component that now has a file fails until it is promoted.

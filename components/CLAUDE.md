@@ -29,8 +29,8 @@ the same idea as the sheet's `Ubiquitous` column in the Graphviz diagram.
 Overview table (ploverdb today).
 
 `unknown.yaml` collects identifiers observed in the platform that no
-component file claims — today, the OpenTelemetry service names that could not
-be attributed. Do not delete an entry to make a test pass: an entry is removed
+component file claims — today, OpenTelemetry service names and Helm chart
+directories. Do not delete an entry to make a test pass: an entry is removed
 only when its identifier moves into a component file. The tests enforce that
 no identifier is claimed twice, and that a `not-recorded` entry whose
 component now has a file fails until it is promoted.

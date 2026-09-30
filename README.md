@@ -188,8 +188,8 @@ These files are the dashboard's only input, and they are committed — which is
 why the dashboard needs no credentials to run.
 
 [`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
-platform that no component file claims yet — currently the OpenTelemetry
-service names that could not be attributed. Entries leave it by being promoted
+platform that no component file claims yet — currently OpenTelemetry service
+names and Helm chart directories. Entries leave it by being promoted
 into a component file or confirmed out of use.
 
 **The dashboard reads these files; the diagram does not.**
