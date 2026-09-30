@@ -1,0 +1,243 @@
+/*
+  The custom controls: buttons, the search input, the listbox popover, the
+  segmented view switch, the tooltip, tabs, and the owner coin.
+
+  Native <select> is gone because it cannot show an owner's colour, cannot be
+  multi-select without becoming a scroll box, and paints itself in the
+  operating system's palette rather than the page's. What replaces it has to
+  carry its own ARIA and its own keyboard handling; controls.js does that, and
+  this file only says what it looks like.
+*/
+
+.btn {
+  font: inherit;
+  font-size: var(--fs-meta);
+  line-height: 1;
+  padding: 0 10px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  background: var(--page);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
+}
+.btn:hover { background: var(--raised); }
+.btn[aria-expanded="true"] { border-color: var(--accent); }
+.btn .caret-down { opacity: 0.55; flex: none; }
+.btn .val { color: var(--muted); }
+.btn.on .val,
+.btn[data-set="1"] .val { color: var(--text); font-weight: 600; }
+
+.btn.icon {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted);
+}
+.btn.icon:hover { color: var(--text); }
+
+input[type="search"] {
+  font: inherit;
+  font-size: var(--fs-meta);
+  height: 28px;
+  min-width: 240px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  background: var(--page);
+  color: var(--text);
+}
+input[type="search"]::placeholder { color: var(--muted); }
+input[type="search"]:focus { border-color: var(--accent); }
+
+/* --- Owner coin ----------------------------------------------------------- */
+
+/* The only saturated colour on the page, and the only round thing. The
+   highlight is a radial stop over the metallic gradient rather than a second
+   element, so a coin is one span wherever it appears. */
+.coin {
+  display: inline-block;
+  width: var(--coin);
+  height: var(--coin);
+  flex: none;
+  border-radius: var(--r-coin);
+  vertical-align: -1px;
+  background: var(--coin-bg, var(--muted));
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+
+.ownercell { display: inline-flex; align-items: center; gap: 6px; }
+
+/* --- Segmented control ---------------------------------------------------- */
+
+/* No outer border and no track: two words in the middle of the top bar do not
+   need a box drawn round them to read as a pair, and the box was the only
+   thing on the bar competing with the brand mark. What is left is the sliding
+   pill on the active segment and plain text either side of it.
+
+   The 1px transparent border and the 2px padding stay because controls.js
+   measures `offsetLeft - 2` to place the indicator: dropping them would move
+   every button two pixels and leave the pill misaligned. Transparent is the
+   honest way to keep a geometry the JS depends on. */
+.seg {
+  position: relative;
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: none;
+}
+.seg .ind {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--accent-soft);
+  transition: transform var(--dur-seg) var(--ease), width var(--dur-seg) var(--ease);
+  pointer-events: none;
+}
+.seg button {
+  position: relative;
+  z-index: 1;
+  font: inherit;
+  font-size: var(--fs-meta);
+  line-height: 1;
+  height: 24px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--r-control);
+  transition: color var(--dur-fast) var(--ease);
+}
+.seg button[aria-checked="true"] { color: var(--accent); font-weight: 600; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-checked="true"]:hover { color: var(--accent); }
+
+/* --- Listbox popover ------------------------------------------------------ */
+
+.lb { position: relative; display: inline-block; }
+
+.lb-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--sp-1) 0;
+  background: var(--page);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-pop);
+}
+.lb-pop[hidden] { display: none; }
+.lb-pop.up { top: auto; bottom: calc(100% + 4px); }
+.lb-pop.right { left: auto; right: 0; }
+
+.lb-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 10px 5px 8px;
+  font-size: var(--fs-meta);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lb-opt .tick {
+  width: 12px;
+  flex: none;
+  color: var(--accent);
+  opacity: 0;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+}
+.lb-opt[aria-selected="true"] .tick { opacity: 1; }
+.lb-opt[aria-selected="true"] { font-weight: 600; }
+.lb-opt:hover,
+.lb-opt.active { background: var(--raised); }
+.lb-opt:focus-visible { outline-offset: -2px; }
+.lb-opt .lbl { overflow: hidden; text-overflow: ellipsis; }
+.lb-sep { height: 1px; margin: var(--sp-1) 0; background: var(--hairline); }
+
+/* --- Tooltip -------------------------------------------------------------- */
+
+/* One instance for the whole page. Arrowless on purpose: an arrow has to be
+   re-pointed every time the box is clamped to the viewport, and it buys
+   nothing a 6px offset does not. */
+.tip {
+  position: fixed;
+  z-index: 90;
+  max-width: 320px;
+  padding: var(--sp-2) 10px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-meta);
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.tip.on { opacity: 1; }
+.tip[hidden] { display: none; }
+.tip b { font-weight: 600; }
+.tip .k {
+  color: var(--muted);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+.tip dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px var(--sp-2);
+  margin: var(--sp-1) 0 0;
+}
+.tip dt {
+  color: var(--muted);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  white-space: nowrap;
+}
+.tip dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tip .title { font-weight: 600; font-family: var(--mono); font-size: var(--fs-table); }
+.tip .note { color: var(--muted); }
+
+/* --- Tabs (the drawer's, once it lands) ----------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--hairline);
+}
+.tabs button {
+  font: inherit;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  padding: var(--sp-2) 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }

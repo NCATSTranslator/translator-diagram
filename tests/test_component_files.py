@@ -1,4 +1,4 @@
-"""The components/*.yaml data files, and the schema they must satisfy.
+"""The catalog/components/*.yaml data files, and the schema they must satisfy.
 
 Named for the files rather than for a module: `tests/test_components.py` tests
 `components.py`, which parses them. This one asserts the data is well formed
@@ -18,10 +18,11 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPONENTS_DIR = ROOT / "components"
-SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
-UNKNOWN_PATH = ROOT / "unknown.yaml"
-UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+CATALOG = ROOT / "catalog"
+COMPONENTS_DIR = CATALOG / "components"
+SCHEMA_PATH = CATALOG / "schema" / "component.schema.json"
+UNKNOWN_PATH = CATALOG / "unknown.yaml"
+UNKNOWN_SCHEMA_PATH = CATALOG / "schema" / "unknown.schema.json"
 
 # The `diagram:` flags and the values the schema already gives them.
 DIAGRAM_FLAG_DEFAULTS = {"ubiquitous": False, "hide": False}
@@ -32,6 +33,21 @@ COMPONENT_FILES = sorted(COMPONENTS_DIR.glob("*.yaml"))
 
 def _load(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _validator_for(schema: dict) -> type:
+    """The validator class the schema's own `$schema` asks for.
+
+    `validator_for` falls back to the latest supported draft both when
+    `$schema` is missing and when it is present but unrecognised, which would
+    let a typo'd URI silently change the validation semantics. `default=None`
+    turns both into a failure here instead.
+    """
+    validator = jsonschema.validators.validator_for(schema, default=None)
+    assert validator is not None, (
+        f"schema does not declare a recognised $schema: {schema.get('$schema')!r}"
+    )
+    return validator
 
 
 @pytest.fixture(scope="module")
@@ -49,6 +65,23 @@ def components() -> dict[str, dict]:
     return {path.stem: _load(path) for path in COMPONENT_FILES}
 
 
+@pytest.fixture(scope="module")
+def claimed_charts(components) -> dict[str, list[str]]:
+    """Chart name -> the component ids recording it.
+
+    A list, not a single id: `identifiers.helm_chart` is one name or several,
+    and three shepherd components legitimately share one chart.
+    """
+    claimed: dict[str, list[str]] = {}
+    for cid, data in components.items():
+        recorded = (data.get("identifiers") or {}).get("helm_chart")
+        if isinstance(recorded, str):
+            recorded = [recorded]
+        for name in recorded or []:
+            claimed.setdefault(name, []).append(cid)
+    return claimed
+
+
 def test_there_are_components():
     # A glob that quietly matches nothing would make every test below pass.
     assert COMPONENT_FILES, f"no *.yaml under {COMPONENTS_DIR}"
@@ -56,12 +89,53 @@ def test_there_are_components():
 
 class TestSchema:
     def test_schema_is_itself_valid(self, schema):
-        jsonschema.Draft202012Validator.check_schema(schema)
+        _validator_for(schema).check_schema(schema)
+
+    def test_an_unresolvable_schema_is_refused(self):
+        # The point of reading $schema from the file is that a missing or
+        # typo'd URI stops the suite rather than silently validating against
+        # whatever draft jsonschema considers newest that week.
+        for bad in ({"type": "object"}, {"$schema": "https://example.invalid/no"}):
+            with pytest.raises(AssertionError):
+                _validator_for(bad)
+
+    def test_helm_chart_takes_one_name_or_several(self, schema):
+        # One component can be deployed by two charts -- a web server and its
+        # loader -- and the alternative to widening this key was inventing a
+        # second one that means the same thing.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "name-lookup.yaml")
+        for value in ("name-lookup", ["web-server", "loader"], None):
+            document["identifiers"]["helm_chart"] = value
+            assert not list(validator.iter_errors(document)), value
+        # ...but not the same chart twice, which would fetch it twice and read
+        # as two deployments.
+        document["identifiers"]["helm_chart"] = ["shepherd", "shepherd"]
+        assert list(validator.iter_errors(document))
+
+    @pytest.mark.parametrize(
+        "path",
+        [("hosted_at",), ("environments", "ci", "location"), ("layer",)],
+        ids=lambda p: p[-1],
+    )
+    def test_a_misspelt_host_or_layer_is_refused(self, schema, path):
+        # The code compares these by exact text (`hosted_at == "Local"`, a
+        # row per layer), so a typo would pass silently as a new host or a new
+        # band. test_file_validates only sees files that already comply, so it
+        # would not notice the enum going missing; this does.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "docmetadata-api.yaml")
+        *parents, key = path
+        target = document
+        for step in parents:
+            target = target[step]
+        target[key] = "itrb"
+        assert list(validator.iter_errors(document))
 
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
         errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(_load(path)),
+            _validator_for(schema)(schema).iter_errors(_load(path)),
             key=lambda e: list(e.path),
         )
         assert not errors, "\n".join(
@@ -140,11 +214,11 @@ class TestOwners:
     def test_every_owner_has_a_colour(self, components):
         # A new owner arriving without a colour would silently take a fallback
         # from the palette, and the legend would stop matching the sheet.
-        with (ROOT / "config" / "owner-colors.csv").open(encoding="utf-8-sig") as f:
+        with (CATALOG / "owner-colors.csv").open(encoding="utf-8-sig") as f:
             known = {row["owner"] for row in csv.DictReader(f)}
         for cid, data in components.items():
             assert data["owner"] in known, (
-                f"{cid}: owner {data['owner']!r} is not in config/owner-colors.csv"
+                f"{cid}: owner {data['owner']!r} is not in catalog/owner-colors.csv"
             )
 
 
@@ -167,15 +241,38 @@ class TestUnknown:
 
     def test_validates(self, unknown):
         schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
-        jsonschema.Draft202012Validator.check_schema(schema)
+        _validator_for(schema).check_schema(schema)
         errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(unknown),
+            _validator_for(schema)(schema).iter_errors(unknown),
             key=lambda e: list(e.path),
         )
         assert not errors, "\n".join(
             f"unknown.yaml: {'/'.join(str(p) for p in e.path)}: {e.message}"
             for e in errors
         )
+
+    @pytest.mark.parametrize(
+        ("status", "field"),
+        [
+            ("not-recorded", "component"),
+            ("operation", "component"),
+            ("needs-decision", "note"),
+            ("out-of-scope", "evidence"),
+        ],
+    )
+    def test_status_requires_the_field_that_justifies_it(self, status, field):
+        # test_validates only runs the schema over the real file, which
+        # already complies, so it would not notice one of these `if`/`then`
+        # rules going missing. catalog/README.md's table promises
+        # them; this holds the schema to it.
+        schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
+        validator = _validator_for(schema)(schema)
+        entry = {"name": "x", "status": status, "first_seen": "2026-09-30"}
+        assert not validator.is_valid({"helm_charts": [entry]}), (
+            f"a `{status}` entry without `{field}` should fail the schema"
+        )
+        entry[field] = "x"
+        assert validator.is_valid({"helm_charts": [entry]})
 
     def test_otel_names_are_claimed_once(self, components, unknown):
         # An identifier claimed in two places is worse than one claimed
@@ -192,10 +289,37 @@ class TestUnknown:
             name = entry["name"]
             assert name not in owners, (
                 f"OTel service {name!r} is in unknown.yaml but is already "
-                f"claimed by components/{owners[name]}.yaml — promote it by "
+                f"claimed by catalog/components/{owners[name]}.yaml — promote it by "
                 f"deleting the unknown.yaml entry"
             )
             owners[name] = "unknown.yaml"
+
+    def test_helm_charts_are_claimed_once(self, unknown, claimed_charts):
+        # The mirror of the OTel rule, with one difference: a chart may be
+        # claimed by several components -- the three shepherds share one -- so
+        # what must not happen is a chart being claimed here *and* held in the
+        # pen, which is how a chart ends up recorded and reported unattributed
+        # at the same time.
+        for entry in unknown.get("helm_charts") or []:
+            name = entry["name"]
+            assert name not in claimed_charts, (
+                f"Helm chart {name!r} is in unknown.yaml but is already "
+                f"claimed by {', '.join(claimed_charts[name])} — promote it by "
+                f"deleting the unknown.yaml entry"
+            )
+
+    def test_a_not_recorded_chart_is_not_already_recorded(self, unknown, claimed_charts):
+        # `not-recorded` on a chart means "we know which component this
+        # deploys, and that component's file does not say so yet". Once it
+        # does, the entry is stale and this fails rather than letting it rot.
+        for entry in unknown.get("helm_charts") or []:
+            if entry["status"] != "not-recorded":
+                continue
+            assert entry["component"] not in claimed_charts.get(entry["name"], []), (
+                f"unknown.yaml: chart {entry['name']!r} is marked not-recorded "
+                f"but catalog/components/{entry['component']}.yaml now claims it — "
+                f"delete the entry"
+            )
 
     def test_not_recorded_entries_really_have_no_file(self, components, unknown):
         # `not-recorded` means "a component we know of that has no file yet".
@@ -206,7 +330,7 @@ class TestUnknown:
                 continue
             assert entry["component"] not in components, (
                 f"unknown.yaml: {entry['name']!r} is marked not-recorded but "
-                f"components/{entry['component']}.yaml exists — move the name "
+                f"catalog/components/{entry['component']}.yaml exists — move the name "
                 f"into that file's identifiers.otel_services"
             )
 
@@ -221,5 +345,5 @@ class TestEnrichedExample:
         component = _load(COMPONENTS_DIR / "name-lookup.yaml")
         assert example == component, (
             "docs/examples/name-lookup-enriched.yaml's `recorded:` block is no "
-            "longer components/name-lookup.yaml verbatim"
+            "longer catalog/components/name-lookup.yaml verbatim"
         )

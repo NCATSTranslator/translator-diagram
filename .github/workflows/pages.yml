@@ -56,9 +56,9 @@ jobs:
 
       - name: Fetch what the component files point at
         env:
-          # Sent to api.github.com only, by _headers in sync.py. Raises the
-          # release-list budget from 60 calls an hour to 5000; one sync spends
-          # about 20.
+          # Sent to api.github.com only, by _headers in fetch.py. Raises the
+          # API budget from 60 calls an hour to 5000; one sync spends about 46
+          # (the breakdown is above _source_repos in sync.py).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # A service being down is data, not an error — sync exits non-zero only
         # if it could not fetch anything at all. Read the step's output rather

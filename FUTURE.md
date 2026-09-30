@@ -14,17 +14,16 @@ deployed**. Nothing we currently fetch knows: the OpenAPI documents carry no
 date, the Helm chart files carry no date, and SmartAPI's `_status.refresh_ts`
 is its own uptime probe.
 
-**The Helm chart's last commit is the closest available proxy.** ITRB deploys
-from [`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops),
-so the last commit touching `helm/<chart>/` dates the intent to deploy:
+**The Helm chart's last commit is the closest available proxy, and it is
+half built.** ITRB deploys from
+[`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops),
+so the last commit touching `helm/<chart>/` dates the intent to deploy.
+`sync-components` already fetches it, one call per recorded chart, and the
+drawer's Helm tab shows it as "Chart last changed", labelled *intent to deploy,
+not a deployment*.
 
-```bash
-curl -s 'https://api.github.com/repos/helxplatform/translator-devops/commits?path=helm/name-lookup&per_page=1'
-```
-
-One call per chart, and we record five charts (`answer-appraiser`, `jaeger`,
-`name-lookup`, `shepherd`, `test-harness`), so five calls a sync. Two things
-to be careful about if this is built:
+What is not built is putting it on the table, where a reader scanning
+environments would see it. Two things to be careful about there:
 
 - It dates the *intent*, not the deployment. A chart change that was never
   rolled out, or a rollout of an unchanged chart, both make it wrong. It
@@ -46,6 +45,26 @@ answers "has anyone touched this repository" rather than "has this component
 changed", and it would outrank the release date on nearly every row and make
 the `release` badge vanish. If it is added, it should rank *below* a release
 rather than by recency.
+
+## Sample OpenTelemetry traces per environment
+
+The dashboard already counts OTel services per environment from the Jaeger
+query API. Showing individual trace samples — latency, error rate, last seen —
+would need a separate sampled job with its own cache and TTL, because the
+query endpoint is not cheap enough to hit on every `sync-components` run and
+the answer is not stable enough to treat as a version fact. If built, it belongs
+in its own tile or drawer section, labelled as sampled telemetry rather than
+deployment truth.
+
+## Rendered Helm manifests per environment
+
+`helm template` against each chart and environment would show the intended
+Kubernetes objects — image, resources, env vars — beyond the `appVersion` the
+page already reads from the chart file. The cost is one Helm invocation per
+(chart, environment) pair, a Helm binary in CI (which `pages.yml` deliberately
+does not install today), and a trust boundary: rendered YAML is intent, not
+what is running. Chart metadata stays in the published build; only image tags
+are withheld today.
 
 ## Watch the GitHub budget
 

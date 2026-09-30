@@ -1,0 +1,40 @@
+# docmetadata-api (docmetadata-api)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: docmetadata-api
+name: docmetadata-api
+owner: CoCoWG
+refactor_status: Removed after Refactor
+hosted_at: ITRB
+
+itrb:
+  app: docmetadata-api
+  group: TMKP
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+endpoints:
+  # Checked on 2026-09-02, all three hosts: / is HTML and everything else
+  # 404s. There is no OpenAPI document to fetch and no status endpoint either.
+  openapi: null
+
+environments:
+  ci:
+    url: https://docmetadata.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://docmetadata.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://docmetadata.transltr.io/
+    location: ITRB
