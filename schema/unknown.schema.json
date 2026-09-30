@@ -44,11 +44,13 @@
           "minLength": 1
         },
         "status": {
-          "description": "unattributed: we do not know what this is. operation: a processing step reported as its own service, not a component. not-recorded: it is a known component that has no file yet, named by `component`. not-in-use: confirmed retired, kept so it is not investigated twice.",
+          "description": "What we know about this identifier; docs/component-metadata.md#unknownyaml has the full table. unattributed: we do not know what it is, or which component it belongs to. not-recorded: it belongs to a known component that has no file yet, named by `component` (for a chart, the component it deploys). needs-decision: we know what it is, but where it is recorded is a maintainer's call, stated in `note`. operation: a processing step reported under its own service name, not a component. out-of-scope: we know what it is, and it is not something this repo records as a component (part of a legacy or adjacent stack with no sheet row, or not the kind of identifier its section lists), said in `evidence`. not-in-use: confirmed retired, kept so it is not investigated twice.",
           "enum": [
             "unattributed",
-            "operation",
             "not-recorded",
+            "needs-decision",
+            "operation",
+            "out-of-scope",
             "not-in-use"
           ]
         },
@@ -72,7 +74,7 @@
           "uniqueItems": true
         },
         "component": {
-          "description": "The component id this belongs to, once known — for a chart, the component it deploys. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
+          "description": "The component id this belongs to, once known \u2014 for a chart, the component it deploys. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
           "type": [
             "string",
             "null"
@@ -108,6 +110,40 @@
                 "minLength": 1
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "needs-decision"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "note"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "out-of-scope"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "evidence"
+            ]
           }
         }
       ]
