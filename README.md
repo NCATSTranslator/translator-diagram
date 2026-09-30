@@ -69,6 +69,7 @@ on what is currently relevant.
 
 | If you want to | Look at |
 |---|---|
+| add or change a component, or investigate an unattributed identifier | [`catalog/`](catalog/), whose [README](catalog/README.md) is the curator's guide |
 | change what a component records | `catalog/components/<id>.yaml`, and [`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) for the field reference |
 | change the dashboard's row order or its stage descriptions | [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml) |
 | change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colours.md`](catalog/owner-colours.md) |
@@ -175,22 +176,27 @@ the second gets a `_2` suffix and a warning.
 
 ## Component metadata files
 
-`catalog/components/<id>.yaml` records one file per component: what it is (owner,
-refactor status, layer, where it runs), its identifier in each of the naming
+Everything a curator edits is under [`catalog/`](catalog/), and
+[`catalog/README.md`](catalog/README.md) is the guide to it: how to add a
+component, the rules the tests enforce, and what each `unknown.yaml` status
+means.
+
+`catalog/components/<id>.yaml` records one file per component: what it is
+(owner, refactor status, layer, where it runs), its identifier in each of the naming
 spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
 ITRB's own `app` and `group`, links to its repositories and documentation, and
 the `connections:` edges between components.
-[`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) is the field
-reference; `tests/test_component_files.py` validates every file against it, and
-`tests/test_components.py` covers the parser.
+[`catalog/schema/component.schema.json`](catalog/schema/component.schema.json)
+is the field reference; `tests/test_component_files.py` validates every file
+against it, and `tests/test_components.py` covers the parser.
 
 These files are the dashboard's only input, and they are committed — which is
 why the dashboard needs no credentials to run.
 
-[`catalog/unknown.yaml`](catalog/unknown.yaml) is the holding pen for identifiers seen in the
-platform that no component file claims yet — currently OpenTelemetry service
-names and Helm chart directories. Entries leave it by being promoted
-into a component file or confirmed out of use.
+[`catalog/unknown.yaml`](catalog/unknown.yaml) is the holding pen for
+identifiers seen in the platform that no component file claims yet —
+currently OpenTelemetry service names and Helm chart directories. Entries
+leave it by being promoted into a component file or confirmed out of use.
 
 **The dashboard reads these files; the diagram does not.**
 `build-dashboard` follows their pointers, but `generate-diagram` still loads
@@ -479,7 +485,8 @@ translator-diagram/
 │   ├── owner-colors.csv    # Owner → fill colour
 │   ├── owner-colours.md    # The rules for choosing a new colour
 │   ├── schema/             # JSON Schema for components/*.yaml and unknown.yaml
-│   └── CLAUDE.md           # What a component file must contain
+│   ├── README.md           # The curator's guide to all of the above
+│   └── CLAUDE.md           # Agent notes for this directory
 ├── config/
 │   └── privacy.yaml        # What a published build leaves out
 ├── docs/                   # The metadata case and its research

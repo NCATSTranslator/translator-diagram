@@ -14,9 +14,9 @@
 #
 # `status` is one of unattributed, not-recorded, needs-decision, operation,
 # out-of-scope or not-in-use. What each means, when to use it and how an entry
-# leaves it: docs/component-metadata.md, section `unknown.yaml`.
+# leaves it: README.md, section `unknown.yaml`.
 #
-# Validated by schema/unknown.schema.json; see tests/test_component_files.py.
+# Validated by schema/unknown.schema.json; see ../tests/test_component_files.py.
 # New kinds of unattributed identifier get a new top-level key (`helm_charts:`
 # and `urls:` are already in the schema; `urls:` is still empty because
 # nothing has needed it yet).

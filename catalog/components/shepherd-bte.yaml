@@ -1,8 +1,8 @@
 # BioThings Explorer (BTE) (shepherd-bte)
 #
 # One Translator component. Fields hold *pointers* to the places that already
-# know about this component; see docs/component-metadata.md for the format and
-# docs/metadata-sources.md for what each of those places actually offers.
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
 #
 # A field that is absent has not been recorded yet. A field that is explicitly
 # `null` has been checked and does not exist.

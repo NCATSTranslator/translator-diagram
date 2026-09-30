@@ -1,49 +1,33 @@
-# components/
+# catalog/
 
-One YAML file per Translator component. The repo-wide working agreements are in
-[../AGENTS.md](../AGENTS.md); the case for the format is in
+Everything a curator edits: the component files, `unknown.yaml`, the stage
+order, the owner colours and their schemas. The repo-wide working agreements
+are in [../AGENTS.md](../AGENTS.md). **[README.md](README.md) is the guide to
+this directory**: what each file holds, how to add a component, the rules the
+tests enforce, the conventions, and what each `unknown.yaml` status means.
+Read it rather than expecting the rules here. The case for the format is in
 [../docs/component-metadata.md](../docs/component-metadata.md).
 
-`components/<id>.yaml` holds one file per component, validated against
-`schema/component.schema.json` by `tests/test_component_files.py` and parsed
-by `components.py` (whose own tests are `tests/test_components.py`).
+This directory is written for people who know the platform, not the code, so
+keep it that way. Curator-facing prose belongs in `README.md`, not in a module
+docstring, and paths written inside `catalog/` are relative to it
+(`components/<id>.yaml`, `owner-colors.csv`).
 
-**The dashboard reads them; the diagram does not.** `sync`, `flow` and
-`dashboard` are built on them, while `loading.py` still parses the sheet CSV.
-The two stacks meet only at `colors`, and merging them is issue #19. The
-rationale for the format is in `docs/component-metadata.md`, the upstream
-survey in `docs/metadata-sources.md`.
+`components/` holds nothing but component files, so `load_components` and
+`tests/test_component_files.py` can glob `*.yaml` without exceptions. Do not
+put anything else in it.
 
-Rules the tests enforce, so a change that breaks one fails CI rather than
-sitting there wrong: the filename stem equals `id`; ids are unique
-case-insensitively; every id in `connections.gets_results_from`/`calls` has a
-file (which is why `docmetadata-api` has one — `ui` calls it); every `owner`
-appears in `owner-colors.csv`; `endpoints` values are relative paths,
-never URLs; and no file writes a `diagram:` flag at its default, which is what
-keeps that block absent rather than 26 copies of `ubiquitous: false`.
+**The dashboard reads the component files; the diagram does not.** `sync`,
+`flow` and `dashboard` are built on them, while `loading.py` still parses the
+sheet CSV. The two stacks meet only at `colors`, and merging them is
+issue #19. The files are validated by `tests/test_component_files.py`, parsed
+by `components.py` (tested by `tests/test_components.py`), and
+`flow-steps.yaml` is checked by `tests/test_flow_steps.py`.
 
-`diagram.ubiquitous: true` marks cross-cutting infrastructure (jaeger today)
-that the **Map view** draws beside each caller instead of as one central node —
-the same idea as the sheet's `Ubiquitous` column in the Graphviz diagram.
-`diagram.hide: true` removes a component from the Map only; it stays in the
-Overview table (ploverdb today).
-
-`unknown.yaml` collects identifiers observed in the platform that no
-component file claims — today, OpenTelemetry service names and Helm chart
-directories. Do not delete an entry to make a test pass: an entry is removed
-only when its identifier moves into a component file. The tests enforce that
-no identifier is claimed twice, and that a `not-recorded` entry whose
-component now has a file fails until it is promoted. The schema also ties each
-`status` to the field that justifies it: `component` on `not-recorded` and
-`operation`, `note` on `needs-decision`, `evidence` on `out-of-scope`. Which
-status to use is set out in the `unknown.yaml` section of
-[`docs/component-metadata.md`](../docs/component-metadata.md#unknownyaml).
-
-Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
-`datetime.date`, which is not a JSON Schema string, and the failure message
-points at the schema rather than the quoting.
+Do not delete an `unknown.yaml` entry to make a test pass: an entry is removed
+only when its identifier moves into a component file.
 
 `pyyaml` is a **runtime** dependency because the dashboard reads
 `components/*.yaml` at run time. `jsonschema` stays **dev-only**: nothing but
-the tests validates those files, and a schema library in the runtime
+the tests validates these files, and a schema library in the runtime
 dependency set would suggest otherwise.

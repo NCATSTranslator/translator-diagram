@@ -244,7 +244,7 @@ class TestUnknown:
     def test_status_requires_the_field_that_justifies_it(self, status, field):
         # test_validates only runs the schema over the real file, which
         # already complies, so it would not notice one of these `if`/`then`
-        # rules going missing. docs/component-metadata.md's table promises
+        # rules going missing. catalog/README.md's table promises
         # them; this holds the schema to it.
         schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
         validator = _validator_for(schema)(schema)

@@ -9,15 +9,6 @@ The constraints below are not obvious from the file, and the file cannot carry
 comments explaining them: it is parsed as CSV, so a comment row would be read as
 an owner.
 
-## Where the file is read from
-
-`load_owner_colors` takes `catalog/owner-colors.csv` from the working directory
-or the nearest directory above it, and falls back to the copy inside the installed
-package so that an install with no checkout still has colours. There is only one
-copy in the repository; the wheel build maps this file to
-`translator_diagram/owner-colors.csv` rather than a second file being kept in
-step by hand. `--owner-colors PATH` overrides both.
-
 Note that the *diagram* reads each component's owner from the Google Sheet while
 the *dashboard* reads it from `components/<id>.yaml`. Renaming an owner means
 renaming it in both places, or the half that still says the old name silently
