@@ -52,10 +52,12 @@ entries are there because someone already tried the obvious thing.
   diff, and it does not need an aesthetic judgement.
 
   The dashboard works the same way: build from one `data/sync/` before and
-  after, and `overview.json` and `index.html` are byte-identical. `sync` itself
-  cannot be compared across two live runs, because upstream answers change in
-  between, so replay a recorded one with `tools/replay_sync.py` — its docstring
-  has the recipe.
+  after, and `overview.json` and `index.html` are byte-identical. (`web/*.js`
+  and `*.css` are inlined verbatim, comments included, so editing a comment
+  there changes `index.html`; `diff` it to confirm only the comment moved.)
+  `sync` itself cannot be compared across two live runs, because upstream
+  answers change in between, so replay a recorded one with
+  `tools/replay_sync.py` — its docstring has the recipe.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
   temporary files, sample CSVs, cloned repos, or anything else you need to
   write while working. Never commit anything from it.
