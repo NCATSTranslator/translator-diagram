@@ -7,11 +7,12 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from translator_diagram.dashboard_cli import build_main
+from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main
 
 
 @pytest.fixture
@@ -131,3 +132,11 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+def test_the_default_components_directory_is_the_catalogs():
+    # Every other test here passes --components, so a default left pointing
+    # at a directory that has moved would only surface when someone runs
+    # sync-components or build-dashboard with no flags.
+    root = Path(__file__).resolve().parent.parent
+    assert list((root / DEFAULT_COMPONENTS).glob("*.yaml"))
