@@ -143,7 +143,8 @@ every component is. The block appears the first time one of them is `true`.
 Not every identifier we find belongs to a component we know about. The 41
 OpenTelemetry service names reporting to the three collectors include seven
 that are Shepherd *operations* rather than components, twelve that belong to
-components with no file yet, and three we cannot place.
+components with no file yet, two that wait on a maintainer's decision, and one
+we cannot place. The Helm chart index has the same problem with more entries.
 
 Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
 the evidence for whatever we do believe. Entries leave it in one of two ways:
@@ -153,6 +154,39 @@ the evidence for whatever we do believe. Entries leave it in one of two ways:
   entry is deleted;
 - **retired** — someone confirms it is out of use, so it stays with
   `status: not-in-use` and nobody investigates it twice.
+
+Every entry has a `status`, which says how much we know and what would move it
+on. The schema holds a one-line version of this table and rejects any other
+value.
+
+| `status` | Means | Must also have | Leaves by |
+|---|---|---|---|
+| `unattributed` | We do not know what this is, or which component it belongs to | | Finding out, then taking whichever status fits |
+| `not-recorded` | It belongs to a known component that has no file yet | `component`, the id that file will have | Promotion, when the file is written. A test fails once the file exists and the entry is still here |
+| `needs-decision` | We know what it is, but where it is recorded is a maintainer's call | `note`, saying what the decision is | Promotion, or `out-of-scope`, once someone decides |
+| `operation` | A processing step reporting under its own service name, not a component | `component`, the service it is a step of | Only by becoming `not-in-use`. It stays so nobody attributes it |
+| `out-of-scope` | We know what it is, and it is not something this repo records as a component: part of a legacy or adjacent stack, or not the kind of identifier its section lists | `evidence`, saying why | `not-recorded`, if the component sheet gains a row for it; `not-in-use`, if it stops running |
+| `not-in-use` | Confirmed retired | | Nothing. It stays so nobody investigates it twice |
+
+Three distinctions do most of the work:
+
+- **`unattributed` versus `needs-decision`.** The question is whether more
+  looking would settle it. `shepherd-server` is understood from its traces,
+  and what is missing is a decision about whether the shared Shepherd server
+  is its own component. A chart whose `Chart.yaml` is the unedited
+  `helm create` default is `unattributed` until someone looks inside it.
+- **`needs-decision` versus `out-of-scope`.** `out-of-scope` is itself a
+  decision, and one nobody expects to revisit. If a maintainer could
+  reasonably want a component file for it, it is `needs-decision`.
+- **`out-of-scope` versus `not-in-use`.** A legacy chart that is still
+  deployed is `out-of-scope`, not retired. `not-in-use` means someone
+  confirmed it stopped running.
+
+`component` means slightly different things by section. On an OTel service it
+names the component the service belongs to. On a Helm chart it names the
+component the chart *deploys*, and one component may deploy several charts,
+since `identifiers.helm_chart` accepts a list. On an `unattributed` entry it is
+at most a guess, to be read alongside `evidence`.
 
 `tests/test_component_files.py` enforces the part that would otherwise rot: no
 identifier may be claimed by a component *and* sit in `unknown.yaml`, no two

@@ -74,7 +74,7 @@
           "uniqueItems": true
         },
         "component": {
-          "description": "The component id this belongs to, once known \u2014 for a chart, the component it deploys. Required by `not-recorded`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
+          "description": "The component id this belongs to, once known \u2014 for a chart, the component it deploys. Required by `not-recorded` and `operation`; on an `unattributed` entry it is a guess and must be read alongside `evidence`.",
           "type": [
             "string",
             "null"
@@ -93,7 +93,10 @@
           "if": {
             "properties": {
               "status": {
-                "const": "not-recorded"
+                "enum": [
+                  "not-recorded",
+                  "operation"
+                ]
               }
             },
             "required": [

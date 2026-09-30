@@ -33,7 +33,11 @@ component file claims — today, OpenTelemetry service names and Helm chart
 directories. Do not delete an entry to make a test pass: an entry is removed
 only when its identifier moves into a component file. The tests enforce that
 no identifier is claimed twice, and that a `not-recorded` entry whose
-component now has a file fails until it is promoted.
+component now has a file fails until it is promoted. The schema also ties each
+`status` to the field that justifies it: `component` on `not-recorded` and
+`operation`, `note` on `needs-decision`, `evidence` on `out-of-scope`. Which
+status to use is set out in the `unknown.yaml` section of
+[`docs/component-metadata.md`](../docs/component-metadata.md#unknownyaml).
 
 Quote ISO dates in that file. YAML parses a bare `2026-08-31` into a
 `datetime.date`, which is not a JSON Schema string, and the failure message
