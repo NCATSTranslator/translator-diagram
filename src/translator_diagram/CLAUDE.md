@@ -203,7 +203,7 @@ because `catalog/` is right there. See `load_owner_colors` for the resolution
 
 The four rules constraining a new owner colour — which hues are reserved, the
 contrast floor, the luminance line, and the fact that the palette is full — are
-in [`catalog/owner-colours.md`](../../catalog/owner-colours.md), where somebody
+in [`catalog/owner-colors.md`](../../catalog/owner-colors.md), where somebody
 choosing a colour will find them.
 
 Generating that copy at build time is the obvious simplification and it does

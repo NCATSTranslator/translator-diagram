@@ -72,7 +72,7 @@ on what is currently relevant.
 | add or change a component, or investigate an unattributed identifier | [`catalog/`](catalog/), whose [README](catalog/README.md) is the curator's guide |
 | change what a component records | `catalog/components/<id>.yaml`, and [`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) for the field reference |
 | change the dashboard's row order or its stage descriptions | [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml) |
-| change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colours.md`](catalog/owner-colours.md) |
+| change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colors.md`](catalog/owner-colors.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
 | change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
 | know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
@@ -483,7 +483,7 @@ translator-diagram/
 │   ├── unknown.yaml        # Identifiers no component file claims yet
 │   ├── flow-steps.yaml     # The dashboard's stages, in page order
 │   ├── owner-colors.csv    # Owner → fill colour
-│   ├── owner-colours.md    # The rules for choosing a new colour
+│   ├── owner-colors.md     # The rules for choosing a new colour
 │   ├── schema/             # JSON Schema for components/*.yaml and unknown.yaml
 │   ├── README.md           # The curator's guide to all of the above
 │   └── CLAUDE.md           # Agent notes for this directory

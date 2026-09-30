@@ -10,7 +10,7 @@ open.
 | [`components/<id>.yaml`](components/) | One file per component: who owns it, its name in each naming space, what it calls, where it runs |
 | [`unknown.yaml`](unknown.yaml) | Identifiers seen in the platform that no component file claims yet, and what we know about each |
 | [`flow-steps.yaml`](flow-steps.yaml) | The dashboard's stages, in page order, and which components sit in each |
-| [`owner-colors.csv`](owner-colors.csv) | Each owning team's colour; [`owner-colours.md`](owner-colours.md) has the rules for choosing one |
+| [`owner-colors.csv`](owner-colors.csv) | Each owning team's colour; [`owner-colors.md`](owner-colors.md) has the rules for choosing one |
 | [`schema/`](schema/) | The field reference for `components/*.yaml` and `unknown.yaml`. Editors that understand `yaml-language-server` pick it up from each file's header |
 
 Every file here is checked by the test suite, so a wrong edit fails loudly
@@ -31,7 +31,7 @@ uv run pytest
 2. Place the id in a stage in `flow-steps.yaml`, or under `unplaced` if it
    genuinely belongs to none yet.
 3. If its owner is a new team, add a row to `owner-colors.csv`, choosing the
-   colour by the rules in `owner-colours.md`.
+   colour by the rules in `owner-colors.md`.
 4. If the component claims an identifier listed in `unknown.yaml`, delete that
    entry (see [Promotion](#unknownyaml) below).
 

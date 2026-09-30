@@ -17,7 +17,7 @@ when it is relevant rather than every time:
 | [`catalog/CLAUDE.md`](catalog/CLAUDE.md), [`catalog/README.md`](catalog/README.md) | Everything a curator edits. The README is the guide: what a component file must contain, what each `unknown.yaml` status means, and which rules the tests enforce |
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
-| [`catalog/owner-colours.md`](catalog/owner-colours.md) | The four constraints on a new team colour |
+| [`catalog/owner-colors.md`](catalog/owner-colors.md) | The four constraints on a new team colour |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** *Working agreements* below. Then, before simplifying anything in
