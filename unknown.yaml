@@ -58,7 +58,7 @@ otel_services:
       Confirmed complex and deliberately left here on 2026-08-31 rather than
       forced into one of the shepherd-* files. Re-investigating needs a
       decision about whether the shared server is its own component, not more
-      trace data.
+      trace data. Tracked in #3.
 
   - name: molepro
     status: needs-decision
@@ -432,7 +432,7 @@ helm_charts:
       ghcr.io/translatorsri/sri_testing-ui and ghcr.io/translatorsri/sri_testing-api.
     note: >-
       No sheet row. Whether it becomes a component, as `sri-testing`, is a
-      maintainer's call.
+      maintainer's call. Tracked in #52.
 
   - name: query-logger
     status: needs-decision
@@ -444,7 +444,7 @@ helm_charts:
       ghcr.io/translatorsri/querylogger.
     note: >-
       No sheet row. Whether it becomes a component, as `query-logger`, is a
-      maintainer's call.
+      maintainer's call. Tracked in #52.
 
   - name: openapi-spec-aggregator
     status: needs-decision
@@ -455,7 +455,7 @@ helm_charts:
       deploys ghcr.io/translatorsri/trapi-openapi-aggregator.
     note: >-
       No sheet row. Whether it becomes a component, as
-      `openapi-spec-aggregator`, is a maintainer's call.
+      `openapi-spec-aggregator`, is a maintainer's call. Tracked in #52.
 
   - name: issue-router
     status: needs-decision
@@ -466,7 +466,7 @@ helm_charts:
       deploys ghcr.io/translatorsri/issuerouter.
     note: >-
       No sheet row. Whether it becomes a component, as `issue-router`, is a
-      maintainer's call.
+      maintainer's call. Tracked in #52.
 
   - name: benchmark
     status: needs-decision
@@ -477,7 +477,7 @@ helm_charts:
       deploys ghcr.io/translatorsri/benchmarks.
     note: >-
       No sheet row. Whether it becomes a component, as `benchmark`, is a
-      maintainer's call.
+      maintainer's call. Tracked in #52.
 
   - name: information-radiator
     status: needs-decision
@@ -489,7 +489,7 @@ helm_charts:
       Harness results on a dashboard.
     note: >-
       No sheet row. Whether it becomes a component, as `information-radiator`,
-      is a maintainer's call.
+      is a maintainer's call. Tracked in #52.
 
   # --- Needs a decision: NodeNorm charts with no row of their own -------------
 
@@ -506,7 +506,7 @@ helm_charts:
     note: >-
       No sheet row. It runs the same image and infores as
       node-normalization-web-server, so the decision is whether it is a
-      second chart for `nodenorm` or a component of its own.
+      second chart for `nodenorm` or a component of its own. Tracked in #52.
 
   - name: redis-r3-external
     status: needs-decision
@@ -519,7 +519,7 @@ helm_charts:
       chemical-drug-db — the conflation/equivalent-id/category Redis
       databases NodeNorm uses, external to the r3 chart above.
     note: >-
-      No sheet row, and it goes wherever r3 goes.
+      No sheet row, and it goes wherever r3 goes. Tracked in #52.
 
   # --- Out of scope: legacy ROBOKOP / Plater / CAM / TranQL stack -------------
   #
