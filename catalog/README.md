@@ -48,7 +48,7 @@ uv run pytest
   a new one.
 - `endpoints` values are relative paths, never URLs.
 - No file writes a `diagram:` flag at its default, which keeps that block
-  absent rather than 26 copies of `ubiquitous: false`.
+  absent rather than a copy of `ubiquitous: false` in every file.
 - Every component is either in a stage or listed under `unplaced` in
   `flow-steps.yaml`.
 - No identifier is claimed by two components, or by a component *and*
