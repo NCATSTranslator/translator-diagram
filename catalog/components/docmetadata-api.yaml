@@ -38,9 +38,3 @@ environments:
   prod:
     url: https://docmetadata.transltr.io/
     location: ITRB
-
-notes: >-
-  Hosts follow the conventional ITRB name and answer HTML at / and 404
-  elsewhere; recorded from that observation on 2026-09-02, not confirmed by an
-  infores (none is registered). The stem is the component id minus the `-api`,
-  which is why nothing derived these: ci, test and prod all answer 200.
