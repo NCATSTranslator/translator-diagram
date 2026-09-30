@@ -162,8 +162,8 @@ value.
 | `status` | Means | Must also have | Leaves by |
 |---|---|---|---|
 | `unattributed` | We do not know what this is, or which component it belongs to | | Finding out, then taking whichever status fits |
-| `not-recorded` | It belongs to a known component that has no file yet | `component`, the id that file will have | Promotion, when the file is written. A test fails once the file exists and the entry is still here |
-| `needs-decision` | We know what it is, but where it is recorded is a maintainer's call | `note`, saying what the decision is | Promotion, or `out-of-scope`, once someone decides |
+| `not-recorded` | It belongs to a component the sheet lists, which has no file yet | `component`, the sheet row's id | Promotion, when the file is written. A test fails once the file exists and the entry is still here |
+| `needs-decision` | We know what it is, but where it is recorded is a maintainer's call — including whether a service the sheet does not list should become a component | `note`, saying what the decision is | `not-recorded`, promotion or `out-of-scope`, once someone decides |
 | `operation` | A processing step reporting under its own service name, not a component | `component`, the service it is a step of | Only by becoming `not-in-use`. It stays so nobody attributes it |
 | `out-of-scope` | We know what it is, and it is not something this repo records as a component: part of a legacy or adjacent stack, or not the kind of identifier its section lists | `evidence`, saying why | `not-recorded`, if the component sheet gains a row for it; `not-in-use`, if it stops running |
 | `not-in-use` | Confirmed retired | | Nothing. It stays so nobody investigates it twice |
@@ -187,6 +187,11 @@ names the component the service belongs to. On a Helm chart it names the
 component the chart *deploys*, and one component may deploy several charts,
 since `identifiers.helm_chart` accepts a list. On an `unattributed` entry it is
 at most a guess, to be read alongside `evidence`.
+
+To find a chart's sheet row, compare the chart directory with the sheet's
+`ITRB App Name` column rather than its `Helm chart` column. For an
+ITRB-hosted row the app name is the chart directory, and `Helm chart` is
+filled on only two rows.
 
 `tests/test_component_files.py` enforces the part that would otherwise rot: no
 identifier may be claimed by a component *and* sit in `unknown.yaml`, no two
