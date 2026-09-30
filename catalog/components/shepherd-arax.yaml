@@ -31,7 +31,14 @@ itrb:
 
 connections:
   gets_results_from: [retriever]
-  calls: [jaeger]
+  # nodenorm-es: ARAX is the only Shepherd service that calls NodeNorm, and
+  # its team is working on removing the query-time calls
+  # (https://github.com/RTXteam/RTX/issues/2855 and
+  # https://github.com/RTXteam/RTX/issues/2896). The call is probably made by
+  # one of the Shepherd components it goes through, but those have no files
+  # of their own yet (translator-diagram#3), so it is recorded here until
+  # they do.
+  calls: [nodenorm-es, jaeger]
   externals: []
 
 repositories:
