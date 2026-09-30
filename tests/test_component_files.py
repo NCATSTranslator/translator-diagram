@@ -231,6 +231,29 @@ class TestUnknown:
             for e in errors
         )
 
+    @pytest.mark.parametrize(
+        ("status", "field"),
+        [
+            ("not-recorded", "component"),
+            ("operation", "component"),
+            ("needs-decision", "note"),
+            ("out-of-scope", "evidence"),
+        ],
+    )
+    def test_status_requires_the_field_that_justifies_it(self, status, field):
+        # test_validates only runs the schema over the real file, which
+        # already complies, so it would not notice one of these `if`/`then`
+        # rules going missing. docs/component-metadata.md's table promises
+        # them; this holds the schema to it.
+        schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
+        validator = _validator_for(schema)(schema)
+        entry = {"name": "x", "status": status, "first_seen": "2026-09-30"}
+        assert not validator.is_valid({"helm_charts": [entry]}), (
+            f"a `{status}` entry without `{field}` should fail the schema"
+        )
+        entry[field] = "x"
+        assert validator.is_valid({"helm_charts": [entry]})
+
     def test_otel_names_are_claimed_once(self, components, unknown):
         # An identifier claimed in two places is worse than one claimed
         # nowhere: the second claim is invisible, and whichever consumer reads
