@@ -20,7 +20,7 @@ import click
 # loading.py, which uses find_dotenv(usecwd=True) and so walks them too.
 # Without it, running from a subdirectory of the checkout took the sheet ID
 # from the repo's .env but the colours from the packaged copy.
-CONFIG_OWNER_COLORS_PATH = Path("config") / "owner-colors.csv"
+OWNER_COLORS_PATH = Path("catalog") / "owner-colors.csv"
 # At the package root rather than under web/: this is a colour table the
 # diagram generator reads, and nothing about it belongs to a browser.
 PACKAGED_OWNER_COLORS = ("translator_diagram", "owner-colors.csv")
@@ -248,7 +248,7 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
     """
     if path is not None:
         return _read_owner_colors(path)
-    found = _find_config_owner_colors()
+    found = _find_owner_colors()
     if found is not None:
         return _read_owner_colors(found)
     package, member = PACKAGED_OWNER_COLORS
@@ -256,11 +256,11 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
         return _read_owner_colors(packaged)
 
 
-def _find_config_owner_colors() -> Path | None:
+def _find_owner_colors() -> Path | None:
     """config/owner-colors.csv in the working directory or the nearest parent."""
     cwd = Path.cwd()
     for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_OWNER_COLORS_PATH
+        candidate = directory / OWNER_COLORS_PATH
         if candidate.exists():
             return candidate
     return None

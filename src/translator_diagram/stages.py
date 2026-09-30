@@ -14,7 +14,7 @@ import click
 from .components import ComponentFile, read_yaml
 from .flow import in_flow_order
 
-CONFIG_STAGES_PATH = Path("config/flow-steps.yaml")
+STAGES_PATH = Path("catalog/flow-steps.yaml")
 
 
 UNPLACED_TITLE = "Not yet placed"
@@ -24,7 +24,7 @@ def _find_stages() -> Path | None:
     """config/flow-steps.yaml in the working directory or the nearest parent."""
     cwd = Path.cwd()
     for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_STAGES_PATH
+        candidate = directory / STAGES_PATH
         if candidate.exists():
             return candidate
     return None
@@ -55,7 +55,7 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     found = path if path is not None else _find_stages()
     if found is None:
         raise click.ClickException(
-            f"No stage file at {CONFIG_STAGES_PATH}. It sets the row order, "
+            f"No stage file at {STAGES_PATH}. It sets the row order, "
             f"and without it the page falls back to data-flow order. Run from "
             f"the repository root."
         )

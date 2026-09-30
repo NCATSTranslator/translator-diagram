@@ -18,10 +18,11 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPONENTS_DIR = ROOT / "components"
-SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
-UNKNOWN_PATH = ROOT / "unknown.yaml"
-UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+CATALOG = ROOT / "catalog"
+COMPONENTS_DIR = CATALOG / "components"
+SCHEMA_PATH = CATALOG / "schema" / "component.schema.json"
+UNKNOWN_PATH = CATALOG / "unknown.yaml"
+UNKNOWN_SCHEMA_PATH = CATALOG / "schema" / "unknown.schema.json"
 
 # The `diagram:` flags and the values the schema already gives them.
 DIAGRAM_FLAG_DEFAULTS = {"ubiquitous": False, "hide": False}
@@ -194,11 +195,11 @@ class TestOwners:
     def test_every_owner_has_a_colour(self, components):
         # A new owner arriving without a colour would silently take a fallback
         # from the palette, and the legend would stop matching the sheet.
-        with (ROOT / "config" / "owner-colors.csv").open(encoding="utf-8-sig") as f:
+        with (CATALOG / "owner-colors.csv").open(encoding="utf-8-sig") as f:
             known = {row["owner"] for row in csv.DictReader(f)}
         for cid, data in components.items():
             assert data["owner"] in known, (
-                f"{cid}: owner {data['owner']!r} is not in config/owner-colors.csv"
+                f"{cid}: owner {data['owner']!r} is not in catalog/owner-colors.csv"
             )
 
 

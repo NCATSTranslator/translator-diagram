@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NCATSTranslator/translator-diagram/schema/component.schema.json",
+  "$id": "https://github.com/NCATSTranslator/translator-diagram/catalog/schema/component.schema.json",
   "title": "Translator component",
   "description": "One Translator platform component, as recorded in components/<id>.yaml. Fields hold pointers to the places that already know about this component; a field that is absent has not been recorded yet, and a field that is explicitly null has been checked and does not exist.",
   "type": "object",
@@ -30,7 +30,7 @@
       ]
     },
     "owner": {
-      "description": "Team that owns the component. Must appear in config/owner-colors.csv.",
+      "description": "Team that owns the component. Must appear in owner-colors.csv, beside this schema directory.",
       "type": "string",
       "minLength": 1
     },

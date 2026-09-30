@@ -221,7 +221,7 @@ def test_the_real_files_all_parse():
     # actual repository data still fits the parser.
     from pathlib import Path
 
-    components = load_components(Path(__file__).resolve().parent.parent / "components")
+    components = load_components(Path(__file__).resolve().parent.parent / "catalog" / "components")
     assert components
     assert all(c.id and c.name and c.owner for c in components)
 
@@ -235,7 +235,7 @@ def test_the_real_files_fill_the_fields_the_dashboard_reads():
     # zero means the parser and the files have stopped agreeing.
     from pathlib import Path
 
-    components = load_components(Path(__file__).resolve().parent.parent / "components")
+    components = load_components(Path(__file__).resolve().parent.parent / "catalog" / "components")
     populated = {
         "refactor_status": sum(1 for c in components if c.refactor_status),
         "layer": sum(1 for c in components if c.layer),

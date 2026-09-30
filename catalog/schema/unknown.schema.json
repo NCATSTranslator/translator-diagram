@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/NCATSTranslator/translator-diagram/schema/unknown.schema.json",
+  "$id": "https://github.com/NCATSTranslator/translator-diagram/catalog/schema/unknown.schema.json",
   "title": "Unattributed identifiers",
   "description": "Identifiers and URLs observed in the Translator platform that have not been attributed to a component in components/. A holding pen, not a component: entries leave it by being promoted into a component file or by being confirmed out of use.",
   "type": "object",

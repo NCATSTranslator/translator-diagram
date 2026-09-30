@@ -21,10 +21,10 @@ from translator_diagram.components import load_components
 from translator_diagram.stages import UNPLACED_TITLE, in_stage_order, load_stages
 
 ROOT = Path(__file__).resolve().parent.parent
-STAGES_PATH = ROOT / "config" / "flow-steps.yaml"
+STAGES_PATH = ROOT / "catalog" / "flow-steps.yaml"
 
 FIX_IT = (
-    "Place it in a stage in config/flow-steps.yaml, or name it under "
+    "Place it in a stage in catalog/flow-steps.yaml, or name it under "
     "`unplaced` if it genuinely belongs to none yet."
 )
 
@@ -41,7 +41,7 @@ def stages():
 
 @pytest.fixture(scope="module")
 def components():
-    return load_components(ROOT / "components")
+    return load_components(ROOT / "catalog" / "components")
 
 
 @pytest.fixture(scope="module")
