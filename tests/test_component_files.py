@@ -113,6 +113,25 @@ class TestSchema:
         document["identifiers"]["helm_chart"] = ["shepherd", "shepherd"]
         assert list(validator.iter_errors(document))
 
+    @pytest.mark.parametrize(
+        "path",
+        [("hosted_at",), ("environments", "ci", "location"), ("layer",)],
+        ids=lambda p: p[-1],
+    )
+    def test_a_misspelt_host_or_layer_is_refused(self, schema, path):
+        # The code compares these by exact text (`hosted_at == "Local"`, a
+        # row per layer), so a typo would pass silently as a new host or a new
+        # band. test_file_validates only sees files that already comply, so it
+        # would not notice the enum going missing; this does.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "docmetadata-api.yaml")
+        *parents, key = path
+        target = document
+        for step in parents:
+            target = target[step]
+        target[key] = "itrb"
+        assert list(validator.iter_errors(document))
+
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
         errors = sorted(

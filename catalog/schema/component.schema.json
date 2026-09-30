@@ -64,10 +64,16 @@
       ]
     },
     "layer": {
-      "description": "The band of the architecture this component sits in, which the diagram draws as a row. Null where none has been assigned.",
-      "type": [
-        "string",
-        "null"
+      "description": "The band of the architecture this component sits in, which the diagram draws as a row. Null where none has been assigned. A new band is added to this list in the same change as the first component in it, so a misspelt one fails validation rather than drawing a row of its own.",
+      "enum": [
+        "ARS and UI",
+        "DINGO Ingests",
+        "DogPark and Retriever",
+        "KGX Storage",
+        "Shared services",
+        "Shepherd",
+        "TSDK/TCT",
+        null
       ]
     },
     "part_of": {
@@ -78,11 +84,8 @@
       ]
     },
     "hosted_at": {
-      "description": "Where the component runs: ITRB for most, otherwise the site hosting it (RENCI, Scripps, DogPark AWS, Local). Each environment also records its own `location`.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "description": "Where the component runs; see $defs/host for the values. Each environment also records its own `location`.",
+      "$ref": "#/$defs/host"
     },
     "identifiers": {
       "description": "This component's name in each of the other naming spaces. Every one of these is assigned independently of the others.",
@@ -367,10 +370,7 @@
           "pattern": "^https?://"
         },
         "location": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/host"
         },
         "endpoints": {
           "description": "Per-environment override for when this environment does not follow the shared `endpoints` paths.",
@@ -391,6 +391,17 @@
         "type": "string",
         "pattern": "^~?[A-Za-z0-9][A-Za-z0-9._-]*$"
       }
+    },
+    "host": {
+      "description": "Where something runs. ITRB for most; otherwise the site hosting it. A new site is added here, in the same change as the first component that uses it, so a misspelt one fails validation rather than quietly reading as a new host.",
+      "enum": [
+        "ITRB",
+        "RENCI",
+        "Scripps",
+        "DogPark AWS",
+        "Local",
+        null
+      ]
     }
   }
 }

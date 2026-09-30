@@ -41,6 +41,11 @@ uv run pytest
 - Every id in `connections.gets_results_from` or `connections.calls` has a
   file. That is why `docmetadata-api` has one: `ui` calls it.
 - Every `owner` appears in `owner-colors.csv`.
+- `hosted_at`, each environment's `location`, and `layer` take one of the
+  values listed in `schema/component.schema.json` (`$defs/host` for the first
+  two). A new host or layer is added there in the same change as the first
+  component that uses it, so a misspelling fails rather than quietly becoming
+  a new one.
 - `endpoints` values are relative paths, never URLs.
 - No file writes a `diagram:` flag at its default, which keeps that block
   absent rather than 26 copies of `ubiquitous: false`.
