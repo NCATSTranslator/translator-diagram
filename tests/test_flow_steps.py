@@ -1,4 +1,4 @@
-"""config/flow-steps.yaml — the stages, and the row order they define.
+"""catalog/flow-steps.yaml — the stages, and the row order they define.
 
 Named for the file rather than for a module, like test_component_files.py.
 `load_stages` is tested in test_stages.py; what is checked here is the data:
@@ -21,10 +21,10 @@ from translator_diagram.components import load_components
 from translator_diagram.stages import UNPLACED_TITLE, in_stage_order, load_stages
 
 ROOT = Path(__file__).resolve().parent.parent
-STAGES_PATH = ROOT / "config" / "flow-steps.yaml"
+STAGES_PATH = ROOT / "catalog" / "flow-steps.yaml"
 
 FIX_IT = (
-    "Place it in a stage in config/flow-steps.yaml, or name it under "
+    "Place it in a stage in catalog/flow-steps.yaml, or name it under "
     "`unplaced` if it genuinely belongs to none yet."
 )
 
@@ -41,7 +41,7 @@ def stages():
 
 @pytest.fixture(scope="module")
 def components():
-    return load_components(ROOT / "components")
+    return load_components(ROOT / "catalog" / "components")
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +65,7 @@ def test_every_listed_component_exists(components, listed):
     # A typo here is invisible on the page: the id simply never matches, and
     # the component it meant to place falls to the bottom instead.
     unknown = sorted(set(listed) - {c.id for c in components})
-    assert not unknown, f"Ids with no components/<id>.yaml: {unknown}"
+    assert not unknown, f"Ids with no catalog/components/<id>.yaml: {unknown}"
 
 
 def test_the_stages_are_the_page_order(components, stages):

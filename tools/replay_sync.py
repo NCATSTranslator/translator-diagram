@@ -88,7 +88,7 @@ def main() -> None:
     shutil.rmtree(out, ignore_errors=True)
     shutil.copytree(snapshot, out)
     lines: list[str] = []
-    sync(load_components(Path("components")), out, fetcher=replayer(snapshot),
+    sync(load_components(Path("catalog/components")), out, fetcher=replayer(snapshot),
          max_age=0, echo=lines.append)
     print(f"{len(lines)} lines echoed; compare {normalise(out, lines)}")
 

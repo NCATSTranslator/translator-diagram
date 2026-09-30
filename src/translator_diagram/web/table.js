@@ -235,7 +235,7 @@
 
   /* A band names its group and, in stage order, says what the group is for.
      The number alone was true and useless: "Step 6" tells a reader where the
-     rows sit, not what they do. Both come from config/flow-steps.yaml.
+     rows sit, not what they do. Both come from catalog/flow-steps.yaml.
 
      It is a header, not a row, and everything in it is on the left: a count
      pushed to the right edge landed under the `prod` column and read as a

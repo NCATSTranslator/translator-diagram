@@ -7,9 +7,9 @@ import click
 import pytest
 
 from translator_diagram.colors import (
-    CONFIG_OWNER_COLORS_PATH,
     FALLBACK_COLORS,
     HEX_COLOR_RE,
+    OWNER_COLORS_PATH,
     PACKAGED_OWNER_COLORS,
     ColorAssigner,
     delta_e,
@@ -19,7 +19,7 @@ from translator_diagram.colors import (
     text_color_for,
 )
 
-PALETTE = Path(__file__).resolve().parent.parent / "config" / "owner-colors.csv"
+PALETTE = Path(__file__).resolve().parent.parent / "catalog" / "owner-colors.csv"
 
 
 class TestColorAssigner:
@@ -99,7 +99,7 @@ class TestOwnerChipsAreReadable:
         failures = {
             owner: round(_contrast(color, text_color_for(color)), 2)
             for owner, color in load_owner_colors(
-                root / "config" / "owner-colors.csv"
+                root / "catalog" / "owner-colors.csv"
             ).items()
             if _contrast(color, text_color_for(color)) < 4.5
         }
@@ -183,7 +183,7 @@ class TestPaletteSeparation:
         worst, owner_a, owner_b = distances[0]
         assert worst >= self.FLOOR, (
             f"{owner_a} and {owner_b} are {worst:.1f} dE apart, below the "
-            f"{self.FLOOR} floor in docs/owner-colours.md. Two owner chips "
+            f"{self.FLOOR} floor in catalog/owner-colours.md. Two owner chips "
             f"that close read as the same team."
         )
 
@@ -242,10 +242,10 @@ class TestLoadOwnerColors:
         assert "NCATS" in result
         assert result["NCATS"].startswith("#")
 
-    def test_the_checkouts_config_copy_wins(self, tmp_path, monkeypatch):
-        config = tmp_path / "config"
-        config.mkdir()
-        (config / "owner-colors.csv").write_text(
+    def test_the_checkouts_catalog_copy_wins(self, tmp_path, monkeypatch):
+        catalog = tmp_path / "catalog"
+        catalog.mkdir()
+        (catalog / "owner-colors.csv").write_text(
             "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
         )
         monkeypatch.chdir(tmp_path)
@@ -259,9 +259,9 @@ class TestLoadOwnerColors:
         # not, running from data/ — the scratch directory AGENTS.md points
         # agents at — would take the sheet ID from the checkout but the
         # colours from the packaged copy, with nothing said.
-        config = tmp_path / "config"
-        config.mkdir()
-        (config / "owner-colors.csv").write_text(
+        catalog = tmp_path / "catalog"
+        catalog.mkdir()
+        (catalog / "owner-colors.csv").write_text(
             "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
         )
         scratch = tmp_path / "data"
@@ -270,9 +270,9 @@ class TestLoadOwnerColors:
         assert load_owner_colors() == {"OnlyHere": "#123456"}
 
     def test_the_build_ships_the_file_the_fallback_reads(self):
-        # There is one owner-colors.csv, at config/owner-colors.csv, and the
+        # There is one owner-colors.csv, at catalog/owner-colors.csv, and the
         # build maps it into the wheel so an installed generate-diagram with no
-        # config/ to read still finds it. Nothing checks that at import time --
+        # catalog/ to read still finds it. Nothing checks that at import time --
         # in a source checkout the packaged path genuinely is not there -- so
         # this asserts the packaging instead: the force-include has to name the
         # same member `load_owner_colors` asks importlib.resources for, or the
@@ -286,13 +286,13 @@ class TestLoadOwnerColors:
             ]["force-include"]
         package, member = PACKAGED_OWNER_COLORS
         source, = [s for s, d in include.items() if d == f"{package}/{member}"]
-        assert Path(source) == CONFIG_OWNER_COLORS_PATH
+        assert Path(source) == OWNER_COLORS_PATH
         assert (root / source).is_file(), f"{source} is what the build ships"
 
     def test_an_explicit_path_beats_both(self, tmp_path, monkeypatch):
-        config = tmp_path / "config"
-        config.mkdir()
-        (config / "owner-colors.csv").write_text(
+        catalog = tmp_path / "catalog"
+        catalog.mkdir()
+        (catalog / "owner-colors.csv").write_text(
             "owner,color\nOnlyHere,#123456\n", encoding="utf-8"
         )
         explicit = tmp_path / "other.csv"

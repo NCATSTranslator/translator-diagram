@@ -20,7 +20,7 @@ import click
 # loading.py, which uses find_dotenv(usecwd=True) and so walks them too.
 # Without it, running from a subdirectory of the checkout took the sheet ID
 # from the repo's .env but the colours from the packaged copy.
-CONFIG_OWNER_COLORS_PATH = Path("config") / "owner-colors.csv"
+OWNER_COLORS_PATH = Path("catalog") / "owner-colors.csv"
 # At the package root rather than under web/: this is a colour table the
 # diagram generator reads, and nothing about it belongs to a browser.
 PACKAGED_OWNER_COLORS = ("translator_diagram", "owner-colors.csv")
@@ -92,7 +92,7 @@ def metallic_stops(fill_hex: str) -> tuple[str, str, str, str]:
     flat swatches, and a brushed finish is four stops: a highlight, the colour
     itself, a shadow, and a softer second highlight where the light comes back
     round. All four are derived from the single hex in
-    `config/owner-colors.csv`, and that is the point of the function. The
+    `catalog/owner-colors.csv`, and that is the point of the function. The
     alternative is a hand-written gradient per owner in the CSS and a matching
     set in the SVG legend — two files nobody edits together, whose failure mode
     is silent: the page and the diagram end up disagreeing about what colour a
@@ -240,7 +240,7 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
 
     Order is preserved from the file; that order also determines legend order.
 
-    With no path, config/owner-colors.csv in the working directory or any
+    With no path, catalog/owner-colors.csv in the working directory or any
     directory above it wins, and the copy shipped inside the package is the
     fallback. The packaged copy is reached through importlib.resources rather
     than __file__, which need not be a real filesystem path in a non-editable
@@ -248,7 +248,7 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
     """
     if path is not None:
         return _read_owner_colors(path)
-    found = _find_config_owner_colors()
+    found = _find_owner_colors()
     if found is not None:
         return _read_owner_colors(found)
     package, member = PACKAGED_OWNER_COLORS
@@ -256,11 +256,11 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
         return _read_owner_colors(packaged)
 
 
-def _find_config_owner_colors() -> Path | None:
-    """config/owner-colors.csv in the working directory or the nearest parent."""
+def _find_owner_colors() -> Path | None:
+    """catalog/owner-colors.csv in the working directory or the nearest parent."""
     cwd = Path.cwd()
     for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_OWNER_COLORS_PATH
+        candidate = directory / OWNER_COLORS_PATH
         if candidate.exists():
             return candidate
     return None

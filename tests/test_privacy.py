@@ -468,7 +468,7 @@ class TestVerify:
             pytest.skip("no local sync; run sync-components")
         policy = load_policy()
         payload = build_payload(
-            load_components(pathlib.Path("components")), SyncedData(sync_dir), policy
+            load_components(pathlib.Path("catalog/components")), SyncedData(sync_dir), policy
         )
         verify(payload, policy)
 

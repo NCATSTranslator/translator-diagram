@@ -19,7 +19,7 @@ from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
 from .synced_data import SyncedData
 
-DEFAULT_COMPONENTS = Path("components")
+DEFAULT_COMPONENTS = Path("catalog/components")
 DEFAULT_SYNC_DIR = Path("data/sync")
 DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 

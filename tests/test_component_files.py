@@ -1,4 +1,4 @@
-"""The components/*.yaml data files, and the schema they must satisfy.
+"""The catalog/components/*.yaml data files, and the schema they must satisfy.
 
 Named for the files rather than for a module: `tests/test_components.py` tests
 `components.py`, which parses them. This one asserts the data is well formed
@@ -18,10 +18,11 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPONENTS_DIR = ROOT / "components"
-SCHEMA_PATH = ROOT / "schema" / "component.schema.json"
-UNKNOWN_PATH = ROOT / "unknown.yaml"
-UNKNOWN_SCHEMA_PATH = ROOT / "schema" / "unknown.schema.json"
+CATALOG = ROOT / "catalog"
+COMPONENTS_DIR = CATALOG / "components"
+SCHEMA_PATH = CATALOG / "schema" / "component.schema.json"
+UNKNOWN_PATH = CATALOG / "unknown.yaml"
+UNKNOWN_SCHEMA_PATH = CATALOG / "schema" / "unknown.schema.json"
 
 # The `diagram:` flags and the values the schema already gives them.
 DIAGRAM_FLAG_DEFAULTS = {"ubiquitous": False, "hide": False}
@@ -194,11 +195,11 @@ class TestOwners:
     def test_every_owner_has_a_colour(self, components):
         # A new owner arriving without a colour would silently take a fallback
         # from the palette, and the legend would stop matching the sheet.
-        with (ROOT / "config" / "owner-colors.csv").open(encoding="utf-8-sig") as f:
+        with (CATALOG / "owner-colors.csv").open(encoding="utf-8-sig") as f:
             known = {row["owner"] for row in csv.DictReader(f)}
         for cid, data in components.items():
             assert data["owner"] in known, (
-                f"{cid}: owner {data['owner']!r} is not in config/owner-colors.csv"
+                f"{cid}: owner {data['owner']!r} is not in catalog/owner-colors.csv"
             )
 
 
@@ -243,7 +244,7 @@ class TestUnknown:
     def test_status_requires_the_field_that_justifies_it(self, status, field):
         # test_validates only runs the schema over the real file, which
         # already complies, so it would not notice one of these `if`/`then`
-        # rules going missing. docs/component-metadata.md's table promises
+        # rules going missing. catalog/README.md's table promises
         # them; this holds the schema to it.
         schema = json.loads(UNKNOWN_SCHEMA_PATH.read_text(encoding="utf-8"))
         validator = _validator_for(schema)(schema)
@@ -269,7 +270,7 @@ class TestUnknown:
             name = entry["name"]
             assert name not in owners, (
                 f"OTel service {name!r} is in unknown.yaml but is already "
-                f"claimed by components/{owners[name]}.yaml — promote it by "
+                f"claimed by catalog/components/{owners[name]}.yaml — promote it by "
                 f"deleting the unknown.yaml entry"
             )
             owners[name] = "unknown.yaml"
@@ -297,7 +298,7 @@ class TestUnknown:
                 continue
             assert entry["component"] not in claimed_charts.get(entry["name"], []), (
                 f"unknown.yaml: chart {entry['name']!r} is marked not-recorded "
-                f"but components/{entry['component']}.yaml now claims it — "
+                f"but catalog/components/{entry['component']}.yaml now claims it — "
                 f"delete the entry"
             )
 
@@ -310,7 +311,7 @@ class TestUnknown:
                 continue
             assert entry["component"] not in components, (
                 f"unknown.yaml: {entry['name']!r} is marked not-recorded but "
-                f"components/{entry['component']}.yaml exists — move the name "
+                f"catalog/components/{entry['component']}.yaml exists — move the name "
                 f"into that file's identifiers.otel_services"
             )
 
@@ -325,5 +326,5 @@ class TestEnrichedExample:
         component = _load(COMPONENTS_DIR / "name-lookup.yaml")
         assert example == component, (
             "docs/examples/name-lookup-enriched.yaml's `recorded:` block is no "
-            "longer components/name-lookup.yaml verbatim"
+            "longer catalog/components/name-lookup.yaml verbatim"
         )

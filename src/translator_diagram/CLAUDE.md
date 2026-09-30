@@ -41,7 +41,7 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` and `Deployment` (one `components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
 | `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
 | `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
@@ -50,7 +50,7 @@ The dashboard is a second, parallel stack over the same components:
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
 | `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
-| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `config/flow-steps.yaml`, hand-written rather than computed |
+| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
 | `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
@@ -170,10 +170,10 @@ produces. A missing `id` column, and a file whose rows are all id-less, are
 ## Common change patterns
 
 **Change the dashboard's row order, or what a band says** →
-`config/flow-steps.yaml`. It lists the stages in page order, each with a title,
+`catalog/flow-steps.yaml`. It lists the stages in page order, each with a title,
 a description and the components it holds, shown in the order it lists them.
 Prose about the platform, and the order it is read in, belong where the people
-who know both can edit them — same reasoning as `config/owner-colors.csv`.
+who know both can edit them — same reasoning as `catalog/owner-colors.csv`.
 
 **That file is the order**, not labels on a computed one. It began as the
 latter, and the computed order was wrong in ways the edges cannot fix: only 13
@@ -191,19 +191,19 @@ with no bands, and that fallback is exactly why a missing file is refused: a
 build run from outside a checkout would otherwise publish the derived order the
 file exists to replace, and look finished doing it.
 
-**Change owner node colours** → edit `config/owner-colors.csv`. No code
+**Change owner node colours** → edit `catalog/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:
 project managers change colours without touching Python. Don't move it into a
 constant. There is one copy: the wheel build maps this file to
 `translator_diagram/owner-colors.csv`, which is where an install with no
 checkout to read falls back to, so nothing has to be kept in step by hand. In
 a source checkout that packaged path does not exist and nothing needs it,
-because `config/` is right there. See `load_owner_colors` for the resolution
+because `catalog/` is right there. See `load_owner_colors` for the resolution
  order and `[tool.hatch.build.targets.wheel.force-include]` for the mapping.
 
 The four rules constraining a new owner colour — which hues are reserved, the
 contrast floor, the luminance line, and the fact that the palette is full — are
-in [`docs/owner-colours.md`](../../docs/owner-colours.md), where somebody
+in [`catalog/owner-colours.md`](../../catalog/owner-colours.md), where somebody
 choosing a colour will find them.
 
 Generating that copy at build time is the obvious simplification and it does
@@ -447,7 +447,7 @@ tile counting things the table does not show.
 rendered from the rows in them, so the Engineering stage — `jaeger` and
 `test-harness`, the only two in it — is absent from a published build rather
 than showing as an empty header. Step numbers come from the stage's position
-in `config/flow-steps.yaml`, so the others are not renumbered; a published page
+in `catalog/flow-steps.yaml`, so the others are not renumbered; a published page
 runs 1–8 and skips 9.
 
 **`edges` and `stages` are built after `privacy.apply`.** The map reads the

@@ -3,8 +3,8 @@
 Two commands over the Translator platform's components, in one package under
 `src/translator_diagram/`: `generate-diagram` renders Graphviz pictures from a
 Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
-`components/*.yaml`. [README.md](README.md) is the user-facing documentation and
-the faster way in.
+`catalog/components/*.yaml`. [README.md](README.md) is the user-facing
+documentation and the faster way in.
 
 This file is what applies to every session. The detail that only matters once
 you are in a particular directory lives beside that directory, so it is read
@@ -14,10 +14,10 @@ when it is relevant rather than every time:
 |---|---|
 | [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) | The module map, the import rules, the data model, "I want to change X → open this", and two sections of decisions that look wrong and aren't. **Read it before changing any module.** |
 | [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) | The browser half: how to screenshot and measure the page, how to test its JS, and the browser-side decisions that look wrong and aren't |
-| [`components/CLAUDE.md`](components/CLAUDE.md) | What a `components/<id>.yaml` must contain and which rules the tests enforce on it |
+| [`catalog/CLAUDE.md`](catalog/CLAUDE.md), [`catalog/README.md`](catalog/README.md) | Everything a curator edits. The README is the guide: what a component file must contain, what each `unknown.yaml` status means, and which rules the tests enforce |
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
-| [`docs/owner-colours.md`](docs/owner-colours.md) | The four constraints on a new team colour |
+| [`catalog/owner-colours.md`](catalog/owner-colours.md) | The four constraints on a new team colour |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** *Working agreements* below. Then, before simplifying anything in
@@ -89,11 +89,14 @@ rebuilds. `--google-sheet` reaches the real sheet, so prefer a local CSV when
 testing. Both commands must stay easy for a human to run: run them yourself when
 it helps. The README has the full flag list.
 
-## The four config files are data, not code
+## The catalog and config are data, not code
 
-`config/owner-colors.csv`, `config/flow-steps.yaml`, `config/privacy.yaml` and
-`components/*.yaml` are edited by people who know the platform and do not want
-to open a Python module. That is deliberate and worth protecting: when a change
+Everything under `catalog/` — the component files, `unknown.yaml`,
+`flow-steps.yaml`, `owner-colors.csv` and their schemas — is edited by people
+who know the platform and do not want to open a Python module, and it is kept
+in that one directory so they never need to look outside it.
+`config/privacy.yaml` is the same kind of file, but a publication decision
+rather than curation. That is deliberate and worth protecting: when a change
 could be made either in one of those files or in code, it belongs in the file.
 Each is validated — by a schema, a test, or a hard error at build time — so a
 wrong edit fails loudly rather than silently doing nothing.

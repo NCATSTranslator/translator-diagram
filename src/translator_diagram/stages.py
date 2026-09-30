@@ -1,4 +1,4 @@
-"""The order the overview is read in, from `config/flow-steps.yaml`.
+"""The order the overview is read in, from `catalog/flow-steps.yaml`.
 
 The bands are hand-written rather than computed. A plausible-looking order
 derived from the recorded edges is worse than an honest one someone chose,
@@ -14,17 +14,17 @@ import click
 from .components import ComponentFile, read_yaml
 from .flow import in_flow_order
 
-CONFIG_STAGES_PATH = Path("config/flow-steps.yaml")
+STAGES_PATH = Path("catalog/flow-steps.yaml")
 
 
 UNPLACED_TITLE = "Not yet placed"
 
 
 def _find_stages() -> Path | None:
-    """config/flow-steps.yaml in the working directory or the nearest parent."""
+    """catalog/flow-steps.yaml in the working directory or the nearest parent."""
     cwd = Path.cwd()
     for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_STAGES_PATH
+        candidate = directory / STAGES_PATH
         if candidate.exists():
             return candidate
     return None
@@ -55,7 +55,7 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     found = path if path is not None else _find_stages()
     if found is None:
         raise click.ClickException(
-            f"No stage file at {CONFIG_STAGES_PATH}. It sets the row order, "
+            f"No stage file at {STAGES_PATH}. It sets the row order, "
             f"and without it the page falls back to data-flow order. Run from "
             f"the repository root."
         )
@@ -123,7 +123,7 @@ def stage_blocks(
     Engineering stage holds jaeger and test-harness and nothing else, and a
     published build shows no heading for it rather than a heading over a gap.
 
-    `step` is the stage's position in `config/flow-steps.yaml`, so the stages
+    `step` is the stage's position in `catalog/flow-steps.yaml`, so the stages
     that remain keep the numbers they have locally: a published page runs 1–8
     and skips 9, rather than renumbering and disagreeing with the full build
     about which step Shepherd is.

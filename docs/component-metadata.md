@@ -76,17 +76,20 @@ actually offers today, and where each one falls short.
 
 ## The format
 
-One file per component, `components/<id>.yaml`. The filename stem **is** the
-id — a test enforces it. Each team edits its own file, `git log` gives
-per-component history, and a future `CODEOWNERS` can route review.
+One file per component, `catalog/components/<id>.yaml`. The filename stem
+**is** the id — a test enforces it. Each team edits its own file, `git log` gives
+per-component history, and a future `CODEOWNERS` can route review. They
+sit in their own subdirectory of `catalog/`, beside everything else a curator
+edits, so that every `*.yaml` in it is exactly one component and nothing that
+reads them needs an exception.
 
 YAML rather than TOML because every neighbour in this ecosystem is YAML — the
 infores catalog, SmartAPI specs, Helm charts, mkdocs, GitHub Actions — and
 because the data is nested and list-heavy in ways TOML renders awkwardly.
 Both support comments, so that was not the deciding factor.
 
-`schema/component.schema.json` is the authoritative field list.
-`components/name-lookup.yaml` is the worked example; here it is in full:
+`catalog/schema/component.schema.json` is the authoritative field list.
+`catalog/components/name-lookup.yaml` is the worked example; here it is in full:
 
 ```yaml
 id: name-lookup
@@ -146,109 +149,23 @@ that are Shepherd *operations* rather than components, twelve that belong to
 components with no file yet, two that wait on a maintainer's decision, and one
 we cannot place. The Helm chart index has the same problem with more entries.
 
-Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
-the evidence for whatever we do believe. Entries leave it in one of two ways:
+Those go in [`catalog/unknown.yaml`](../catalog/unknown.yaml) rather than
+being dropped, with the evidence for whatever we do believe, so the next
+person does not have to rediscover them. One file rather than one per entry,
+because an unattributed entry has no component id to name a file after, and a
+single list is what a test can check for an identifier claimed twice — which
+is what stops a retired entry from quietly coming back.
 
-- **promoted** — we learn which component it belongs to, so the identifier
-  moves into that component's file (or gets a new component file) and the
-  entry is deleted;
-- **retired** — someone confirms it is out of use, so it stays with
-  `status: not-in-use` and nobody investigates it twice.
-
-Every entry has a `status`, which says how much we know and what would move it
-on. The schema holds a one-line version of this table and rejects any other
-value.
-
-| `status` | Means | Must also have | Leaves by |
-|---|---|---|---|
-| `unattributed` | We do not know what this is, or which component it belongs to | | Finding out, then taking whichever status fits |
-| `not-recorded` | It belongs to a component the sheet lists, which has no file yet | `component`, the sheet row's id | Promotion, when the file is written. A test fails once the file exists and the entry is still here |
-| `needs-decision` | We know what it is, but where it is recorded is a maintainer's call — including whether a service the sheet does not list should become a component | `note`, saying what the decision is | `not-recorded`, promotion or `out-of-scope`, once someone decides |
-| `operation` | A processing step reporting under its own service name, not a component | `component`, the service it is a step of | Only by becoming `not-in-use`. It stays so nobody attributes it |
-| `out-of-scope` | We know what it is, and it is not something this repo records as a component: part of a legacy or adjacent stack, or not the kind of identifier its section lists | `evidence`, saying why | `not-recorded`, if the component sheet gains a row for it; `not-in-use`, if it stops running |
-| `not-in-use` | Confirmed retired | | Nothing. It stays so nobody investigates it twice |
-
-Three distinctions do most of the work:
-
-- **`unattributed` versus `needs-decision`.** The question is whether more
-  looking would settle it. `shepherd-server` is understood from its traces,
-  and what is missing is a decision about whether the shared Shepherd server
-  is its own component. A chart whose `Chart.yaml` is the unedited
-  `helm create` default is `unattributed` until someone looks inside it.
-- **`needs-decision` versus `out-of-scope`.** `out-of-scope` is itself a
-  decision, and one nobody expects to revisit. If a maintainer could
-  reasonably want a component file for it, it is `needs-decision`.
-- **`out-of-scope` versus `not-in-use`.** A legacy chart that is still
-  deployed is `out-of-scope`, not retired. `not-in-use` means someone
-  confirmed it stopped running.
-
-`component` means slightly different things by section. On an OTel service it
-names the component the service belongs to. On a Helm chart it names the
-component the chart *deploys*, and one component may deploy several charts,
-since `identifiers.helm_chart` accepts a list. On an `unattributed` entry it is
-at most a guess, to be read alongside `evidence`.
-
-To find a chart's sheet row, compare the chart directory with the sheet's
-`ITRB App Name` column rather than its `Helm chart` column. For an
-ITRB-hosted row the app name is the chart directory, and `Helm chart` is
-filled on only two rows.
-
-`tests/test_component_files.py` enforces the part that would otherwise rot: no
-identifier may be claimed by a component *and* sit in `unknown.yaml`, no two
-components may claim the same one, and a `not-recorded` entry naming a
-component that now has a file fails until it is promoted.
-
-The same file takes other kinds of unattributed identifier as they turn up —
-`urls:` is already in the schema.
+What each `status` means and how an entry leaves it is in
+[`catalog/README.md`](../catalog/README.md#unknownyaml), beside the file.
 
 ### Conventions
 
-**Absent means "not recorded yet". Explicit `null` means "checked, there is
-none."** The sheet already needs this distinction — it writes `NA` in the
-`OpenAPI URL` column for components that genuinely have no OpenAPI document.
-Collapsing the two would send a fetcher back to the same dead ends forever.
-
-**Endpoints are relative paths, not URLs.** One line covers all four
-environments instead of four near-identical absolute URLs per endpoint kind.
-Where an environment does not follow the shared pattern, it carries its own
-`endpoints:` block. `node-annotator` is the live example and the reason the
-override exists: ci and test serve `webapp/openapi.json`, prod serves
-`openapi.json`, and ci and test are the intended convention going forward — so
-the override records the exception rather than the rule.
-
-**Environments are recorded only where SmartAPI cannot supply them.** For a
-registered component the block should be *absent*, and a fetcher fills it in.
-The unit is the environment, not the component: registration is manual and
-routinely partial, so a component can be registered for prod and say nothing
-about the ci and test it is also deployed to. `answer-appraiser` is the live
-example — its record lists production only — so its `environments:` block
-carries the two SmartAPI does not cover and leaves prod to the fetcher.
-
-**A `~` prefix marks a planned relationship**, unchanged from the sheet:
-`calls: [~jaeger]` is an edge we intend but have not built, and renders red.
-Note that a bare `~` is YAML `null`; the schema requires at least one
-character after it, so a stray tilde fails validation rather than becoming a
-silent null in the middle of a list.
-
-**The file set is closed under references.** Every id in
-`connections.gets_results_from` or `connections.calls` must have a file, even
-when the component itself is filtered out of the diagram — the generator's
-ghost-node rendering exists for exactly that case. `docmetadata-api` has a
-file only because `ui` calls it.
-
-**An empty list is a claim; a default flag is not.** `gets_results_from: []`
-says this component was checked and gets results from nothing, which is the
-absent-versus-`null` rule applied to a list — so `connections:` keeps its
-empty lists. A `diagram:` flag at its default says only what the schema
-already says, so it is not written at all, and the block goes with it once it
-is empty. The distinction is why one block is full of `[]` and the other is
-usually missing.
-
-**Public information only.** Every URL in this repo is already publicly
-reachable; the transltr.io endpoints are all discoverable through SmartAPI. A
-private repository may be *linked* (`visibility: private`), but nothing inside
-it may be copied here, and no fetcher may read it. That rule is what keeps
-this repo publishable without a per-field review.
+The rules a component file follows — absent versus `null`, relative
+endpoints, environments only where SmartAPI cannot supply them, the `~`
+prefix, a file set closed under references, and public information only — are
+in [`catalog/README.md`](../catalog/README.md#conventions), each with its
+reason, so that a curator finds them without leaving that directory.
 
 ## Open questions
 
@@ -321,7 +238,7 @@ the grounds that a wrong answer is worse than a missing one.
 
 Not in this pull request. The order after it:
 
-1. A fetcher reads `components/*.yaml`, queries SmartAPI once, fetches each
+1. A fetcher reads `catalog/components/*.yaml`, queries SmartAPI once, fetches each
    `openapi` and `status` endpoint, and writes an enriched `components.json`
    into the gitignored `data/`. It caches, and a component being down never
    fails the diagram.

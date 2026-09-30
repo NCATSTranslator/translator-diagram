@@ -2,7 +2,7 @@
 
 Separate from `helpers.py` on purpose: that file's `_comp` builds a `Component`
 -- one row of the sheet -- and this one builds a `ComponentFile`, one
-`components/<id>.yaml`. The two models deliberately do not know about each
+`catalog/components/<id>.yaml`. The two models deliberately do not know about each
 other, so neither builder can stand in for the other.
 """
 

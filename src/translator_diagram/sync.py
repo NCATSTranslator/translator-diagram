@@ -1,4 +1,4 @@
-"""Following the pointers in components/*.yaml out to their sources.
+"""Following the pointers in catalog/components/*.yaml out to their sources.
 
 Writes raw responses under data/sync/ and a manifest recording every fetch it
 attempted, including the ones that failed. The dashboard reads that directory;
@@ -871,7 +871,7 @@ def sync(
     # guessed at. Both lines are the sync's half of the data PR they ask for:
     # a chart nothing accounts for wants an entry in unknown.yaml, and a
     # registry record found by infores wants its id recorded in the component
-    # file. Neither is written anywhere by this command — components/*.yaml and
+    # file. Neither is written anywhere by this command — catalog/components/*.yaml and
     # unknown.yaml are hand-edited and test-enforced, and a fetcher that edited
     # them would be deciding what the maintainers decide.
     _echo_matching_summary(components, root, by_smartapi, echo)

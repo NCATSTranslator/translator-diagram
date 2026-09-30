@@ -1,4 +1,4 @@
-"""Ordering the overview by `config/flow-steps.yaml`.
+"""Ordering the overview by `catalog/flow-steps.yaml`.
 
 `test_flow_steps.py` is the companion to this file: it checks the shipped data
 file, while this checks the code that reads it -- the same split as
@@ -103,8 +103,8 @@ stages:
         # The same upward walk load_owner_colors and load_policy do: running
         # build-dashboard from anywhere inside a checkout finds the checkout's
         # stages, not nothing.
-        (tmp_path / "config").mkdir()
-        (tmp_path / "config" / "flow-steps.yaml").write_text(self.FILE)
+        (tmp_path / "catalog").mkdir()
+        (tmp_path / "catalog" / "flow-steps.yaml").write_text(self.FILE)
         deep = tmp_path / "a" / "b"
         deep.mkdir(parents=True)
         monkeypatch.chdir(deep)
