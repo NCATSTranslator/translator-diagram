@@ -444,6 +444,7 @@ class TestTheMetadataBlock:
         component = _comp(
             "svc",
             component_type="ARA",
+            description="Answers questions.",
             hosted_at="ITRB",
             part_of="Shepherd",
             itrb={"app": "shepherd-ci-pipeline", "group": "shepherd"},
@@ -463,6 +464,7 @@ class TestTheMetadataBlock:
         )
         row = build_rows([component], synced)[0]
         assert row["component_type"] == "ARA"
+        assert row["description"] == "Answers questions."
         assert (row["hosted_at"], row["part_of"]) == ("ITRB", "Shepherd")
         assert row["itrb"] == {"app": "shepherd-ci-pipeline", "group": "shepherd"}
         assert row["chart_names"] == ["one", "two"]

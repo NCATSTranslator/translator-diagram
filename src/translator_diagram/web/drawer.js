@@ -188,9 +188,11 @@
   }
 
   function headerHtml(row) {
-    // GitHub's own one-liner for the repository. It is the shortest true
-    // sentence about what this thing is, and it costs one line.
-    const blurb = (row.repository_meta || {}).description || "";
+    // The catalog's own one-liner, else GitHub's for the repository: the
+    // shortest true sentence about what this thing is, in one line. The
+    // catalog's wins because a repository's blurb can describe the repository
+    // rather than the service (docmetadata-api's reads as a fork request).
+    const blurb = row.description || (row.repository_meta || {}).description || "";
     const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer]
       .filter(filled)
       .map(esc)

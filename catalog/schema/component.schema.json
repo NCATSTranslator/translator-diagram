@@ -23,7 +23,7 @@
       "minLength": 1
     },
     "description": {
-      "description": "One or two sentences on what this component does.",
+      "description": "One or two sentences on what this component does. The dashboard shows it under the name in the details drawer, ahead of the source repository's GitHub description, so keep it publishable.",
       "type": [
         "string",
         "null"
