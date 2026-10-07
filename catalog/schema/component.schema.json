@@ -312,6 +312,35 @@
         }
       }
     },
+    "examples": {
+      "description": "Up to three requests someone could make to try this component, each a GET path relative to every environment's base URL, as `endpoints` are. Null means checked, and there is no meaningful example. At most three, because these document a component and smoke-check it; a test suite belongs in the Test Harness. A TRAPI component's SmartAPI record already points at its test data (`x-trapi.test_data_location`), so do not copy that here. GET only for now: a POST example needs `method` and `body`, added here in the same change as the first component that needs one.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "description",
+          "path"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "What this example asks for, and what it shows about the response.",
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "description": "Path and query string relative to an environment's base URL, e.g. `publications?pubids=PMC6365303`.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "environments": {
       "description": "Base URLs per environment. Record these only where SmartAPI does not already know them; for a registered component this block should be absent and filled by a fetcher.",
       "type": "object",

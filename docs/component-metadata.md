@@ -141,6 +141,12 @@ and `hide` — the two fields that really are about the picture rather than the
 component — and both default to `false`, which is what most components are.
 The block appears only in a file where one of them is `true`.
 
+There is no `examples:` block yet either. It holds up to three GET requests
+someone could make to try the component, as paths relative to each
+environment's base URL like `endpoints`; `docmetadata-api` is the first file
+with one, and what the field is for is in
+[`catalog/README.md`](../catalog/README.md#conventions).
+
 ### `unknown.yaml`
 
 Not every identifier we find belongs to a component we know about. The 41
@@ -162,10 +168,10 @@ What each `status` means and how an entry leaves it is in
 ### Conventions
 
 The rules a component file follows — absent versus `null`, relative
-endpoints, environments only where SmartAPI cannot supply them, the `~`
-prefix, a file set closed under references, and public information only — are
-in [`catalog/README.md`](../catalog/README.md#conventions), each with its
-reason, so that a curator finds them without leaving that directory.
+endpoints and examples, environments only where SmartAPI cannot supply them,
+the `~` prefix, a file set closed under references, and public information
+only — are in [`catalog/README.md`](../catalog/README.md#conventions), each
+with its reason, so that a curator finds them without leaving that directory.
 
 ## Open questions
 

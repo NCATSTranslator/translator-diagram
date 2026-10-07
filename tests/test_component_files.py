@@ -132,6 +132,16 @@ class TestSchema:
         target[key] = "itrb"
         assert list(validator.iter_errors(document))
 
+    def test_examples_stop_at_three(self, schema):
+        # Examples document a component and smoke-check it. A fourth is the
+        # start of a test suite, which belongs in the Test Harness instead.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "docmetadata-api.yaml")
+        example = {"description": "One PMID", "path": "publications?pubids=PMID:1"}
+        for count, allowed in ((0, False), (1, True), (3, True), (4, False)):
+            document["examples"] = [example] * count
+            assert bool(list(validator.iter_errors(document))) is not allowed, count
+
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
         errors = sorted(
@@ -233,6 +243,16 @@ class TestEndpoints:
                 continue
             assert not value.startswith(("http://", "https://", "/")), (
                 f"{path.name}: endpoints.{kind} must be relative, got {value!r}"
+            )
+
+    @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
+    def test_example_paths_are_relative(self, path):
+        # Joined onto each environment's base URL for the same reason, so one
+        # example covers every environment.
+        for i, example in enumerate(_load(path).get("examples") or []):
+            value = example["path"]
+            assert not value.startswith(("http://", "https://", "/")), (
+                f"{path.name}: examples[{i}].path must be relative, got {value!r}"
             )
 
 

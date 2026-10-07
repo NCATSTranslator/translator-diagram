@@ -46,7 +46,8 @@ uv run pytest
   two). A new host or layer is added there in the same change as the first
   component that uses it, so a misspelling fails rather than quietly becoming
   a new one.
-- `endpoints` values are relative paths, never URLs.
+- `endpoints` values and `examples` paths are relative paths, never URLs.
+- No component has more than three `examples`.
 - No file writes a `diagram:` flag at its default, which keeps that block
   absent rather than a copy of `ubiquitous: false` in every file.
 - Every component is either in a stage or listed under `unplaced` in
@@ -81,6 +82,16 @@ routinely partial, so a component can be registered for prod and say nothing
 about the ci and test it is also deployed to. `answer-appraiser` is the live
 example — its record lists production only — so its `environments:` block
 carries the two SmartAPI does not cover and leaves prod to the fetcher.
+
+**Examples are for trying a component, not testing it.** `examples` holds
+up to three GET requests someone could make to see what a component does,
+each a `description` and a `path` relative to every environment's base URL,
+the same convention as `endpoints`. [`components/docmetadata-api.yaml`](components/docmetadata-api.yaml)
+is the live example. Three is the cap because a longer list is a test suite,
+and those belong in the Test Harness. A TRAPI component's SmartAPI record
+already points at its test data, so don't copy that here. Most files have no
+examples yet; absent means not recorded, and nothing runs them yet — that is
+[#57](https://github.com/NCATSTranslator/translator-diagram/issues/57).
 
 **A `~` prefix marks a planned relationship**, unchanged from the sheet:
 `calls: [~jaeger]` is an edge we intend but have not built, and renders red.
