@@ -10,6 +10,7 @@
 
 id: retriever
 name: Retriever (query API)
+summary: API server to route calls to the different tiers
 owner: DOGSURF
 component_type: KP
 refactor_status: New in Refactor
@@ -38,6 +39,3 @@ repositories:
 
 endpoints:
   openapi: openapi.json
-
-notes: >-
-  API server to route calls to the different tiers

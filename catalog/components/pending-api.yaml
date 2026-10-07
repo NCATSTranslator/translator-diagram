@@ -10,6 +10,12 @@
 
 id: pending-api
 name: BioThings Pending API
+summary: Hosts a number of APIs from the previous phase.
+description: |-
+  Some have moved to CoCo's own ES server (nodenorm, annotator, nameres) and
+  the BTE ones are expected to be removed, but this host is likely to stay
+  live while any of its APIs are still in use, and could host tier 2 knowledge
+  graph APIs later.
 owner: DOGSURF
 refactor_status: Continues into Refactor
 layer: Shared services
@@ -51,9 +57,3 @@ environments:
   prod:
     url: https://biothings.transltr.io/
     location: ITRB
-
-notes: >-
-  Hosts a number of APIs from the previous phase. Some have moved to CoCo's own
-  ES server (nodenorm, annotator, nameres) and the BTE ones are expected to be
-  removed, but this host is likely to stay live while any of its APIs are still
-  in use, and could host tier 2 knowledge graph APIs later.

@@ -11,6 +11,7 @@ of truth in the meantime.
 
 import csv
 import json
+import re
 from pathlib import Path
 
 import jsonschema
@@ -165,6 +166,17 @@ class TestSchema:
         assert not errors, "\n".join(
             f"{path.name}: {'/'.join(str(p) for p in e.path) or '<root>'}: {e.message}"
             for e in errors
+        )
+
+    @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
+    def test_a_description_keeps_its_line_breaks(self, path):
+        # `>` folds a single line break into a space and a blank line into one
+        # break, so a Markdown list collapses into its first item and two
+        # paragraphs into one, and nothing errors. TD.fmt.prose needs the
+        # breaks as written, which only a `|` block keeps.
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"^description:\s*>", text, re.MULTILINE), (
+            f"{path.name}: write `description:` as a `|` block, not `>`"
         )
 
 

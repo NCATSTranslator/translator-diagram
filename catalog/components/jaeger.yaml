@@ -10,6 +10,8 @@
 
 id: jaeger
 name: Jaeger (OTel)
+summary: >-
+  Third-party software, not a Translator component: we deploy upstream Jaeger.
 owner: DOGSLED
 refactor_status: Continues into Refactor
 layer: Shared services
@@ -59,5 +61,4 @@ environments:
     location: ITRB
 
 notes: >-
-  Third-party software, not a Translator component: we deploy upstream
-  Jaeger. Only the chart is ours.
+  Only the chart is ours.

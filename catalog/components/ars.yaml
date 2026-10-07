@@ -10,6 +10,8 @@
 
 id: ars
 name: ARS
+description: |-
+  Calls SmartAPI on boot to fetch registration data
 owner: NCATS
 component_type: ARS
 refactor_status: Continues into Refactor
@@ -40,6 +42,3 @@ repositories:
 documentation:
   - url: https://github.com/NCATSTranslator/Translator-All/wiki/Autonomous-Relay-System-(ARS)
     kind: wiki
-
-notes: >-
-  Calls SmartAPI on boot to fetch registration data

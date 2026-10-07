@@ -10,6 +10,8 @@
 
 id: dogpark-tier-1
 name: "Tier 1: ElasticSearch (KGX split out by data source)"
+description: |-
+  Actual data later, called by retriever
 owner: DOGSURF
 refactor_status: New in Refactor
 layer: DogPark and Retriever
@@ -24,6 +26,3 @@ connections:
   gets_results_from: [dogpark-ranger]
   calls: []
   externals: []
-
-notes: >-
-  Actual data later, called by retriever

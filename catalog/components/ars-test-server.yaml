@@ -10,6 +10,7 @@
 
 id: ars-test-server
 name: ARS Test Server
+summary: A small server that periodically runs performance tests on a cron job
 owner: NCATS
 refactor_status: Continues into Refactor
 layer: ARS and UI
@@ -23,6 +24,3 @@ connections:
   gets_results_from: []
   calls: [ars]
   externals: []
-
-notes: >-
-  A small server that periodically runs performance tests on a cron job

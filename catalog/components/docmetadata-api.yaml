@@ -1,17 +1,5 @@
 # Document Metadata API (docmetadata-api)
 #
-# Returns PubMed metadata (journal name and abbreviation, article title,
-# volume, issue, publication year, month and day, and abstract) for up to 100
-# publication ids per request: `GET /publications?pubids=...&request_id=...`.
-# The response echoes `request_id` in a `_meta` block, with a timestamp, the
-# result count and the processing time, and lists the ids it could not find
-# under `not_found`; the target is p90 under 150 ms. The Translator UI calls it
-# to show the publications behind a result. The specification is the README of
-# https://github.com/ncats/DocumentMetadataAPI.
-#
-# Being replaced: Core-Components-Working-Group#15 plans to load pubmed2db's
-# export of PubMed into Node Annotator and serve these lookups from there.
-#
 # One Translator component. Fields hold *pointers* to the places that already
 # know about this component; see ../README.md for how to fill them in and
 # ../../docs/metadata-sources.md for what each of those places offers.
@@ -22,9 +10,34 @@
 
 id: docmetadata-api
 name: Document Metadata API
-description: >-
+summary: >-
   Looks up PubMed metadata (title, journal, publication date and abstract) by
   PMID or PMC id, for the Translator UI.
+description: |-
+  Returns PubMed metadata (journal name and abbreviation, article title,
+  volume, issue, publication year, month and day, and abstract) for up to 100
+  publication ids per request: `GET /publications?pubids=...&request_id=...`.
+  The response echoes `request_id` in a `_meta` block, with a timestamp, the
+  result count and the processing time, and lists the ids it could not find
+  under `not_found`; the target is p90 under 150 ms. The Translator UI calls it
+  to show the publications behind a result. The specification is the
+  [README](https://github.com/ncats/DocumentMetadataAPI#readme).
+
+  Not maintained, and the script that builds the TSV its MongoDB database is
+  loaded from is missing.
+  [Core-Components-Working-Group#15](https://github.com/NCATSTranslator/Core-Components-Working-Group/issues/15)
+  plans to replace it by loading
+  [pubmed2db](https://github.com/TranslatorSRI/pubmed2db)'s export of PubMed
+  into Node Annotator; pubmed2db is a data source, to be recorded as one under
+  [translator-diagram#56](https://github.com/NCATSTranslator/translator-diagram/issues/56).
+
+  The live service differs from the specification in its README, and a
+  replacement has to match what the UI actually receives:
+
+  - `not_found` is inside `results` rather than beside it;
+  - the `_meta` timestamp has no colon between minutes and seconds
+    (`18:0321Z`);
+  - PMC ids take no prefix (`PMC6365303`).
 owner: CoCoWG
 refactor_status: Removed after Refactor
 hosted_at: ITRB
@@ -86,13 +99,3 @@ environments:
   prod:
     url: https://docmetadata.transltr.io/
     location: ITRB
-
-notes: >-
-  Not maintained, and the script that builds the TSV its MongoDB database is
-  loaded from is missing. Core-Components-Working-Group#15 plans to replace
-  it by loading pubmed2db's export of PubMed into Node Annotator; pubmed2db
-  is a data source, to be recorded as one under translator-diagram#56. The
-  live service differs from the specification in its README, and a
-  replacement has to match what the UI actually receives: not_found is
-  inside results rather than beside it, the _meta timestamp has no colon
-  between minutes and seconds (18:0321Z), and PMC ids take no prefix.

@@ -10,6 +10,9 @@
 
 id: kgx-storage-pipeline
 name: KGX Storage
+summary: >-
+  A file browser over the Translator ingests, with a JSON health endpoint at
+  /health reporting how many metrics it has loaded.
 owner: DINGO
 refactor_status: New in Refactor
 layer: KGX Storage
@@ -42,7 +45,6 @@ environments:
     location: ITRB
 
 notes: >-
-  A file browser over the Translator ingests, with a JSON health endpoint at
-  /health reporting how many metrics it has loaded. It publishes no version
-  anywhere — not at /health, not in a document, and it is in no registry — so
-  its cell shows the health it reports and no version number.
+  It publishes no version anywhere — not at /health, not in a document, and it
+  is in no registry — so its cell shows the health it reports and no version
+  number.

@@ -48,7 +48,8 @@ uv run pytest
   a new one.
 - `endpoints` values and `examples` paths are relative paths, never URLs.
 - No component has more than three `examples`.
-- A `summary` is one line of at most 160 characters.
+- A `summary` is one line of at most 160 characters, and a `description` is a
+  `|` block rather than `>`.
 - No file writes a `diagram:` flag at its default, which keeps that block
   absent rather than a copy of `ubiquitous: false` in every file.
 - Every component is either in a stage or listed under `unplaced` in

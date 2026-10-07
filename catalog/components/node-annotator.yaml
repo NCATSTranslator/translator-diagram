@@ -10,6 +10,11 @@
 
 id: node-annotator
 name: Node Annotator
+description: |-
+  It is the planned home for the Document Metadata API's lookups
+  (docmetadata-api, Core-Components-Working-Group#15): pubmed2db's export of
+  PubMed would be loaded into it, behind a front end that finds one document
+  by PMID, PMC id or DOI and answers in the shape the UI already reads.
 owner: CoCoWG
 component_type: Utility
 refactor_status: Continues into Refactor
@@ -52,15 +57,11 @@ environments:
       openapi: openapi.json
 
 notes: >-
-  Registered in SmartAPI without an infores, and its ci/test servers carry
-  no x-maturity and are declared http:// not https://. SmartAPI registers it
-  at biothings.ci.transltr.io/annotator, which does not serve the OpenAPI
+  Registered in SmartAPI without an infores, and its ci/test servers carry no
+  x-maturity and are declared http:// not https://. SmartAPI registers it at
+  biothings.ci.transltr.io/annotator, which does not serve the OpenAPI
   document; annotator.ci.transltr.io does. Both were live on 2026-08-31, so
-  the ci base URL is recorded here rather than pulled. Prod serves its
-  OpenAPI at openapi.json rather than the webapp/openapi.json that ci and
-  test use, so it carries a per-environment override; ci and test are the
-  intended convention going forward. It is the planned home for the Document
-  Metadata API's lookups (docmetadata-api, Core-Components-Working-Group#15):
-  pubmed2db's export of PubMed would be loaded into it, behind a front end
-  that finds one document by PMID, PMC id or DOI and answers in the shape the
-  UI already reads.
+  the ci base URL is recorded here rather than pulled. Prod serves its OpenAPI
+  at openapi.json rather than the webapp/openapi.json that ci and test use, so
+  it carries a per-environment override; ci and test are the intended
+  convention going forward.

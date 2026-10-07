@@ -10,6 +10,8 @@
 
 id: shepherd-arax
 name: ARAX
+description: |-
+  Contains ARAX, ARAGORN and BTE
 owner: CATRAX
 component_type: ARA
 refactor_status: New in Refactor
@@ -48,6 +50,3 @@ repositories:
   - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/shepherd
     role: helm-chart
     visibility: public
-
-notes: >-
-  Contains ARAX, ARAGORN and BTE

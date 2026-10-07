@@ -10,6 +10,10 @@
 
 id: test-harness
 name: Test Harness
+description: |-
+  The Test Harness uses Smart API to grab the urls for the various components
+  it tests. It isn't really hosted, but is a spawned python script that runs
+  on the RENCI server.
 owner: DOGSLED
 refactor_status: Continues into Refactor
 layer: Shared services
@@ -35,8 +39,3 @@ repositories:
   - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/test-harness
     role: helm-chart
     visibility: public
-
-notes: >-
-  The Test Harness uses Smart API to grab the urls for the various
-  components it tests. It isn't really hosted, but is a spawned python
-  script that runs on the RENCI server.
