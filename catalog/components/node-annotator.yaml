@@ -11,6 +11,9 @@
 id: node-annotator
 name: Node Annotator
 description: |-
+  Node Annotator is used by the UI to retrieve node properties, such as
+  chemical/drug information.
+
   It is the planned home for the Document Metadata API's lookups
   (docmetadata-api, Core-Components-Working-Group#15): pubmed2db's export of
   PubMed would be loaded into it, behind a front end that finds one document
