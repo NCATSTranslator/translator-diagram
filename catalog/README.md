@@ -122,7 +122,7 @@ Entries leave it in one of two ways:
   moves into that component's file (or gets a new component file) and the
   entry is deleted;
 - **retired** — someone confirms it is out of use, so it stays with
-  `status: not-in-use` and nobody investigates it twice.
+  `status: retired` and nobody investigates it twice.
 
 Never delete an entry to make a test pass: an entry is removed only when its
 identifier moves into a component file.
@@ -136,9 +136,9 @@ value.
 | `unattributed` | We do not know what this is, or which component it belongs to | | Finding out, then taking whichever status fits |
 | `not-recorded` | It belongs to a component the sheet lists, which has no file yet | `component`, the sheet row's id | Promotion, when the file is written. A test fails once the file exists and the entry is still here |
 | `needs-decision` | We know what it is, but where it is recorded is a maintainer's call — including whether a service the sheet does not list should become a component | `note`, saying what the decision is | `not-recorded`, promotion or `out-of-scope`, once someone decides |
-| `operation` | A processing step reporting under its own service name, not a component | `component`, the service it is a step of | Only by becoming `not-in-use`. It stays so nobody attributes it |
-| `out-of-scope` | We know what it is, and it is not something this repo records as a component: part of a legacy or adjacent stack, or not the kind of identifier its section lists | `evidence`, saying why | `not-recorded`, if the component sheet gains a row for it; `not-in-use`, if it stops running |
-| `not-in-use` | Confirmed retired | | Nothing. It stays so nobody investigates it twice |
+| `operation` | A processing step reporting under its own service name, not a component | `component`, the service it is a step of | Only by becoming `retired`. It stays so nobody attributes it |
+| `out-of-scope` | We know what it is, and it is not something this repo records as a component: part of a legacy or adjacent stack, or not the kind of identifier its section lists | `evidence`, saying why | `not-recorded`, if the component sheet gains a row for it; `retired`, if it stops running |
+| `retired` | Someone confirmed it stopped running | | Nothing. It stays so nobody investigates it twice |
 
 Three distinctions do most of the work:
 
@@ -150,9 +150,10 @@ Three distinctions do most of the work:
 - **`needs-decision` versus `out-of-scope`.** `out-of-scope` is itself a
   decision, and one nobody expects to revisit. If a maintainer could
   reasonably want a component file for it, it is `needs-decision`.
-- **`out-of-scope` versus `not-in-use`.** A legacy chart that is still
-  deployed is `out-of-scope`, not retired. `not-in-use` means someone
-  confirmed it stopped running.
+- **`out-of-scope` versus `retired`.** A legacy chart that is still
+  deployed is `out-of-scope`, not retired. `retired` means someone
+  confirmed it stopped running, so something that has not started running
+  yet, such as a component still in development, is never `retired`.
 
 `component` means slightly different things by section. On an OTel service it
 names the component the service belongs to. On a Helm chart it names the

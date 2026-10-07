@@ -10,10 +10,10 @@
 #     identifier into that component's file (or write a new component file for
 #     it) and delete the entry here;
 #   - retired, when someone confirms it is no longer in use: set
-#     `status: not-in-use` and leave it, so it is not investigated twice.
+#     `status: retired` and leave it, so it is not investigated twice.
 #
 # `status` is one of unattributed, not-recorded, needs-decision, operation,
-# out-of-scope or not-in-use. What each means, when to use it and how an entry
+# out-of-scope or retired. What each means, when to use it and how an entry
 # leaves it: README.md, section `unknown.yaml`.
 #
 # Validated by schema/unknown.schema.json; see ../tests/test_component_files.py.
@@ -195,7 +195,7 @@ otel_services:
     component: strider
     note: A second service name for the same component, in the test collector.
 
-# Nothing has reached `status: not-in-use` yet: every name above was reporting
+# Nothing has reached `status: retired` yet: every name above was reporting
 # to a live collector on 2026-08-31.
 #
 # Promoted out of this file so far:
@@ -654,10 +654,10 @@ helm_charts:
       manifests (covidkop, robokop-graphs and scentkop redirects) and has
       no Chart.yaml, unlike the other 49 directories in the index.
 
-  # --- Not in use: the sheet marks it removed ---------------------------------
+  # --- Retired: the sheet marks it removed ------------------------------------
 
   - name: cam-kp-api
-    status: not-in-use
+    status: retired
     first_seen: "2026-09-02"
     component: cam-kp-api
     evidence: >-

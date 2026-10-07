@@ -44,14 +44,14 @@
           "minLength": 1
         },
         "status": {
-          "description": "What we know about this identifier; README.md, section unknown.yaml, beside this schema directory, has the full table. unattributed: we do not know what it is, or which component it belongs to. not-recorded: it belongs to a component the sheet lists, which has no file yet, named by `component` (for a chart, the component it deploys). needs-decision: we know what it is, but where it is recorded (or whether it should be a component at all) is a maintainer's call, stated in `note`. operation: a processing step reported under its own service name, not a component. out-of-scope: we know what it is, and it is not something this repo records as a component (part of a legacy or adjacent stack with no sheet row, or not the kind of identifier its section lists), said in `evidence`. not-in-use: confirmed retired, kept so it is not investigated twice.",
+          "description": "What we know about this identifier; README.md, section unknown.yaml, beside this schema directory, has the full table. unattributed: we do not know what it is, or which component it belongs to. not-recorded: it belongs to a component the sheet lists, which has no file yet, named by `component` (for a chart, the component it deploys). needs-decision: we know what it is, but where it is recorded (or whether it should be a component at all) is a maintainer's call, stated in `note`. operation: a processing step reported under its own service name, not a component. out-of-scope: we know what it is, and it is not something this repo records as a component (part of a legacy or adjacent stack with no sheet row, or not the kind of identifier its section lists), said in `evidence`. retired: confirmed to have stopped running, kept so it is not investigated twice.",
           "enum": [
             "unattributed",
             "not-recorded",
             "needs-decision",
             "operation",
             "out-of-scope",
-            "not-in-use"
+            "retired"
           ]
         },
         "first_seen": {
