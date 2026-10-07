@@ -255,6 +255,9 @@ html[data-drawer="open"] .page { padding-right: 440px; }
 .dw-desc ul { padding-left: 1.2em; }
 .dw-desc code { font-family: var(--mono); font-size: 0.92em; }
 .dw-desc a { color: var(--link); }
+/* The body has no top padding; a paragraph that opens the tab brings its own
+   margin, and a heading, which has none, would sit against the tab bar. */
+.dw-sec:first-child > .dw-notes { margin-top: var(--sp-3); }
 .dw-sublabel {
   margin: var(--sp-3) 0 var(--sp-1);
   font-size: var(--fs-label);

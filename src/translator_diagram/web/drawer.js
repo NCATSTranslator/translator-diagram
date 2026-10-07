@@ -371,7 +371,9 @@
     // is why the notes carry a heading and the description does not.
     return sections([
       row.description ? `<div class="dw-prose dw-desc">${TD.fmt.prose(row.description)}</div>` : "",
-      row.notes ? heading("Notes") + `<p class="dw-prose">${esc(row.notes)}</p>` : "",
+      row.notes
+        ? `<div class="dw-notes">${heading("Notes")}<p class="dw-prose">${esc(row.notes)}</p></div>`
+        : "",
       identity,
       meta ? heading("Repository") + meta : "",
     ]);
