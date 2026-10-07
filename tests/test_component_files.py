@@ -142,6 +142,20 @@ class TestSchema:
             document["examples"] = [example] * count
             assert bool(list(validator.iter_errors(document))) is not allowed, count
 
+    def test_a_summary_is_one_short_line(self, schema):
+        # It is the drawer's two-line subtitle and, once #19 lands, the
+        # diagram's tooltip. Anything longer belongs in `description`.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "docmetadata-api.yaml")
+        for summary, allowed in (
+            ("x" * 160, True),
+            ("x" * 161, False),
+            ("One line.\nAnd another.", False),
+            ("", False),
+        ):
+            document["summary"] = summary
+            assert bool(list(validator.iter_errors(document))) is not allowed, summary
+
     @pytest.mark.parametrize("path", COMPONENT_FILES, ids=lambda p: p.stem)
     def test_file_validates(self, path, schema):
         errors = sorted(

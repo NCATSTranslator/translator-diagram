@@ -141,6 +141,11 @@ and `hide` — the two fields that really are about the picture rather than the
 component — and both default to `false`, which is what most components are.
 The block appears only in a file where one of them is `true`.
 
+The example has no `summary` or `description` either. Prose about a
+component is split by the question it answers — what it is, in one line;
+what it does, at length; and what is odd about this record, in `notes` — and
+the rule for each is in [`catalog/README.md`](../catalog/README.md#conventions).
+
 There is no `examples:` block yet either. It holds up to three GET requests
 someone could make to try the component, as paths relative to each
 environment's base URL like `endpoints`; `docmetadata-api` is the first file

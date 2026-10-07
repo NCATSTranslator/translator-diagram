@@ -120,16 +120,20 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   overflow-wrap: anywhere;
 }
 
-/* GitHub's one-liner for the repository. One line, clipped: it is orientation,
-   not content, and a three-line description would push the tabs off the top. */
+/* The catalog's `summary`, or GitHub's one-liner for the repository. Two lines,
+   clipped: it is orientation, not content. Two because the schema allows a
+   summary 160 characters long, which one line at this width cuts in half;
+   not three, because a long GitHub description would push the tabs down. */
 .dw-blurb {
   margin-top: 3px;
   color: var(--muted);
   font-size: var(--fs-meta);
   line-height: 1.4;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* The sheet has no drag handle — a handle that does not drag is a lie — so the
@@ -245,6 +249,12 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   font-size: var(--fs-table);
   line-height: 1.55;
 }
+/* TD.fmt.prose output: blocks are spaced like the paragraphs around them. */
+.dw-desc > :first-child { margin-top: 0; }
+.dw-desc p, .dw-desc ul { margin: var(--sp-2) 0 0; }
+.dw-desc ul { padding-left: 1.2em; }
+.dw-desc code { font-family: var(--mono); font-size: 0.92em; }
+.dw-desc a { color: var(--link); }
 .dw-sublabel {
   margin: var(--sp-3) 0 var(--sp-1);
   font-size: var(--fs-label);

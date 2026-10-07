@@ -350,7 +350,7 @@ def _scrubbed(value: Any, patterns: tuple[re.Pattern[str], ...]) -> tuple[Any, i
 # mapping. URLs are deliberately absent: rewriting one breaks the link, and a
 # URL naming a withheld component is a reference for `verify` to stop on.
 ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
-    ((), ("notes", "description")),
+    ((), ("notes", "summary", "description")),
     (("smartapi_record",), ("title", "description_text", "tags")),
     (("smartapi_record", "servers"), ("description",)),
     (("smartapi_record", "contact"), ("name",)),

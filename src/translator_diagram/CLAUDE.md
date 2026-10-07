@@ -151,7 +151,7 @@ CSV column → `Component` field:
 | `Refactor status` | `refactor_status` | Drives active-set filtering |
 | `Gets results from` | `depends_on` / `depends_on_planned` | Comma-separated IDs; `~` prefix = planned |
 | `Calls` | `uses` / `uses_planned` | Comma-separated IDs; `~` prefix = planned |
-| `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip |
+| `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip. The component files split this column's job three ways (`summary`, `description`, `notes`); when #19 moves the diagram onto them, the tooltip should show `summary` |
 | `Ubiquitous` | `ubiquitous` | TRUE/yes/y/1 → render as per-caller clones |
 | `Hide` | `hide` | TRUE/yes/y/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
 | `Part of` | `part_of` | Groups the node into a named cluster subgraph |

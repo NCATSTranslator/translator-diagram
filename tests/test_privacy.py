@@ -171,6 +171,7 @@ class TestApply:
             {
                 "id": "keep",
                 "notes": "Traces go to jaeger, then to Jaeger's console.",
+                "summary": "A jaeger forwarder.",
                 "description": "Forwards spans to jaeger.",
                 "smartapi_record": {
                     "title": "jaeger bridge",
@@ -187,14 +188,15 @@ class TestApply:
         kept, report = apply(rows, _policy(components=["jaeger"]))
         record = kept[0]["smartapi_record"]
         assert kept[0]["notes"] == "Traces go to …, then to …'s console."
+        assert kept[0]["summary"] == "A … forwarder."
         assert kept[0]["description"] == "Forwards spans to …."
         assert record["title"] == "… bridge"
         assert record["description_text"] == "Reads from …."
         assert record["tags"] == ["…", "tracing"]
         assert kept[0]["releases_detail"][0]["name"] == "… support"
         assert kept[0]["releases_detail"][0]["body_excerpt"] == "Adds …."
-        assert report.mentions == 8
-        assert "8 mentions in free text" in report.summary()
+        assert report.mentions == 9
+        assert "9 mentions in free text" in report.summary()
 
     def test_every_free_text_field_on_a_row_is_scrubbed(self):
         """Repository topics, chart commit subjects, catalog prose and the

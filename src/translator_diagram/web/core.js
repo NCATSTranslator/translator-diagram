@@ -95,7 +95,56 @@
   /* The payload's name for a version source, or the key itself. */
   const sourceLabel = (key) => ((TD.DATA || {}).source_labels || {})[key] || key;
 
-  TD.fmt = { esc, relativeAge, since, plural, host, href, sourceLabel, DASH: '<span class="dash">—</span>' };
+  /* A component's `description`: the small Markdown subset the schema allows.
+     Blank lines separate blocks; a block whose first line starts with "- " is
+     a list, and a line that does not continues the item above it. Inside a
+     block, `code` and [text](url) are the only markup. Every other character
+     is escaped, and a link whose URL is not http(s) is shown as its text.
+
+     ponytail: no emphasis, headings, nested lists, tables or images, because
+     nobody has written one into a component file. When a description needs
+     them, inline a CommonMark library with a sanitiser rather than growing
+     this; a hand-written parser stops being obviously safe soon after it stops
+     being small. */
+  const INLINE = /`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+  function inline(text) {
+    let html = "";
+    let last = 0;
+    for (const match of text.matchAll(INLINE)) {
+      html += esc(text.slice(last, match.index));
+      const [, code, label, url] = match;
+      if (code !== undefined) {
+        html += `<code>${esc(code)}</code>`;
+      } else {
+        const safe = href(url);
+        html += safe
+          ? `<a href="${esc(safe)}" target="_blank" rel="noopener">${esc(label)}</a>`
+          : esc(label);
+      }
+      last = match.index + match[0].length;
+    }
+    return html + esc(text.slice(last));
+  }
+
+  function prose(text) {
+    const blocks = String(text ?? "").replace(/\r\n?/g, "\n").split(/\n[ \t]*\n/);
+    return blocks
+      .map((block) => block.split("\n").map((line) => line.trim()).filter(Boolean))
+      .filter((lines) => lines.length)
+      .map((lines) => {
+        if (!lines[0].startsWith("- ")) return `<p>${inline(lines.join(" "))}</p>`;
+        const items = [];
+        for (const line of lines) {
+          if (line.startsWith("- ")) items.push(line.slice(2));
+          else items[items.length - 1] += ` ${line}`;
+        }
+        return `<ul>${items.map((item) => `<li>${inline(item)}</li>`).join("")}</ul>`;
+      })
+      .join("");
+  }
+
+  TD.fmt = { esc, relativeAge, since, plural, host, href, prose, sourceLabel, DASH: '<span class="dash">—</span>' };
 
   /* --- Motion ------------------------------------------------------------ */
 

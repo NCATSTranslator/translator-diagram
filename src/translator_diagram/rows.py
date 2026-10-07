@@ -361,9 +361,11 @@ def build_rows(
                 "helm_version": helm.get("version"),
                 "helm_images": helm.get("images") or [],
                 "notes": component.notes,
-                # The catalog's own sentence about what this is. The drawer
-                # puts it ahead of the repository's GitHub blurb, which is
-                # whatever the repository's owner last typed there.
+                # The catalog's own line about what this is. The drawer puts it
+                # ahead of the repository's GitHub blurb, which is whatever the
+                # repository's owner last typed there.
+                "summary": component.summary,
+                # Markdown, rendered by TD.fmt.prose in the page.
                 "description": component.description,
                 "externals": [
                     {"direction": d, "name": n} for d, n in component.externals

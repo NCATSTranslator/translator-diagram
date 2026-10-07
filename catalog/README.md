@@ -48,6 +48,7 @@ uv run pytest
   a new one.
 - `endpoints` values and `examples` paths are relative paths, never URLs.
 - No component has more than three `examples`.
+- A `summary` is one line of at most 160 characters.
 - No file writes a `diagram:` flag at its default, which keeps that block
   absent rather than a copy of `ubiquitous: false` in every file.
 - Every component is either in a stage or listed under `unplaced` in
@@ -82,6 +83,25 @@ routinely partial, so a component can be registered for prod and say nothing
 about the ci and test it is also deployed to. `answer-appraiser` is the live
 example — its record lists production only — so its `environments:` block
 carries the two SmartAPI does not cover and leaves prod to the fetcher.
+
+**`summary`, `description` and `notes` answer different questions.**
+
+- `summary` — *what is this?* One line, plain text, that makes sense on its
+  own: the drawer shows it under the component's name. "Contains ARAX,
+  ARAGORN and BTE" is not a summary; it needs the name beside it.
+- `description` — *what does it do, and where is it going?* As long as it
+  needs, in a small Markdown subset: paragraphs, `code`, `-` lists and
+  `[links](https://…)`. Write it with `|` rather than `>`, because `>` folds
+  the line breaks a list needs. Write it only where the component's own
+  documentation does not already say it well; otherwise link that under
+  `documentation` instead of copying it here.
+- `notes` — *why does our record of it look like this?* Why a field is null,
+  overridden or unusual, and what a reader needs to make sense of a cell.
+  Plain text. An explanation only a curator needs goes in a YAML comment
+  beside the field it explains, as the `endpoints:` comments do.
+
+[`components/docmetadata-api.yaml`](components/docmetadata-api.yaml) has all
+three. All three are published, so keep them to public information.
 
 **Examples are for trying a component, not testing it.** `examples` holds
 up to three GET requests someone could make to see what a component does,

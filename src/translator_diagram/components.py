@@ -64,6 +64,10 @@ class ComponentFile:
     name: str
     owner: str
     component_type: str | None = None
+    # One line, plain text; the long account in a Markdown subset; and notes
+    # about this record rather than the component. catalog/README.md says
+    # which question each answers.
+    summary: str | None = None
     description: str | None = None
     refactor_status: str = ""
     layer: str | None = None
@@ -335,6 +339,7 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
         name=data.get("name") or data["id"],
         owner=data.get("owner") or "None",
         component_type=data.get("component_type"),
+        summary=data.get("summary"),
         description=data.get("description"),
         refactor_status=data.get("refactor_status") or "",
         layer=data.get("layer"),

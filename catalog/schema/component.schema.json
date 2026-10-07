@@ -22,12 +22,23 @@
       "type": "string",
       "minLength": 1
     },
-    "description": {
-      "description": "One or two sentences on what this component does. The dashboard shows it under the name in the details drawer, ahead of the source repository's GitHub description, so keep it publishable.",
+    "summary": {
+      "description": "One line on what this component is, that makes sense on its own: the dashboard shows it under the name in the details drawer, ahead of the source repository's GitHub description. Plain text, at most 160 characters, no line breaks. About the component, not about this record (that is `notes`). Publishable.",
       "type": [
         "string",
         "null"
-      ]
+      ],
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[^\\n]*$"
+    },
+    "description": {
+      "description": "What this component is, how it works and where it is going, as long as that takes. A small Markdown subset: paragraphs, `code`, `-` lists and [links](https://...), http(s) only. Write it only where the component's own documentation does not already say it well; otherwise link that under `documentation`. The dashboard shows it at the top of the details drawer. Publishable.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
     },
     "owner": {
       "description": "Team that owns the component. Must appear in owner-colors.csv, beside this schema directory.",
@@ -378,7 +389,7 @@
       }
     },
     "notes": {
-      "description": "Free text. Surfaces as the SVG hover tooltip, so keep it publishable.",
+      "description": "About this record rather than the component: why a field is null, overridden or unusual, and anything a reader needs to make sense of what the dashboard shows. Plain text. What the component is and does belongs in `summary` or `description`; an explanation only a curator needs belongs in a YAML comment beside its field. Surfaces as the SVG hover tooltip, so keep it publishable.",
       "type": [
         "string",
         "null"

@@ -188,11 +188,11 @@
   }
 
   function headerHtml(row) {
-    // The catalog's own one-liner, else GitHub's for the repository: the
-    // shortest true sentence about what this thing is, in one line. The
-    // catalog's wins because a repository's blurb can describe the repository
-    // rather than the service (docmetadata-api's reads as a fork request).
-    const blurb = row.description || (row.repository_meta || {}).description || "";
+    // The catalog's `summary`, else GitHub's one-liner for the repository: the
+    // shortest true sentence about what this thing is. The catalog's wins
+    // because a repository's blurb can describe the repository rather than
+    // the service (docmetadata-api's reads as a fork request).
+    const blurb = row.summary || (row.repository_meta || {}).description || "";
     const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer]
       .filter(filled)
       .map(esc)
@@ -366,8 +366,12 @@
 
     const meta = repoMetaHtml(row);
 
+    // What the component is, then what is odd about our record of it: the
+    // catalog's `description` and `notes` answer those two questions, which
+    // is why the notes carry a heading and the description does not.
     return sections([
-      row.notes ? `<p class="dw-prose">${esc(row.notes)}</p>` : "",
+      row.description ? `<div class="dw-prose dw-desc">${TD.fmt.prose(row.description)}</div>` : "",
+      row.notes ? heading("Notes") + `<p class="dw-prose">${esc(row.notes)}</p>` : "",
       identity,
       meta ? heading("Repository") + meta : "",
     ]);
