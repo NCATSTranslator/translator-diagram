@@ -59,4 +59,8 @@ notes: >-
   the ci base URL is recorded here rather than pulled. Prod serves its
   OpenAPI at openapi.json rather than the webapp/openapi.json that ci and
   test use, so it carries a per-environment override; ci and test are the
-  intended convention going forward.
+  intended convention going forward. It is the planned home for the Document
+  Metadata API's lookups (docmetadata-api, Core-Components-Working-Group#15):
+  pubmed2db's export of PubMed would be loaded into it, behind a front end
+  that finds one document by PMID, PMC id or DOI and answers in the shape the
+  UI already reads.
