@@ -10,6 +10,9 @@
 
 id: node-annotator
 name: Node Annotator
+summary: >-
+  Node Annotator is used by the UI to retrieve node properties, such as
+  chemical/drug information.
 description: |-
   Node Annotator is used by the UI to retrieve node properties, such as
   chemical/drug information.
