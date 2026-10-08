@@ -18,3 +18,4 @@ require("./sort.test.js");
 require("./layout.test.js");
 require("./map.test.js");
 require("./prose.test.js");
+require("./drawer.test.js");

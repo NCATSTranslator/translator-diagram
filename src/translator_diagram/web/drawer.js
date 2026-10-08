@@ -187,12 +187,19 @@
     return links.length ? `<div class="dw-links">${links.join("")}</div>` : "";
   }
 
+  /* The catalog's `summary`, else GitHub's one-liner for the repository: the
+     shortest true sentence about what this thing is. The catalog's wins
+     because a repository's blurb can describe the repository rather than the
+     service (docmetadata-api's reads as a fork request). */
+  function blurbFor(row) {
+    const summary = (row || {}).summary;
+    if (filled(summary)) return summary;
+    const description = ((row || {}).repository_meta || {}).description;
+    return filled(description) ? description : "";
+  }
+
   function headerHtml(row) {
-    // The catalog's `summary`, else GitHub's one-liner for the repository: the
-    // shortest true sentence about what this thing is. The catalog's wins
-    // because a repository's blurb can describe the repository rather than
-    // the service (docmetadata-api's reads as a fork request).
-    const blurb = row.summary || (row.repository_meta || {}).description || "";
+    const blurb = blurbFor(row);
     const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer]
       .filter(filled)
       .map(esc)
@@ -1157,4 +1164,6 @@
 
   drawer.open = open;
   drawer.isOpen = () => !!root && !root.hidden;
+  // For tests/web/drawer.test.js; nothing on the page calls it from outside.
+  drawer.blurbFor = blurbFor;
 })();
