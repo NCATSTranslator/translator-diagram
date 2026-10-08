@@ -46,7 +46,9 @@ shots come back byte-identical. The page resolves its theme through
 `matchMedia("(prefers-color-scheme: dark)")` (`app.js`), so copy `index.html`
 beside itself — relative paths must still resolve — and inject a script before
 the bootstrap that returns a fixed `matches` for that query. This is the same
-stubbing trick as the JS note below.
+stubbing trick as the JS note below. Insert it straight after
+`<meta charset="utf-8">`: the page writes no `<head>` tag (HTML implies it), so
+a script that looks for `<head>` to insert after finds nothing.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
