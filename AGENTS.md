@@ -3,8 +3,8 @@
 Two commands over the Translator platform's components, in one package under
 `src/translator_diagram/`: `generate-diagram` renders Graphviz pictures from a
 Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
-`components/*.yaml`. [README.md](README.md) is the user-facing documentation and
-the faster way in.
+`catalog/components/*.yaml`. [README.md](README.md) is the user-facing
+documentation and the faster way in.
 
 This file is what applies to every session. The detail that only matters once
 you are in a particular directory lives beside that directory, so it is read
@@ -13,10 +13,11 @@ when it is relevant rather than every time:
 | Where | What is in it |
 |---|---|
 | [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) | The module map, the import rules, the data model, "I want to change X → open this", and two sections of decisions that look wrong and aren't. **Read it before changing any module.** |
-| [`components/CLAUDE.md`](components/CLAUDE.md) | What a `components/<id>.yaml` must contain and which rules the tests enforce on it |
+| [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) | The browser half: how to screenshot and measure the page, how to test its JS, and the browser-side decisions that look wrong and aren't |
+| [`catalog/CLAUDE.md`](catalog/CLAUDE.md), [`catalog/README.md`](catalog/README.md) | Everything a curator edits. The README is the guide: what a component file must contain, what each `unknown.yaml` status means, and which rules the tests enforce |
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
-| [`docs/owner-colours.md`](docs/owner-colours.md) | The four constraints on a new team colour |
+| [`catalog/owner-colors.md`](catalog/owner-colors.md) | The four constraints on a new team colour |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** *Working agreements* below. Then, before simplifying anything in
@@ -36,44 +37,27 @@ entries are there because someone already tried the obvious thing.
   catch visual bugs: this page once passed 301 tests, `node --check` and a
   self-containment assertion while shipping a badge on 27 of 45 cells that
   drowned the table, a tile that counted 74 things where there were 41, and two
-  environment columns unreachable at narrow widths. Render it and look —
-  headless Firefox needs no extra tooling, and its own profile because yours is
-  probably already running:
+  environment columns unreachable at narrow widths. Render it and look, in
+  **both views** (Overview and Map) and in light and dark.
 
-  ```bash
-  uv run build-dashboard
-  MOZ_NO_REMOTE=1 /Applications/Firefox.app/Contents/MacOS/firefox \
-    --headless --new-instance --profile /tmp/ffprofile \
-    --screenshot /tmp/dash.png --window-size=1700,1400 \
-    "file://$PWD/data/dashboard/index.html"
-  ```
-
-  Shoot it narrow (`--window-size=760,1000`) and at the widths *between* the
-  breakpoints — the table is wider than the window between about 1100 and
-  1500px, which is where the sticky header and the band descriptions go wrong.
-  Whether the result *reads* well is still the operator's call: report what you
-  saw and let them look.
-
-  A headless profile follows the system theme, so on a dark machine every
-  screenshot is dark and half the palette goes unchecked. A second profile with
-  one pref shoots the other theme (use `1` for dark on a light machine):
-
-  ```bash
-  mkdir -p /tmp/fflight && echo 'user_pref("ui.systemUsesDarkTheme", 0);' > /tmp/fflight/user.js
-  ```
-
-- **JS with judgement in it can be tested, even with no JS harness here.** Slice
-  the block out of `web/dashboard.js`, stub `document`/`localStorage`/
-  `matchMedia`, and run it under `node` from the scratchpad — that is how the
-  theme cycle was checked against both system preferences, and how the sort
-  comparators were driven over the real `overview.json` to prove undated rows
-  stay last in *both* directions. Throwaway scripts, not fixtures: nothing in
-  CI runs JS beyond `node --check`.
+  The recipe — Chromium rather than Firefox, frozen animations, the theme
+  stub, and which widths to measure rather than eyeball — is in
+  [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md),
+  along with how to test the JS without a harness. Whether the result *reads*
+  well is still the operator's call: report what you saw and let them look.
 - **When a change should not alter the output, prove it.** Generate from a
   sample CSV before and after and compare — the `.dot`, `.json`, `.svg` and
   `.png` are all byte-identical for a change that only moves code. (A `.pdf`
   never is: it embeds a creation timestamp.) This is stronger than reading the
   diff, and it does not need an aesthetic judgement.
+
+  The dashboard works the same way: build from one `data/sync/` before and
+  after, and `overview.json` and `index.html` are byte-identical. (`web/*.js`
+  and `*.css` are inlined verbatim, comments included, so editing a comment
+  there changes `index.html`; `diff` it to confirm only the comment moved.)
+  `sync` itself cannot be compared across two live runs, because upstream
+  answers change in between, so replay a recorded one with
+  `tools/replay_sync.py` — its docstring has the recipe.
 - **`data/` is gitignored scratch space. Use it instead of `/tmp`** for
   temporary files, sample CSVs, cloned repos, or anything else you need to
   write while working. Never commit anything from it.
@@ -107,11 +91,14 @@ rebuilds. `--google-sheet` reaches the real sheet, so prefer a local CSV when
 testing. Both commands must stay easy for a human to run: run them yourself when
 it helps. The README has the full flag list.
 
-## The four config files are data, not code
+## The catalog and config are data, not code
 
-`config/owner-colors.csv`, `config/flow-steps.yaml`, `config/privacy.yaml` and
-`components/*.yaml` are edited by people who know the platform and do not want
-to open a Python module. That is deliberate and worth protecting: when a change
+Everything under `catalog/` — the component files, `unknown.yaml`,
+`flow-steps.yaml`, `owner-colors.csv` and their schemas — is edited by people
+who know the platform and do not want to open a Python module, and it is kept
+in that one directory so they never need to look outside it.
+`config/privacy.yaml` is the same kind of file, but a publication decision
+rather than curation. That is deliberate and worth protecting: when a change
 could be made either in one of those files or in code, it belongs in the file.
 Each is validated — by a schema, a test, or a hard error at build time — so a
 wrong edit fails loudly rather than silently doing nothing.

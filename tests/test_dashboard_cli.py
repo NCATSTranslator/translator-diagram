@@ -7,18 +7,20 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from translator_diagram.dashboard_cli import build_main
+from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main
 
 
 @pytest.fixture
 def workspace(tmp_path):
-    """A components directory, a sync cache, a policy and colours, under tmp."""
-    components = tmp_path / "components"
-    components.mkdir()
+    """A catalog, a sync cache and a policy, under tmp."""
+    catalog = tmp_path / "catalog"
+    components = catalog / "components"
+    components.mkdir(parents=True)
     for cid in ("keeper", "secret"):
         (components / f"{cid}.yaml").write_text(
             f"id: {cid}\n"
@@ -34,14 +36,12 @@ def workspace(tmp_path):
     (sync / "manifest.json").write_text(
         json.dumps({"finished_at": "2026-09-01T00:00:00+00:00", "counts": {}})
     )
-    config = tmp_path / "config"
-    config.mkdir()
-    # owner-colors.csv lives only in config/ now, so a workspace without one
+    # owner-colors.csv lives only in catalog/, so a workspace without one
     # has no colours to find -- the same as any other checkout.
-    (config / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
+    (catalog / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
     # A checkout has one of these too, and build-dashboard now refuses to
     # guess at the row order without it.
-    (config / "flow-steps.yaml").write_text(
+    (catalog / "flow-steps.yaml").write_text(
         "stages:\n"
         "  - title: Serving\n"
         "    description: Answers questions.\n"
@@ -50,6 +50,8 @@ def workspace(tmp_path):
         "  description: Nothing is unplaced.\n"
         "  components: []\n"
     )
+    config = tmp_path / "config"
+    config.mkdir()
     (config / "privacy.yaml").write_text(
         "components:\n"
         "  - id: secret\n"
@@ -71,7 +73,7 @@ def _run(workspace, *args):
         result = runner.invoke(
             build_main,
             [
-                "--components", str(workspace / "components"),
+                "--components", str(workspace / "catalog" / "components"),
                 "--sync-dir", str(workspace / "sync"),
                 "--output-dir", str(workspace / "out"),
                 *args,
@@ -126,7 +128,15 @@ class TestAMissingStageFileStopsTheBuild:
     def test_no_stages_and_no_walk_is_an_error(self, workspace):
         """The row order is a decision, not something to be derived. Without
         the file the page would silently show data-flow order instead."""
-        (workspace / "config" / "flow-steps.yaml").unlink()
+        (workspace / "catalog" / "flow-steps.yaml").unlink()
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+def test_the_default_components_directory_is_the_catalogs():
+    # Every other test here passes --components, so a default left pointing
+    # at a directory that has moved would only surface when someone runs
+    # sync-components or build-dashboard with no flags.
+    root = Path(__file__).resolve().parent.parent
+    assert list((root / DEFAULT_COMPONENTS).glob("*.yaml"))

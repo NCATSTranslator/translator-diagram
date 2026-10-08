@@ -76,17 +76,20 @@ actually offers today, and where each one falls short.
 
 ## The format
 
-One file per component, `components/<id>.yaml`. The filename stem **is** the
-id — a test enforces it. Each team edits its own file, `git log` gives
-per-component history, and a future `CODEOWNERS` can route review.
+One file per component, `catalog/components/<id>.yaml`. The filename stem
+**is** the id — a test enforces it. Each team edits its own file, `git log` gives
+per-component history, and a future `CODEOWNERS` can route review. They
+sit in their own subdirectory of `catalog/`, beside everything else a curator
+edits, so that every `*.yaml` in it is exactly one component and nothing that
+reads them needs an exception.
 
 YAML rather than TOML because every neighbour in this ecosystem is YAML — the
 infores catalog, SmartAPI specs, Helm charts, mkdocs, GitHub Actions — and
 because the data is nested and list-heavy in ways TOML renders awkwardly.
 Both support comments, so that was not the deciding factor.
 
-`schema/component.schema.json` is the authoritative field list.
-`components/name-lookup.yaml` is the worked example; here it is in full:
+`catalog/schema/component.schema.json` is the authoritative field list.
+`catalog/components/name-lookup.yaml` is the worked example; here it is in full:
 
 ```yaml
 id: name-lookup
@@ -133,83 +136,47 @@ endpoints:                       # paths relative to an environment's base URL
   docs: docs
 ```
 
-There is no `diagram:` block, and there is none in any of the 26 files. It
-holds `ubiquitous` and `hide` — the two fields that really are about the
-picture rather than the component — and both default to `false`, which is what
-every component is. The block appears the first time one of them is `true`.
+There is no `diagram:` block, and most files have none. It holds `ubiquitous`
+and `hide` — the two fields that really are about the picture rather than the
+component — and both default to `false`, which is what most components are.
+The block appears only in a file where one of them is `true`.
+
+The example has no `summary` or `description` either. Prose about a
+component is split by the question it answers — what it is, in one line;
+what it does, at length; and what is odd about this record, in `notes` — and
+the rule for each is in [`catalog/README.md`](../catalog/README.md#conventions).
+
+There is no `examples:` block yet either. It holds up to three GET requests
+someone could make to try the component, as paths relative to each
+environment's base URL like `endpoints`; `docmetadata-api` is the first file
+with one, and what the field is for is in
+[`catalog/README.md`](../catalog/README.md#conventions).
 
 ### `unknown.yaml`
 
 Not every identifier we find belongs to a component we know about. The 41
 OpenTelemetry service names reporting to the three collectors include seven
 that are Shepherd *operations* rather than components, twelve that belong to
-components with no file yet, and three we cannot place.
+components with no file yet, two that wait on a maintainer's decision, and one
+we cannot place. The Helm chart index has the same problem with more entries.
 
-Those go in [`unknown.yaml`](../unknown.yaml) rather than being dropped, with
-the evidence for whatever we do believe. Entries leave it in one of two ways:
+Those go in [`catalog/unknown.yaml`](../catalog/unknown.yaml) rather than
+being dropped, with the evidence for whatever we do believe, so the next
+person does not have to rediscover them. One file rather than one per entry,
+because an unattributed entry has no component id to name a file after, and a
+single list is what a test can check for an identifier claimed twice — which
+is what stops a retired entry from quietly coming back.
 
-- **promoted** — we learn which component it belongs to, so the identifier
-  moves into that component's file (or gets a new component file) and the
-  entry is deleted;
-- **retired** — someone confirms it is out of use, so it stays with
-  `status: not-in-use` and nobody investigates it twice.
-
-`tests/test_components.py` enforces the part that would otherwise rot: no
-identifier may be claimed by a component *and* sit in `unknown.yaml`, no two
-components may claim the same one, and a `not-recorded` entry naming a
-component that now has a file fails until it is promoted.
-
-The same file takes other kinds of unattributed identifier as they turn up —
-`urls:` is already in the schema.
+What each `status` means and how an entry leaves it is in
+[`catalog/README.md`](../catalog/README.md#unknownyaml), beside the file.
 
 ### Conventions
 
-**Absent means "not recorded yet". Explicit `null` means "checked, there is
-none."** The sheet already needs this distinction — it writes `NA` in the
-`OpenAPI URL` column for components that genuinely have no OpenAPI document.
-Collapsing the two would send a fetcher back to the same dead ends forever.
-
-**Endpoints are relative paths, not URLs.** One line covers all four
-environments instead of four near-identical absolute URLs per endpoint kind.
-Where an environment does not follow the shared pattern, it carries its own
-`endpoints:` block. `node-annotator` is the live example and the reason the
-override exists: ci and test serve `webapp/openapi.json`, prod serves
-`openapi.json`, and ci and test are the intended convention going forward — so
-the override records the exception rather than the rule.
-
-**Environments are recorded only where SmartAPI cannot supply them.** For a
-registered component the block should be *absent*, and a fetcher fills it in.
-The unit is the environment, not the component: registration is manual and
-routinely partial, so a component can be registered for prod and say nothing
-about the ci and test it is also deployed to. `answer-appraiser` is the live
-example — its record lists production only — so its `environments:` block
-carries the two SmartAPI does not cover and leaves prod to the fetcher.
-
-**A `~` prefix marks a planned relationship**, unchanged from the sheet:
-`calls: [~jaeger]` is an edge we intend but have not built, and renders red.
-Note that a bare `~` is YAML `null`; the schema requires at least one
-character after it, so a stray tilde fails validation rather than becoming a
-silent null in the middle of a list.
-
-**The file set is closed under references.** Every id in
-`connections.gets_results_from` or `connections.calls` must have a file, even
-when the component itself is filtered out of the diagram — the generator's
-ghost-node rendering exists for exactly that case. `docmetadata-api` has a
-file only because `ui` calls it.
-
-**An empty list is a claim; a default flag is not.** `gets_results_from: []`
-says this component was checked and gets results from nothing, which is the
-absent-versus-`null` rule applied to a list — so `connections:` keeps its
-empty lists. A `diagram:` flag at its default says only what the schema
-already says, so it is not written at all, and the block goes with it once it
-is empty. The distinction is why one block is full of `[]` and the other is
-usually missing.
-
-**Public information only.** Every URL in this repo is already publicly
-reachable; the transltr.io endpoints are all discoverable through SmartAPI. A
-private repository may be *linked* (`visibility: private`), but nothing inside
-it may be copied here, and no fetcher may read it. That rule is what keeps
-this repo publishable without a per-field review.
+The rules a component file follows — absent versus `null`, relative
+endpoints and examples, environments only where SmartAPI cannot supply them,
+the `~` prefix, a file set closed under references, and public information
+only — are in [`catalog/README.md`](../catalog/README.md#conventions), each
+with its reason, so that a curator finds them without leaving that directory.
 
 ## Open questions
 
@@ -267,8 +234,8 @@ the component *is*, and the data flow is one of the four jobs this repo
 exists to do — so filing it under drawing was backwards.
 
 They are now top-level fields, `connections:` and a `diagram:` block holding
-the two flags that earned it. That block is absent from all 26 files, because
-both flags default to `false` and every component is. The eight files whose
+the two flags that earned it. That block is absent from most files, because
+both flags default to `false` and most components are. The eight files whose
 `identifiers:` block turned out to hold nothing but `itrb_app` and
 `itrb_group` are why ITRB moved out at the same time: a group is not a name
 for a component, it is a namespace around an application.
@@ -282,7 +249,7 @@ the grounds that a wrong answer is worse than a missing one.
 
 Not in this pull request. The order after it:
 
-1. A fetcher reads `components/*.yaml`, queries SmartAPI once, fetches each
+1. A fetcher reads `catalog/components/*.yaml`, queries SmartAPI once, fetches each
    `openapi` and `status` endpoint, and writes an enriched `components.json`
    into the gitignored `data/`. It caches, and a component being down never
    fails the diagram.

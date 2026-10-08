@@ -1,0 +1,447 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NCATSTranslator/translator-diagram/catalog/schema/component.schema.json",
+  "title": "Translator component",
+  "description": "One Translator platform component, as recorded in components/<id>.yaml. Fields hold pointers to the places that already know about this component; a field that is absent has not been recorded yet, and a field that is explicitly null has been checked and does not exist.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "owner",
+    "refactor_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "Stable identifier. Must equal the filename stem exactly.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "name": {
+      "description": "Human-readable display name, shown in the diagram.",
+      "type": "string",
+      "minLength": 1
+    },
+    "summary": {
+      "description": "One line on what this component is, that makes sense on its own: the dashboard shows it under the name in the details drawer, ahead of the source repository's GitHub description. Plain text, at most 160 characters, no line breaks. About the component, not about this record (that is `notes`). Publishable.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[^\\n]*$"
+    },
+    "description": {
+      "description": "What this component is, how it works and where it is going, as long as that takes. A small Markdown subset: paragraphs, `code`, `-` lists and [links](https://...), http(s) only. Write it only where the component's own documentation does not already say it well; otherwise link that under `documentation`. The dashboard shows it at the top of the details drawer. Publishable.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "owner": {
+      "description": "Team that owns the component. Must appear in owner-colors.csv, beside this schema directory.",
+      "type": "string",
+      "minLength": 1
+    },
+    "component_type": {
+      "description": "The x-translator `component` vocabulary. Null for components that are not registered API services.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "KP",
+        "ARA",
+        "ARS",
+        "Utility",
+        "DINGO",
+        "DAWG",
+        "SHEPHERD",
+        "COCO",
+        null
+      ]
+    },
+    "refactor_status": {
+      "description": "Where this component stands in the Refactor. Required: every component has one.",
+      "enum": [
+        "New in Refactor",
+        "Continues into Refactor",
+        "In development",
+        "Removed after Refactor",
+        "Removed after DINGO integration",
+        "Already removed"
+      ]
+    },
+    "layer": {
+      "description": "The band of the architecture this component sits in, which the diagram draws as a row. Null where none has been assigned. A new band is added to this list in the same change as the first component in it, so a misspelt one fails validation rather than drawing a row of its own.",
+      "enum": [
+        "ARS and UI",
+        "DINGO Ingests",
+        "DogPark and Retriever",
+        "KGX Storage",
+        "Shared services",
+        "Shepherd",
+        "TSDK/TCT",
+        null
+      ]
+    },
+    "part_of": {
+      "description": "The larger subsystem this component is one part of, where there is one: `Shepherd`, `Dog Park`. Finer-grained than `layer`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "hosted_at": {
+      "description": "Where the component runs; see $defs/host for the values. Each environment also records its own `location`.",
+      "$ref": "#/$defs/host"
+    },
+    "identifiers": {
+      "description": "This component's name in each of the other naming spaces. Every one of these is assigned independently of the others.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "infores": {
+          "description": "Information Resource CURIE, from biolink/information-resource-registry.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^infores:[a-z0-9][a-z0-9.-]*$"
+        },
+        "smartapi": {
+          "description": "SmartAPI registry record id (32 hex characters).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "helm_chart": {
+          "description": "Chart directory name(s) under helxplatform/translator-devops/helm; a list when one component is deployed by several charts, e.g. a web server and its loader.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "translator_all_wiki": {
+          "description": "Page slug in the NCATSTranslator/Translator-All wiki.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "otel_services": {
+          "description": "OpenTelemetry service names this component reports under. A list: a component often emits under several names (one per worker or operation), and the names differ between environments.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "itrb": {
+      "description": "ITRB's names for this component. Two coordinates rather than one, which is why they are here and not in `identifiers`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "description": "ITRB application name (the sheet's `ITRB App Name`). Not one-to-one with a component: four components deploy from `retriever-ci-pipeline`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "The group ITRB files this component under (the sheet's `Component in ITRB`). A namespace around the application rather than another name for the component.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "connections": {
+      "description": "The data flow between components, recorded by hand because nothing upstream records it. An empty list is a claim -- checked, there are none; an absent one means not yet recorded.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gets_results_from": {
+          "description": "Components this one gets results from.",
+          "$ref": "#/$defs/component_refs"
+        },
+        "calls": {
+          "description": "Components this one calls.",
+          "$ref": "#/$defs/component_refs"
+        },
+        "externals": {
+          "description": "Edges to things outside the component set: a user, another programme, an upstream data source.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "direction",
+              "name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "direction": {
+                "enum": [
+                  "in",
+                  "out"
+                ]
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "repositories": {
+      "description": "Source, chart and deployment repositories. A private repository may be linked here, but nothing inside it may be copied into this repo.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "url",
+          "role"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://"
+          },
+          "role": {
+            "enum": [
+              "source",
+              "helm-chart",
+              "deployment",
+              "data",
+              "related"
+            ]
+          },
+          "visibility": {
+            "enum": [
+              "public",
+              "private"
+            ],
+            "default": "public"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "documentation": {
+      "description": "Prose documentation about this component, wherever it lives.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "url",
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://"
+          },
+          "kind": {
+            "enum": [
+              "wiki",
+              "technical-documentation",
+              "api-docs",
+              "readme",
+              "other"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "endpoints": {
+      "description": "Paths relative to each environment's base URL, so one line covers all four environments. Null means this component has no endpoint of that kind.",
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "properties": {
+        "openapi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "docs": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meta_knowledge_graph": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "examples": {
+      "description": "Up to three requests someone could make to try this component, each a GET path relative to every environment's base URL, as `endpoints` are. Null means checked, and there is no meaningful example. At most three, because these document a component and smoke-check it; a test suite belongs in the Test Harness. A TRAPI component's SmartAPI record already points at its test data (`x-trapi.test_data_location`), so do not copy that here. GET only for now: a POST example needs `method` and `body`, added here in the same change as the first component that needs one.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "description",
+          "path"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "description": "What this example asks for, and what it shows about the response.",
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "description": "Path and query string relative to an environment's base URL, e.g. `publications?pubids=PMC6365303`.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "environments": {
+      "description": "Base URLs per environment. Record these only where SmartAPI does not already know them; for a registered component this block should be absent and filled by a fetcher.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dev": {
+          "$ref": "#/$defs/environment"
+        },
+        "ci": {
+          "$ref": "#/$defs/environment"
+        },
+        "test": {
+          "$ref": "#/$defs/environment"
+        },
+        "prod": {
+          "$ref": "#/$defs/environment"
+        }
+      }
+    },
+    "diagram": {
+      "description": "Flags that change how the picture is drawn and say nothing about the component itself. Omit the block when both are at their defaults, which is every file today.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ubiquitous": {
+          "description": "Draw as a ubiquitous service rather than wiring an edge to every caller.",
+          "type": "boolean",
+          "default": false
+        },
+        "hide": {
+          "description": "Keep out of the rendered diagram.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "notes": {
+      "description": "About this record rather than the component: why a field is null, overridden or unusual, and anything a reader needs to make sense of what the dashboard shows. Plain text. What the component is and does belongs in `summary` or `description`; an explanation only a curator needs belongs in a YAML comment beside its field. Surfaces as the SVG hover tooltip, so keep it publishable.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "environment": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "location": {
+          "$ref": "#/$defs/host"
+        },
+        "endpoints": {
+          "description": "Per-environment override for when this environment does not follow the shared `endpoints` paths.",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "component_refs": {
+      "description": "Component ids. A '~' prefix marks a relationship that is planned but not yet implemented.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^~?[A-Za-z0-9][A-Za-z0-9._-]*$"
+      }
+    },
+    "host": {
+      "description": "Where something runs. ITRB for most; otherwise the site hosting it. A new site is added here, in the same change as the first component that uses it, so a misspelt one fails validation rather than quietly reading as a new host.",
+      "enum": [
+        "ITRB",
+        "RENCI",
+        "Scripps",
+        "DogPark AWS",
+        "Local",
+        null
+      ]
+    }
+  }
+}
