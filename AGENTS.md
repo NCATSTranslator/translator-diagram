@@ -41,8 +41,9 @@ entries are there because someone already tried the obvious thing.
   environment columns unreachable at narrow widths. Render it and look, in
   **both views** (Overview and Map) and in light and dark.
 
-  The recipe — Chromium rather than Firefox, frozen animations, the theme
-  stub, and which widths to measure rather than eyeball — is in
+  The recipe — Chromium, or Firefox with the two variables macOS 27 needs,
+  frozen animations, the theme, and which widths to measure rather than
+  eyeball — is in
   [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md),
   along with how to test the JS without a harness. Whether the result *reads*
   well is still the operator's call: report what you saw and let them look.

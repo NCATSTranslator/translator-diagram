@@ -11,13 +11,10 @@ which part of it — is in [../CLAUDE.md](../CLAUDE.md).
 `AGENTS.md` says to render the page and look before calling it fine, in both
 views and both themes. This is how.
 
-**Use Chromium, not Firefox.** Headless Firefox does not start on current
-macOS — every invocation dies with `Could not find profile folder`, whatever
-you pass for `--profile`, including a directory that demonstrably exists
-([gaurav/prcoder#61](https://github.com/gaurav/prcoder/issues/61)). The
-recipe here used to be Firefox; it is kept only as the reason not to try it
-again. Playwright's bundled headless shell needs no install. From the repo
-root:
+Either browser works. Chromium's headless shell runs from the command line
+with no Python package; Firefox runs through Playwright's API, which also
+handles the theme and the reduced motion itself (see *Firefox* below).
+Playwright's bundled headless shell needs no install. From the repo root:
 
 ```bash
 uv run build-dashboard
@@ -82,6 +79,48 @@ done
 
 Checked on 8b5d40d: both themes render, and the tiles read the final counts
 in both.
+
+**Firefox** needs two environment variables on macOS 27, and nothing else.
+Without them every launch dies with `Could not find profile folder`, whatever
+`-profile` names: macOS 27 denies a shell-launched process access to
+`~/Library/Application Support/Firefox`, and Firefox reads that directory even
+when given a profile elsewhere. Pointing `MOZ_APP_DATA` and
+`MOZ_LOCAL_APP_DATA` at a directory under `data/` gives it app data of its
+own. The diagnosis and the upstream fix (Firefox 158, after which the
+variables can go) are in prcoder's
+[firefox-runner README](https://github.com/gaurav/prcoder/blob/main/tools/firefox-runner/README.md).
+
+Playwright's `color_scheme` and `reduced_motion` drive the page's own
+`matchMedia` queries, so this needs neither the stub above nor a copy of
+`index.html`. Serve the build as above, then:
+
+```bash
+cat > data/ff_shot.py <<'PY'
+import os, sys
+from pathlib import Path
+from playwright.sync_api import sync_playwright
+url, out, theme = sys.argv[1:4]
+appdata = Path("data/firefox-appdata").resolve()
+appdata.mkdir(parents=True, exist_ok=True)
+env = {**os.environ, "MOZ_APP_DATA": str(appdata), "MOZ_LOCAL_APP_DATA": str(appdata)}
+with sync_playwright() as p:
+    browser = p.firefox.launch(env=env)
+    page = browser.new_page(viewport={"width": 1700, "height": 1400},
+                            reduced_motion="reduce", color_scheme=theme)
+    page.goto(url)
+    page.wait_for_timeout(1500)
+    page.screenshot(path=out)
+    browser.close()
+PY
+uv run --with playwright==1.64.0 python data/ff_shot.py \
+  "http://localhost:8765/index.html?view=map" data/shots/map-dark.png dark
+```
+
+The Playwright version has to match a Firefox build in
+`~/Library/Caches/ms-playwright/`: 1.64.0 wants `firefox-1555`, and
+`uv run --with playwright==1.64.0 playwright install firefox` fetches it.
+Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
+render, and the tiles read the final counts.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
