@@ -21,7 +21,7 @@ stages:
     description: >-
       Pulls external sources in and turns them into KGX, against the
       identifiers everything else joins on.
-    components: [dingo-ingest, nodenorm-es, nodenorm-redis]
+    components: [dingo-ingest, nodenorm-es, nodenorm-redis, cam-pipeline]
 
   - title: KGX storage
     description: Lands ingested KGX where the query tiers can read it.

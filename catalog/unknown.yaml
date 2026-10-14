@@ -140,6 +140,10 @@ otel_services:
     first_seen: "2026-08-31"
     environments: [test, prod]
     component: automat
+    note: >-
+      Serves the data the retired components/cam-pipeline.yaml built. Stays
+      here with the other Automat KPs until automat.transltr.io (prod) and
+      automat.renci.org (dev) are removed.
   - name: automat-hgnc
     status: not-recorded
     first_seen: "2026-08-31"
@@ -480,25 +484,9 @@ helm_charts:
       fourth chart for `nodenorm-redis` or a component of its own. Tracked in
       #52.
 
-  # --- Out of scope: legacy ROBOKOP / Plater / CAM / TranQL stack -------------
+  # --- Out of scope: legacy ROBOKOP / Plater / TranQL stack -------------------
   #
   # Known, not in the sheet, and not expected to get component files.
-
-  - name: cam-pipeline-builder
-    status: out-of-scope
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml's description is "Build the cam-pipeline" — the CAM
-      pipeline's build step, part of the same CAM stack as cam-kp-api.
-
-  - name: cam-pipeline-web-server
-    status: out-of-scope
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; by name
-      this is the CAM pipeline's web server, part of the same CAM stack.
 
   - name: graph-registry
     status: out-of-scope
@@ -612,22 +600,6 @@ helm_charts:
       Not a Helm chart: the directory holds raw Kubernetes Ingress
       manifests (covidkop, robokop-graphs and scentkop redirects) and has
       no Chart.yaml, unlike the other 49 directories in the index.
-
-  # --- Retired: the sheet marks it removed ------------------------------------
-
-  - name: cam-kp-api
-    status: retired
-    first_seen: "2026-09-02"
-    component: cam-kp-api
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; version
-      "0.2-trapi-1.3" ties it to TRAPI 1.3. By name this is the CAM (Causal
-      Activity Model) Knowledge Provider API, part of the CAM pipeline with
-      the cam-pipeline-builder and cam-pipeline-web-server charts.
-    note: >-
-      Sheet row `cam-kp-api` (ITRB app DEPRECATED - cam-kp-api, Already
-      removed). The chart directory is still in the index; the deployment is
-      not.
 
   # --- Unattributed: little more than the name is observable ------------------
   #
