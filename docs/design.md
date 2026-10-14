@@ -46,7 +46,7 @@ the sheet as the diagram's input too. The steps are in
 [`FUTURE.md`](../FUTURE.md#retire-the-sheet-as-an-input), and until #19 lands
 the diagram and the dashboard can disagree. The import rules that keep the
 stacks apart, and `tests/test_package_layout.py` that enforces them, are in
-the [module map](../src/translator_diagram/CLAUDE.md#package-layout-srctranslator_diagram).
+the [module map](../src/translator_diagram/AGENTS.md#package-layout-srctranslator_diagram).
 
 ## The catalog records identity; everything else is pointed at
 
@@ -101,7 +101,7 @@ the same way: the recorded `connections:` are what this repository claims, and
 the infores catalog's dataflow is shown beside them, drawn differently, so it
 never reads as ours. Each of these rules was a bug first. The list, with the
 bug behind each, is
-[*What the dashboard refuses to claim*](../src/translator_diagram/CLAUDE.md#what-the-dashboard-refuses-to-claim).
+[*What the dashboard refuses to claim*](../src/translator_diagram/AGENTS.md#what-the-dashboard-refuses-to-claim).
 
 ## Inside a build
 
@@ -151,7 +151,7 @@ with their connections), read one payload, and the detail drawer serves both.
 The JS is split by subject, and each file's pure helpers are tested under
 `node --test` from `tests/web/`. How to render the page, measure it and look
 at it, and the browser-side decisions, are in
-[`web/CLAUDE.md`](../src/translator_diagram/web/CLAUDE.md).
+[`web/AGENTS.md`](../src/translator_diagram/web/AGENTS.md).
 
 ## Where the rest is
 
@@ -159,7 +159,7 @@ at it, and the browser-side decisions, are in
 |---|---|
 | How to use the commands, and what the page shows | [`README.md`](../README.md) |
 | How to work in this repository | [`AGENTS.md`](../AGENTS.md) |
-| Which module holds what, and which may import which | [`src/translator_diagram/CLAUDE.md`](../src/translator_diagram/CLAUDE.md) |
+| Which module holds what, and which may import which | [`src/translator_diagram/AGENTS.md`](../src/translator_diagram/AGENTS.md) |
 | Decisions that look wrong but aren't | the same file, *Things that look wrong but aren't* |
 | What a component file contains | [`catalog/README.md`](../catalog/README.md) and its schema |
 | Why the format looks the way it does | [`component-metadata.md`](component-metadata.md) |

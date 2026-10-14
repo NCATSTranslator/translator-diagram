@@ -74,9 +74,9 @@ on what is currently relevant.
 | change the dashboard's row order or its stage descriptions | [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml) |
 | change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colors.md`](catalog/owner-colors.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
-| change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
+| change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) |
 | see how the parts fit together | [`docs/design.md`](docs/design.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
+| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) for the code and [`web/AGENTS.md`](src/translator_diagram/web/AGENTS.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -477,8 +477,8 @@ translator-diagram/
 │   ├── dashboard.py        # The payload, the graph views, the rendered page
 │   ├── dashboard_cli.py    # sync-components and build-dashboard
 │   ├── web/                # The page's CSS and JS, inlined into it
-│   │   └── CLAUDE.md       # How to look at the page, and its non-obvious decisions
-│   └── CLAUDE.md           # The module map and the non-obvious decisions
+│   │   └── AGENTS.md       # How to look at the page, and its non-obvious decisions
+│   └── AGENTS.md           # The module map and the non-obvious decisions
 ├── catalog/                # Everything a curator edits, by hand
 │   ├── components/         # One YAML file per component
 │   ├── unknown.yaml        # Identifiers no component file claims yet
@@ -487,7 +487,7 @@ translator-diagram/
 │   ├── owner-colors.md     # The rules for choosing a new colour
 │   ├── schema/             # JSON Schema for components/*.yaml and unknown.yaml
 │   ├── README.md           # The curator's guide to all of the above
-│   └── CLAUDE.md           # Agent notes for this directory
+│   └── AGENTS.md           # Agent notes for this directory
 ├── config/
 │   └── privacy.yaml        # What a published build leaves out
 ├── docs/                   # The design, the metadata case and its research
@@ -562,13 +562,13 @@ has one file per module — a change to `loading.py` belongs in
 `tests/test_loading.py`.
 
 Two things are worth reading before a first change.
-[`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) has the
+[`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) has the
 module map, the rule about which module may import which (enforced by
 `tests/test_package_layout.py`), and a *Things that look wrong but aren't*
 section that exists because most of them were arrived at the hard way. And if
 you change the dashboard, render it and look at it: the page has passed a full
 test suite while visibly broken more than once, and
-[`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md)
+[`src/translator_diagram/web/AGENTS.md`](src/translator_diagram/web/AGENTS.md)
 carries the headless-Chromium recipe for checking it at several widths and in
 both themes.
 

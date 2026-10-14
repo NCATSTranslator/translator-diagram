@@ -4,7 +4,7 @@ The browser half of the dashboard: the CSS and JS that `CSS_FILES` and
 `JS_FILES` in `dashboard.py` concatenate and inline into the generated page.
 The repo-wide working agreements are in [../../../AGENTS.md](../../../AGENTS.md),
 and the Python side — the payload this code reads, and which module builds
-which part of it — is in [../CLAUDE.md](../CLAUDE.md).
+which part of it — is in [../AGENTS.md](../AGENTS.md).
 
 ## Looking at the page
 

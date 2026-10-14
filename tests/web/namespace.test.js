@@ -15,7 +15,7 @@
   ES modules would catch both, and were not adopted for it: the page must
   open from file://, where `import` across files is blocked, so modules mean
   a bundler and a Node toolchain inside a build that otherwise needs only
-  Python (see "This is not a module system" in web/CLAUDE.md). This suite
+  Python (see "This is not a module system" in web/AGENTS.md). This suite
   gets the same two checks by running the real files instead.
 
   It loads them into a context of its own, with an inert stand-in for each
