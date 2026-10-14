@@ -27,3 +27,4 @@ require("./layout.test.js");
 require("./map.test.js");
 require("./prose.test.js");
 require("./drawer.test.js");
+require("./namespace.test.js");
