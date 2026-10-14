@@ -130,8 +130,15 @@ is listed in `flow-steps.yaml` right after that service, and takes `part_of`
 only where the service has one; the service lists it under `connections.calls`.
 Its `summary` says what the software does for us — "third-party" is the
 field's job now, not the summary's. [`components/jaeger.yaml`](components/jaeger.yaml)
-is the live example; `redis-r3-external` in `unknown.yaml` is the kind of
+is the live example; `omnicorp-redis` in `unknown.yaml` is the kind of
 thing the rule decides.
+
+A maintainer can still count a separately deployed datastore as part of its
+service, when it exists only for that service and they ship together. Its
+chart then goes on the service's `identifiers.helm_chart` with the others, and
+a comment there says why. `nodenorm-redis` is the example: its seven Redis
+databases are their own chart, `redis-r3-external`, recorded beside the web
+server and the loader.
 
 **Examples are for trying a component, not testing it.** `examples` holds
 up to three GET requests someone could make to see what a component does,
