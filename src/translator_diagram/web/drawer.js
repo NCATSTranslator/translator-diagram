@@ -198,9 +198,17 @@
     return filled(description) ? description : "";
   }
 
+  /* The upstream software this component is a deployment of -- "Jaeger",
+     "MongoDB" -- when the catalog says the code is not ours, else "". */
+  function thirdPartyText(row) {
+    const block = (row || {}).third_party;
+    return block && filled(block.software) ? String(block.software) : "";
+  }
+
   function headerHtml(row) {
     const blurb = blurbFor(row);
-    const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer]
+    const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer,
+      thirdPartyText(row) ? "third-party" : ""]
       .filter(filled)
       .map(esc)
       .join(" · ");
@@ -342,8 +350,19 @@
       ? `${dot(row.uptime)}${esc(row.uptime)} ${note("from SmartAPI, whole record")}`
       : "";
 
+    // Software we deploy but did not write. Saying whose it is beside the
+    // name is what stops the Releases and Repositories below reading as
+    // claims about code of ours.
+    const software = thirdPartyText(row);
+    const softwareUrl = software ? (row.third_party || {}).url : "";
+    const softwareHtml = software
+      ? `${softwareUrl ? ext(softwareUrl, software) : esc(software)} ${
+        note("third-party; only the deployment is ours")}`
+      : "";
+
     const identity = dl([
       drow("Type", typeValue ? esc(typeValue) + typeExtra : "", true),
+      drow("Software", softwareHtml),
       drow("Layer", row.layer ? esc(row.layer) : "", true),
       drow("Stage", stage ? `${stage}${row.step_description
         ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
@@ -1166,4 +1185,5 @@
   drawer.isOpen = () => !!root && !root.hidden;
   // For tests/web/drawer.test.js; nothing on the page calls it from outside.
   drawer.blurbFor = blurbFor;
+  drawer.thirdPartyText = thirdPartyText;
 })();

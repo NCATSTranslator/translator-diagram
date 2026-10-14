@@ -1,5 +1,6 @@
 /*
-  The drawer's one-line blurb under a component's name.
+  The drawer's one-line blurb under a component's name, and the name of the
+  third-party software a component deploys.
 
   drawer.js is otherwise uncovered (#22): it builds DOM and listens on the
   document, so only its pure helpers are reachable from node. Loading it needs
@@ -22,7 +23,7 @@ globalThis.addEventListener = globalThis.addEventListener || (() => {});
 for (const file of ["core.js", "drawer.js"]) {
   vm.runInThisContext(fs.readFileSync(path.join(WEB, file), "utf8"), { filename: file });
 }
-const { blurbFor } = globalThis.TD.drawer;
+const { blurbFor, thirdPartyText } = globalThis.TD.drawer;
 
 const repo = { repository_meta: { description: "Code from a previous collaborator" } };
 
@@ -41,4 +42,17 @@ test("with neither there is no blurb, and a missing block is not an error", () =
   assert.equal(blurbFor({}), "");
   assert.equal(blurbFor({ repository_meta: null }), "");
   assert.equal(blurbFor(undefined), "");
+});
+
+test("third-party software is named from its block, and only then", () => {
+  assert.equal(thirdPartyText({ third_party: { software: "Jaeger", url: "https://x/" } }), "Jaeger");
+  // The url is optional; the name is what the header and the map show.
+  assert.equal(thirdPartyText({ third_party: { software: "MongoDB" } }), "MongoDB");
+});
+
+test("our own code has no third-party text", () => {
+  assert.equal(thirdPartyText({ third_party: null }), "");
+  assert.equal(thirdPartyText({}), "");
+  assert.equal(thirdPartyText({ third_party: { software: "" } }), "");
+  assert.equal(thirdPartyText(undefined), "");
 });

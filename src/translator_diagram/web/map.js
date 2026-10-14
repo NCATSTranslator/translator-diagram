@@ -270,7 +270,9 @@
     nameBox.append(name);
     group.append(nameBox);
 
-    const type = row.type || row.component_type;
+    // The x-translator type, or for software we deploy but did not write --
+    // which has none -- what it is: "MongoDB", "Redis".
+    const type = row.type || row.component_type || (row.third_party || {}).software;
     if (type) {
       group.append(svg("text", {
         class: "mp-type", x: node.w - 10, y: 20, "text-anchor": "end",
