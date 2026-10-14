@@ -376,6 +376,10 @@ def build_rows(
                 # so a reader can tell "nobody wrote this down" from "the
                 # registry says KP".
                 "component_type": component.component_type,
+                # `{software, url}` for software we deploy but did not write
+                # (upstream Jaeger), else null. The file's own claim, like
+                # `component_type`: nothing upstream records whose code it is.
+                "third_party": component.third_party,
                 "hosted_at": component.hosted_at,
                 "part_of": component.part_of,
                 "itrb": {"app": component.itrb_app, "group": component.itrb_group},

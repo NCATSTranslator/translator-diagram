@@ -64,6 +64,9 @@ class ComponentFile:
     name: str
     owner: str
     component_type: str | None = None
+    # `{software, url}` when the code is not ours -- we deploy upstream Jaeger,
+    # a MongoDB -- and None when it is, or when nobody has said.
+    third_party: dict[str, Any] | None = None
     # One line, plain text; the long account in a Markdown subset; and notes
     # about this record rather than the component. catalog/README.md says
     # which question each answers.
@@ -339,6 +342,7 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
         name=data.get("name") or data["id"],
         owner=data.get("owner") or "None",
         component_type=data.get("component_type"),
+        third_party=data.get("third_party"),
         summary=data.get("summary"),
         description=data.get("description"),
         refactor_status=data.get("refactor_status") or "",

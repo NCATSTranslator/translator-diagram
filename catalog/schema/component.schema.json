@@ -63,6 +63,32 @@
         null
       ]
     },
+    "third_party": {
+      "description": "Set when the code is not ours: software we deploy but did not write, such as Jaeger or a MongoDB a service reads. It gets a file of its own when it is deployed on its own or shared by more than one component; a datastore bundled inside its service's chart does not (../README.md, Conventions). Absent means Translator-written code; null means checked, our own code.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "software"
+      ],
+      "properties": {
+        "software": {
+          "description": "The upstream project's name as it calls itself: Jaeger, MongoDB, Redis, Elasticsearch.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[^\\n]*$"
+        },
+        "url": {
+          "description": "The project's home page.",
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        }
+      }
+    },
     "refactor_status": {
       "description": "Where this component stands in the Refactor. Required: every component has one.",
       "enum": [

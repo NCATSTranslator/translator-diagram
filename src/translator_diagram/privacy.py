@@ -351,6 +351,7 @@ def _scrubbed(value: Any, patterns: tuple[re.Pattern[str], ...]) -> tuple[Any, i
 # URL naming a withheld component is a reference for `verify` to stop on.
 ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     ((), ("notes", "summary", "description")),
+    (("third_party",), ("software",)),
     (("smartapi_record",), ("title", "description_text", "tags")),
     (("smartapi_record", "servers"), ("description",)),
     (("smartapi_record", "contact"), ("name",)),

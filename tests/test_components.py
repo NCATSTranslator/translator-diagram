@@ -62,6 +62,14 @@ class TestParsing:
         none = _parse()
         assert none.helm_charts == [] and none.helm_chart is None
 
+    def test_third_party_is_the_block_or_nothing(self):
+        # Absent and null both read back as None: the dashboard shows the
+        # block when there is one and says nothing otherwise.
+        block = {"software": "Jaeger", "url": "https://www.jaegertracing.io/"}
+        assert _parse(third_party=block).third_party == block
+        assert _parse().third_party is None
+        assert _parse(third_party=None).third_party is None
+
     def test_the_wiki_page_is_a_name_not_a_url(self):
         component = _parse(identifiers={"translator_all_wiki": "RTX-KG2"})
         assert component.translator_all_wiki == "RTX-KG2"

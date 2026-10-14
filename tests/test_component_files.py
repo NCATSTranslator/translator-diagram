@@ -114,6 +114,30 @@ class TestSchema:
         document["identifiers"]["helm_chart"] = ["shepherd", "shepherd"]
         assert list(validator.iter_errors(document))
 
+    def test_third_party_names_its_software(self, schema):
+        # The block exists to say *what* we deploy, so a bare `third_party: {}`
+        # would mark a component third-party without saying of what; and its
+        # url is a link the drawer renders, so it takes the same http(s) rule
+        # as a repository's.
+        validator = _validator_for(schema)(schema)
+        document = _load(COMPONENTS_DIR / "jaeger.yaml")
+        for value in (
+            {"software": "Jaeger"},
+            {"software": "Jaeger", "url": "https://www.jaegertracing.io/"},
+            None,
+        ):
+            document["third_party"] = value
+            assert not list(validator.iter_errors(document)), value
+        for bad in (
+            {},
+            {"url": "https://www.jaegertracing.io/"},
+            {"software": ""},
+            {"software": "Jaeger", "url": "ftp://x"},
+            {"software": "Jaeger", "version": "1.60"},
+        ):
+            document["third_party"] = bad
+            assert list(validator.iter_errors(document)), bad
+
     @pytest.mark.parametrize(
         "path",
         [("hosted_at",), ("environments", "ci", "location"), ("layer",)],
