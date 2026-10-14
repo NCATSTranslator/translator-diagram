@@ -76,7 +76,7 @@ on what is currently relevant.
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
 | change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) |
 | see how the parts fit together | [`docs/design.md`](docs/design.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) for the code and [`web/AGENTS.md`](src/translator_diagram/web/AGENTS.md) for the page — particularly *Things that look wrong but aren't* |
+| know why something is the way it is | [CONTRIBUTING.md](CONTRIBUTING.md) for how to work here, [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) for the code and [`web/AGENTS.md`](src/translator_diagram/web/AGENTS.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -498,7 +498,8 @@ translator-diagram/
 ├── uv.lock                 # Pinned dependency versions
 ├── env.default             # Template for .env (diagram only)
 ├── FUTURE.md               # Ideas with their costs worked out
-├── AGENTS.md               # Working agreements, and where the rest is
+├── CONTRIBUTING.md         # How to work here: checks, conventions
+├── AGENTS.md               # What only an agent needs, and where the rest is
 └── data/                   # Gitignored — every input and output goes here
     ├── sync/               # Cached upstream responses + manifest.json
     ├── dashboard/          # index.html and overview.json
@@ -549,28 +550,12 @@ is the live list. Ideas that started here:
 
 ## Contributing
 
-```bash
-uv sync              # first-time setup
-uv run pytest        # the test suite
-uv run ruff check    # Python lint
-uv run rumdl check . # Markdown lint
-```
-
-All four run in CI on every pull request, along with a dashboard build. The
-source is one module per subject under `src/translator_diagram/`, and `tests/`
-has one file per module — a change to `loading.py` belongs in
-`tests/test_loading.py`.
-
-Two things are worth reading before a first change.
-[`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) has the
-module map, the rule about which module may import which (enforced by
-`tests/test_package_layout.py`), and a *Things that look wrong but aren't*
-section that exists because most of them were arrived at the hard way. And if
-you change the dashboard, render it and look at it: the page has passed a full
-test suite while visibly broken more than once, and
-[`src/translator_diagram/web/AGENTS.md`](src/translator_diagram/web/AGENTS.md)
-carries the headless-Chromium recipe for checking it at several widths and in
-both themes.
+[CONTRIBUTING.md](CONTRIBUTING.md) is how to work here: the setup and the
+checks CI runs (`uv run pytest`, `ruff check`, `rumdl check .`), how to check
+a change to the diagram or the page, and the conventions. Read
+[`docs/design.md`](docs/design.md) and the module map in
+[`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) before
+a first change.
 
 ## Licence
 

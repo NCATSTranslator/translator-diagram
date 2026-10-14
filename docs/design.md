@@ -158,7 +158,7 @@ at it, and the browser-side decisions, are in
 | To find | Read |
 |---|---|
 | How to use the commands, and what the page shows | [`README.md`](../README.md) |
-| How to work in this repository | [`AGENTS.md`](../AGENTS.md) |
+| How to work in this repository | [`CONTRIBUTING.md`](../CONTRIBUTING.md), and [`AGENTS.md`](../AGENTS.md) for what only an agent needs |
 | Which module holds what, and which may import which | [`src/translator_diagram/AGENTS.md`](../src/translator_diagram/AGENTS.md) |
 | Decisions that look wrong but aren't | the same file, *Things that look wrong but aren't* |
 | What a component file contains | [`catalog/README.md`](../catalog/README.md) and its schema |

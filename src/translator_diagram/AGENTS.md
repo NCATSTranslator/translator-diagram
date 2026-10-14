@@ -1,7 +1,9 @@
 # src/translator_diagram/
 
-The code for both commands. Repo-wide working agreements — how to check your work,
-what only a human can judge, `data/` as scratch space — are in
+The code for both commands. How to work in this repository — how to check your
+work, `data/` as scratch space, the conventions — is in
+[../../CONTRIBUTING.md](../../CONTRIBUTING.md), and what only an agent needs,
+such as leaving the visual verdict to a human, is in
 [../../AGENTS.md](../../AGENTS.md). This file is the module map and the decisions
 that are not visible from the line you are changing.
 

@@ -107,7 +107,8 @@ def test_every_module_is_accounted_for():
 def test_imports_run_in_the_recorded_direction(module):
     stray = _package_imports(module) - ALLOWED[module]
     assert not stray, (
-        f"{module}.py imports {sorted(stray)}, which the layering in AGENTS.md "
+        f"{module}.py imports {sorted(stray)}, which the layering in "
+        f"src/translator_diagram/AGENTS.md "
         f"does not allow. Move the shared code down the graph rather than "
         f"widening ALLOWED — that is how colors.py came to hold the palette "
         f"constants that render and legend both need."
