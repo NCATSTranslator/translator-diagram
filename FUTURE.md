@@ -7,6 +7,8 @@ be lost in a pull request description.
 
 ## Date a deployment, not just a release
 
+Tracked in [#23](https://github.com/NCATSTranslator/translator-diagram/issues/23).
+
 The dashboard's `Last updated` column answers "when did this component last
 change" from a GitHub release or a SmartAPI registration. Neither answers the
 question people actually ask, which is **when was this environment last
@@ -35,10 +37,13 @@ environments would see it. Two things to be careful about there:
 
 ## Fill in the components with no date at all
 
+Tracked in [#24](https://github.com/NCATSTranslator/translator-diagram/issues/24).
+
 Thirteen of twenty-six components show no `Last updated`: they publish no
 GitHub releases and appear in no SmartAPI record. `GET /repos/{owner}/{name}`
 returns `pushed_at`, which would date every one of them that has a repository,
-at the cost of a second GitHub call per repository — about 19 more per sync.
+at the cost of a second GitHub call per repository — about 19 more per sync,
+on top of the 46 it already spends.
 
 Deliberately not done for now: a push to any branch moves `pushed_at`, so it
 answers "has anyone touched this repository" rather than "has this component
@@ -68,8 +73,10 @@ are withheld today.
 
 ## Watch the GitHub budget
 
-Both ideas above spend from the same allowance: **60 requests an hour** for an
-unauthenticated address, 5000 with a `GITHUB_TOKEN` in the environment (see
-`_headers` in `sync.py`). One full sync currently spends 19. Release lists are
-already keyed by repository rather than by component, so the three shepherds
-cost one call between them; anything added here should be keyed the same way.
+The two dating ideas at the top spend from the same allowance: **60 requests
+an hour** for an unauthenticated address, 5000 with a `GITHUB_TOKEN` in the
+environment (see `_headers` in `fetch.py`). One full sync currently spends
+about 46, broken down in the comment above `_source_repos` in `sync.py`.
+Release lists are already keyed by repository rather than by component, so the
+three shepherds cost one call between them; anything added here should be keyed
+the same way.

@@ -1,7 +1,10 @@
-# Component metadata: a proposal
+# Component metadata
 
-**Status:** proposal, for discussion. Nothing here is wired into the diagram
-generator yet — `loading.py` still reads the Google Sheet.
+**Status:** in use. `sync-components` and `build-dashboard` read
+`catalog/components/*.yaml`; `generate-diagram` still reads the Google Sheet
+until [#19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
+This began as a proposal, and the reasoning it gave is kept below because it
+is still why the format looks the way it does.
 
 ## The problem
 

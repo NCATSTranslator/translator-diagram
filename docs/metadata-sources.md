@@ -152,8 +152,9 @@ by when the release was created, and NameResolution's `v1.5.2` was published
 after `v1.6.2`.
 
 Rate limit: 60 requests an hour per address unauthenticated, 5000 with a
-token. Nineteen repositories is one sync, so this only bites when re-syncing
-with `--force`; `sync.py` sends `GITHUB_TOKEN` when the environment has one.
+token. One sync spends about 46 — the breakdown is in the comment above
+`_source_repos` in `sync.py` — so a second sync inside the hour runs out
+without one; `sync.py` sends `GITHUB_TOKEN` when the environment has one.
 
 ### Dates
 
