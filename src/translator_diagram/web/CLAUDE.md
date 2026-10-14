@@ -50,6 +50,14 @@ stubbing trick as the JS note below. Insert it straight after
 `<meta charset="utf-8">`: the page writes no `<head>` tag (HTML implies it), so
 a script that looks for `<head>` to insert after finds nothing.
 
+**The stub must answer the reduced-motion query too.** `core.js` asks
+`matchMedia("(prefers-reduced-motion: reduce)")` to decide whether the tiles
+count up, and a stub that returns `matches: false` for every query but the
+colour scheme switches the animation back on: four shots taken with the flag
+above still showed tiles mid-count (`40`, `41`, `42`, `43` fetches of the
+same 219). Return `matches: true` for a query containing `reduced-motion`,
+or hand any other query to the real `matchMedia` saved before the stub.
+
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
 between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
