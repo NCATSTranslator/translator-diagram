@@ -258,6 +258,31 @@ class TestRendering:
         html = render_html(build_payload([component], synced))
         assert '<meta name="robots" content="noindex, nofollow">' in html
 
+    def test_nothing_else_in_web_reaches_the_page(self, component, synced):
+        """web/ holds the agent notes for the browser half (web/AGENTS.md)
+        beside the files the page inlines. Those notes describe screenshot
+        recipes and internal decisions, and the page is published, so they
+        must never be inlined. Only the files named in CSS_FILES, JS_FILES
+        and FAVICON_FILE reach the page today; this keeps it that way if
+        someone switches to globbing the directory.
+
+        It checks every reasonably long line of each unshipped file, not the
+        file name, because a page that inlined the file would not name it."""
+        web = Path(dashboard.__file__).parent / "web"
+        shipped = {*dashboard.CSS_FILES, *dashboard.JS_FILES, dashboard.FAVICON_FILE}
+        unshipped = sorted(
+            p for p in web.iterdir() if p.is_file() and p.name not in shipped
+        )
+        assert "AGENTS.md" in {p.name for p in unshipped}, (
+            "web/AGENTS.md is gone or is now inlined: this test checks nothing"
+        )
+        html = render_html(build_payload([component], synced))
+        for path in unshipped:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if len(line) >= 40:
+                    assert line not in html, f"{path.name} reached the page: {line!r}"
+
 
 class TestEdges:
     def test_a_results_edge_points_the_way_data_moves(self):

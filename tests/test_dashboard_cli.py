@@ -108,6 +108,19 @@ class TestTheFlagDefaultsToWithholding:
         assert "Withheld 1 components (secret)" in result.output
 
 
+class TestTheOutputIsOnlyThePage:
+    def test_a_build_writes_the_page_and_its_payload_and_nothing_else(self, workspace):
+        """The Pages workflow uploads the whole output directory, and a
+        local preview serves it, so anything written there is published.
+        In particular the agent notes in web/ (web/AGENTS.md) must never be
+        copied out beside the page."""
+        result, _ = _run(workspace)
+        assert result.exit_code == 0, result.output
+        written = {p.relative_to(workspace / "out").as_posix()
+                   for p in (workspace / "out").rglob("*")}
+        assert written == {"index.html", "overview.json"}
+
+
 class TestAMissingPolicyStopsTheBuild:
     def test_no_policy_and_no_flag_is_an_error(self, workspace):
         """Not an empty policy. "Cannot find the file" must never be the path
