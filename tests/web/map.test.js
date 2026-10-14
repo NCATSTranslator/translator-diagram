@@ -9,12 +9,13 @@ const MAP = path.join(ROOT, "src", "translator_diagram", "web", "map.js");
 
 globalThis.TD = { fmt: { esc: String } };
 vm.runInThisContext(fs.readFileSync(MAP, "utf8"), { filename: "map.js" });
+const { nodeNameLimit } = TD.map;
 
 test("a map node name reserves the measured category width and an 8px gap", () => {
-  assert.equal(TD.map.nodeNameLimit(188, 12), 146);
-  assert.equal(TD.map.nodeNameLimit(188, 0), 166);
+  assert.equal(nodeNameLimit(188, 12), 146);
+  assert.equal(nodeNameLimit(188, 0), 166);
 });
 
 test("an unexpectedly wide category cannot consume the whole node name", () => {
-  assert.equal(TD.map.nodeNameLimit(188, 999), 24);
+  assert.equal(nodeNameLimit(188, 999), 24);
 });
