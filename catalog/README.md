@@ -52,6 +52,8 @@ uv run pytest
   `|` block rather than `>`.
 - No file writes a `diagram:` flag at its default, which keeps that block
   absent rather than a copy of `ubiquitous: false` in every file.
+- A `third_party` block names its `software`, and its `url`, if any, is
+  http(s).
 - Every component is either in a stage or listed under `unplaced` in
   `flow-steps.yaml`.
 - No identifier is claimed by two components, or by a component *and*
@@ -103,6 +105,33 @@ carries the two SmartAPI does not cover and leaves prod to the fetcher.
 
 [`components/docmetadata-api.yaml`](components/docmetadata-api.yaml) has all
 three. All three are published, so keep them to public information.
+
+**Software we deploy but did not write is a component too, marked
+`third_party`.** Jaeger is upstream code on our chart, and a MongoDB or Redis
+a service reads is a pod we run. Each gets a file when it is deployed on its
+own — its own chart or ITRB app, so a version per environment to show — or is
+shared by more than one component, like the Elasticsearch behind `nodenorm-es`
+and `nameres-es`, which has no single service file to live in. A datastore
+bundled as a dependency inside its service's own chart is not a component:
+mention it in the service's `description`. The block says whose code it is:
+
+```yaml
+third_party:
+  software: Jaeger                      # the upstream project's name
+  url: https://www.jaegertracing.io/    # its home page; optional
+```
+
+Absent means Translator-written; `null` means checked, our own code. The rest
+of the file is filled like any component's: `owner` is the team that runs it,
+`refactor_status` is required, `component_type` is absent (it is not a
+registered API service), and the upstream repository goes under
+`repositories` with `role: related`. A datastore takes its service's `layer`,
+is listed in `flow-steps.yaml` right after that service, and takes `part_of`
+only where the service has one; the service lists it under `connections.calls`.
+Its `summary` says what the software does for us — "third-party" is the
+field's job now, not the summary's. [`components/jaeger.yaml`](components/jaeger.yaml)
+is the live example; `redis-r3-external` in `unknown.yaml` is the kind of
+thing the rule decides.
 
 **Examples are for trying a component, not testing it.** `examples` holds
 up to three GET requests someone could make to see what a component does,

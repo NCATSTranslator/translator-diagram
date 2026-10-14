@@ -364,10 +364,12 @@ helm_charts:
     evidence: >-
       Chart.yaml carries the unedited `helm create` description and
       declares one dependency, bitnami/redis 17.9.3 — a caching layer for
-      the omnicorp chart, not a component in its own right.
+      the omnicorp chart, deployed on its own.
     note: >-
       Sheet row `omnicorp-redis` (ITRB app omnicorp-redis, Removed after
-      Refactor).
+      Refactor). Its own chart and its own row, so under README.md's
+      third-party rule it gets a file with `third_party: {software: Redis}`
+      when #20 converts the row.
 
   - name: ontology-kp
     status: not-recorded
@@ -519,7 +521,9 @@ helm_charts:
       chemical-drug-db — the conflation/equivalent-id/category Redis
       databases NodeNorm uses, external to the r3 chart above.
     note: >-
-      No sheet row, and it goes wherever r3 goes. Tracked in #52.
+      No sheet row, and it goes wherever r3 goes: if r3 becomes a component,
+      this is one too, deployed on its own and marked
+      `third_party: {software: Redis}` under README.md's rule. Tracked in #52.
 
   # --- Out of scope: legacy ROBOKOP / Plater / CAM / TranQL stack -------------
   #

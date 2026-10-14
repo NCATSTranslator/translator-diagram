@@ -57,6 +57,8 @@ requirements — we *point at* rather than copy.
 - the data flow: what it gets results from, and what it calls;
 - where it sits: its refactor status, its layer, the subsystem it is part of,
   and where it runs;
+- whose code it is, when it is not ours: `third_party` names the upstream
+  software we deploy;
 - how it should be drawn, in the rare case that needs saying at all.
 
 **Pointed at**, because somewhere upstream is already authoritative:
@@ -244,6 +246,30 @@ for a component, it is a namespace around an application.
 current and sometimes unavailable; a pinned value is always available and
 sometimes wrong. This proposal pulls everything it can and pins nothing, on
 the grounds that a wrong answer is worse than a missing one.
+
+**6. Is software we deploy but did not write a component? — decided: yes,
+marked.** Jaeger is upstream code on a chart of ours; a MongoDB or Redis that
+a service reads is a pod we run. Each gets a component file when it is
+deployed on its own or shared by more than one component, and a `third_party`
+block (`software`, `url`) says whose code it is. Two facts decided it. A
+separately deployed pod has a version per environment, which is the thing the
+dashboard exists to show, and it needs a row to show it in. And a shared
+datastore — the Elasticsearch behind `nodenorm-es` and `nameres-es` — has no
+single service file to live in.
+
+The alternative was a `datastores:` sub-block on the service that uses it,
+which would have kept the component list to Translator software. It fails on
+both facts above: it cannot carry a version grid, and a shared store would be
+recorded twice or on an arbitrary one of its readers. A datastore bundled as
+a dependency inside its service's own chart (`sri-testing`'s
+`bitnami/mongodb`) stays a mention in that service's `description`, because
+it has neither a deployment nor a version of its own.
+
+What this does not add is a role: nothing says *datastore* rather than
+*service*, and a reader tells them apart by name, summary and the `calls` edge
+from the service. [#55](https://github.com/NCATSTranslator/translator-diagram/issues/55)
+asks the same question for pipelines and data sources, and a `kind` axis, if
+one is needed, is its to add.
 
 ## How this replaces the sheet
 
