@@ -75,6 +75,7 @@ on what is currently relevant.
 | change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colors.md`](catalog/owner-colors.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
 | change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) |
+| see how the parts fit together | [`docs/design.md`](docs/design.md) |
 | know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code and [`web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
@@ -489,7 +490,7 @@ translator-diagram/
 │   └── CLAUDE.md           # Agent notes for this directory
 ├── config/
 │   └── privacy.yaml        # What a published build leaves out
-├── docs/                   # The metadata case and its research
+├── docs/                   # The design, the metadata case and its research
 ├── tests/                  # One test file per module
 ├── tools/                  # replay_sync.py: sync() offline, from a recorded cache
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)

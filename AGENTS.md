@@ -12,6 +12,7 @@ when it is relevant rather than every time:
 
 | Where | What is in it |
 |---|---|
+| [`docs/design.md`](docs/design.md) | How the parts fit together: the two stacks, sync versus build, which source wins, where redaction sits. The map to everything below |
 | [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) | The module map, the import rules, the data model, "I want to change X → open this", and two sections of decisions that look wrong and aren't. **Read it before changing any module.** |
 | [`src/translator_diagram/web/CLAUDE.md`](src/translator_diagram/web/CLAUDE.md) | The browser half: how to screenshot and measure the page, how to test its JS, and the browser-side decisions that look wrong and aren't |
 | [`catalog/CLAUDE.md`](catalog/CLAUDE.md), [`catalog/README.md`](catalog/README.md) | Everything a curator edits. The README is the guide: what a component file must contain, what each `unknown.yaml` status means, and which rules the tests enforce |
