@@ -55,8 +55,33 @@ a script that looks for `<head>` to insert after finds nothing.
 count up, and a stub that returns `matches: false` for every query but the
 colour scheme switches the animation back on: four shots taken with the flag
 above still showed tiles mid-count (`40`, `41`, `42`, `43` fetches of the
-same 219). Return `matches: true` for a query containing `reduced-motion`,
-or hand any other query to the real `matchMedia` saved before the stub.
+same 219). This one answers the colour scheme itself and hands every other
+query to the real `matchMedia`, so the flag keeps working. Run it in the
+build directory; it writes `light.html` and `dark.html` beside `index.html`:
+
+```bash
+for theme in light dark; do python3 - "$theme" <<'PY'
+import sys
+theme = sys.argv[1]
+dark = "true" if theme == "dark" else "false"
+stub = (
+    '<meta charset="utf-8"><script>'
+    "const realMatchMedia = window.matchMedia.bind(window);"
+    "window.matchMedia = (q) => q.includes('prefers-color-scheme')"
+    "  ? { matches: q.includes('dark') && " + dark + ", media: q,"
+    "      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }"
+    "  : realMatchMedia(q);"
+    "</script>"
+)
+page = open("index.html", encoding="utf-8").read()
+assert page.count('<meta charset="utf-8">') == 1
+open(f"{theme}.html", "w", encoding="utf-8").write(page.replace('<meta charset="utf-8">', stub, 1))
+PY
+done
+```
+
+Checked on 8b5d40d: both themes render, and the tiles read the final counts
+in both.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
