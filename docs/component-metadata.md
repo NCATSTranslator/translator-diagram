@@ -183,15 +183,18 @@ the `~` prefix, a file set closed under references, and public information
 only — are in [`catalog/README.md`](../catalog/README.md#conventions), each
 with its reason, so that a curator finds them without leaving that directory.
 
-## Open questions
+## Decisions
 
-These are the parts worth arguing about before anyone fills in 96 files.
+The questions this format had to answer before anyone filled in 96 files, and
+what was decided. The ones still open — whether to require metadata in the
+Helm chart, and whether observed calls should check the recorded data flow —
+are in [`FUTURE.md`](../FUTURE.md), with the issues that track them.
 
 **1. Is the kebab-case id the right identifier? — decided, for now: yes.**
 It is readable, it is what the sheet already uses, and every reference in
 these files already resolves through it. The cost is that it is *our*
 invention, so we maintain it. Two alternatives are unambiguous and externally
-maintained, and both are worth revisiting before we scale past 26 files:
+maintained:
 
 - the **GitHub repository** (`NCATSTranslator/NameResolution`) — universal,
   every component has one, easy to look up. But some components map to several
@@ -209,28 +212,10 @@ with Translator software with no field distinguishing the two.
 
 Nothing is lost by deciding this later: `identifiers` already records the
 GitHub repository and the ITRB app name, so a switch is a rename plus a
-reference rewrite, not a re-survey. What would be lost is doing it *twice* —
-so the question wants an answer before the remaining 70 components get
-files.
+reference rewrite, not a re-survey. When "later" has to be is in
+[`FUTURE.md`](../FUTURE.md#settle-the-component-identifier-before-20).
 
-**2. Should Helm charts become a required metadata source?** Today
-`Chart.yaml` is boilerplate — see [`metadata-sources.md`](metadata-sources.md)
-— so we cannot pull identity from it. But `values.yaml` already carries
-resource requests, storage sizes and data-download URLs that exist nowhere
-else, and the chart is the one artifact every deployed component must have.
-If we want to *require* components to declare basic metadata, the chart is a
-plausible place to require it. The counter-argument is coverage: only 5 of the
-26 components here have a chart in the public `translator-devops` repo, and
-SmartAPI and GitHub already cover far more.
-
-**3. Should the OpenTelemetry call graph check the recorded data flow?**
-The collectors observe which service actually called which, which is the same
-question `gets_results_from` and `calls` answer by hand. Comparing the two
-would catch both a stale edge and a dependency nobody declared. It is not
-free: service names are a naming space of their own, async work distorts span
-parentage, and a trace only shows edges that were exercised.
-
-**4. Is `diagram:` the right nesting? — decided: no, and it has been split.**
+**2. Is `diagram:` the right nesting? — decided: no, and it has been split.**
 The argument for it was that grouping the drawing-only fields keeps it obvious
 which describe the component and which describe the picture. The block did not
 hold to that: of its nine fields only `ubiquitous` and `hide` were about the
@@ -245,12 +230,12 @@ both flags default to `false` and most components are. The eight files whose
 `itrb_group` are why ITRB moved out at the same time: a group is not a name
 for a component, it is a namespace around an application.
 
-**5. How much should be pulled versus pinned?** A fetched value is always
-current and sometimes unavailable; a pinned value is always available and
-sometimes wrong. This proposal pulls everything it can and pins nothing, on
-the grounds that a wrong answer is worse than a missing one.
+**3. How much should be pulled versus pinned? — decided: pulled.** A
+fetched value is always current and sometimes unavailable; a pinned value is
+always available and sometimes wrong. The format pulls everything it can and
+pins nothing, on the grounds that a wrong answer is worse than a missing one.
 
-**6. Is software we deploy but did not write a component? — decided: yes,
+**4. Is software we deploy but did not write a component? — decided: yes,
 marked.** Jaeger is upstream code on a chart of ours; a MongoDB or Redis that
 a service reads is a pod we run. Each gets a component file when it is
 deployed on its own or shared by more than one component, and a `third_party`
@@ -276,15 +261,9 @@ one is needed, is its to add.
 
 ## How this replaces the sheet
 
-Not in this pull request. The order after it:
-
-1. A fetcher reads `catalog/components/*.yaml`, queries SmartAPI once, fetches each
-   `openapi` and `status` endpoint, and writes an enriched `components.json`
-   into the gitignored `data/`. It caches, and a component being down never
-   fails the diagram.
-2. `loading.py` reads YAML instead of CSV, and `--google-sheet` retires. A
-   one-way `--export-csv` keeps a spreadsheet view available for anyone who
-   wants one.
-3. [Issue #6](https://github.com/NCATSTranslator/translator-diagram/issues/6)
-   — reconciling against the list ITRB sends — joins on `itrb.app` and
-   `itrb.group`.
+The first step has shipped: `sync-components` reads every component file,
+follows its pointers, and caches what it finds under the gitignored
+`data/sync/`, where `build-dashboard` renders from. What is left — the diagram
+reading YAML, the remaining sheet rows, a read-only sheet as an output, and the
+ITRB reconciliation — is in
+[`FUTURE.md`](../FUTURE.md#retire-the-sheet-as-an-input).
