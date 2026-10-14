@@ -17,7 +17,7 @@ This is the research behind
 | GitHub | every component | Source, README, releases, issue tracker | **Yes**, but six orgs |
 | `/status` | some components | Software version, data release, liveness | Partly — no shared schema |
 | OpenTelemetry | 41 service names | Runtime service identity, and the real call graph | **Yes**, with attribution work |
-| Helm charts | 5 of our 26 | Image, resources, storage, data downloads | Partly — see below |
+| Helm charts | 8 of our 26 | Image, resources, storage, data downloads | Partly — see below |
 | infores catalog | 496 resources | Stable CURIE, knowledge level, consumers | As a cross-reference only |
 | Technical Documentation | ~15 components | Prose architecture pages | Sparse and stale |
 | Translator-All wiki | hundreds of pages | Prose, links | Not machine-readable |
@@ -69,6 +69,9 @@ Where the registry is uneven, and a fetcher must cope:
 - `name-lookup` and `sri-node-normalizer` list every server **twice**.
 - Registration is manual and tied to a GitHub username, so a component nobody
   registered is simply absent.
+
+Getting these fixed is upstream work; see
+[`FUTURE.md`](../FUTURE.md#upstream-gaps-worth-reporting).
 
 ## OpenAPI `info`
 
@@ -147,6 +150,9 @@ same kind of miss:
   tagged anywhere, so falling back from `/releases` to `/tags` would not find
   it either.
 
+Which of these an upstream team could fix is in
+[`FUTURE.md`](../FUTURE.md#upstream-gaps-worth-reporting).
+
 Note also that `published_at` is not the order `/releases` returns: it sorts
 by when the release was created, and NameResolution's `v1.5.2` was published
 after `v1.6.2`.
@@ -208,7 +214,9 @@ something a fetcher can parse generically.
 What it uniquely offers is **data provenance**: `babel_version` and
 `biolink_model.tag` are a different axis from software version, and nothing
 else exposes them at runtime. `?full=true` adds JVM/OS/cache detail; the
-default is cheap enough for a liveness probe.
+default is cheap enough for a liveness probe. A shared schema would make them
+readable generically; see
+[`FUTURE.md`](../FUTURE.md#upstream-gaps-worth-reporting).
 
 ## The deployment root
 
@@ -289,6 +297,10 @@ They are a sixth naming space, and a messier one than the rest:
   `answer-appraiser` is `ANSWER-APPRAISER` in prod; `strider` is
   `STRIDER-DEV` in test.
 
+`identifiers.otel_services` absorbs all of this today. Whether the names could
+converge upstream is in
+[`FUTURE.md`](../FUTURE.md#upstream-gaps-worth-reporting).
+
 ### Traces carry the call graph
 
 This is what the other sources cannot give us. Span parent/child
@@ -303,8 +315,10 @@ ARAX             -> NodeNorm, retriever
 ```
 
 Every one of those edges is an observation, not a declaration, which makes it
-the natural check on the `connections:` edges we record by hand. It
-is also how the ambiguous service names above were attributed at all: `gandalf`
+the natural check on the `connections:` edges we record by hand — not built
+yet, and planned in
+[`FUTURE.md`](../FUTURE.md#check-the-recorded-data-flow-against-what-is-observed).
+It is also how the ambiguous service names above were attributed at all: `gandalf`
 is `dogpark-tier-0` because `retriever` calls it, and `arax` is the Shepherd
 worker because it calls `ARAX`.
 
@@ -472,7 +486,8 @@ The last two only ever fire for charts a component already claims, because
 to what the page can show, and it means the two evidence-based rules currently
 confirm recorded matches rather than finding new ones.
 
-Run over today's cache: **7 charts of 50 attributed, 43 not**. Six are
+Run over today's cache: **7 charts of 50 attributed, 43 not** — tracked in
+[#41](https://github.com/NCATSTranslator/translator-diagram/issues/41). Six are
 recorded; the seventh is `aragorn`, matched to `shepherd-aragorn` because
 that component records the OpenTelemetry service `aragorn`. **That one is a
 name collision, not a finding**: the chart deploys the standalone ARAGORN
@@ -482,15 +497,17 @@ carries `provenanceTag: infores:dogpark-tier0`; without a second piece of
 evidence a name match is worth reporting and not worth recording.
 
 The 43 remaining are named in the sync summary and land in the payload as
-`unclaimed_charts`. They are never written into a component file: those and
+`unclaimed_charts`; eight of them deploy services we can identify, and whether
+those are components is
+[#52](https://github.com/NCATSTranslator/translator-diagram/issues/52). They are never written into a component file: those and
 `unknown.yaml` are hand-edited and test-enforced, and the matcher's job is to
 say what needs deciding, not to decide it.
 
 **Conclusion:** charts are not usable for *identity* today, but they are the
 only source for resources and data downloads, and they are the one artifact
 every deployed component must have. That makes them the natural place to
-*require* a metadata block, if we ever want to require one — see the open
-questions in [`component-metadata.md`](component-metadata.md).
+*require* a metadata block, if we ever want to require one — see
+[`FUTURE.md`](../FUTURE.md#require-a-metadata-block-in-the-helm-chart).
 
 ## infores catalog
 
@@ -519,9 +536,10 @@ The complete field set, with usage counts across the 496 entries: `name` 496,
 
 **There is no field for a repository, an endpoint, an image, a team or a
 deployment.** What it does uniquely offer is `consumes`/`consumed_by`, which
-makes the catalog a dataflow graph in its own right — worth comparing against
-ours, though it describes knowledge flow between resources rather than API
-calls between services.
+makes the catalog a dataflow graph in its own right, though it describes
+knowledge flow between resources rather than API calls between services. The
+map draws it beside ours; comparing the two is in
+[`FUTURE.md`](../FUTURE.md#check-the-recorded-data-flow-against-what-is-observed).
 
 Measured on the current cache: 9 of the 26 components record an infores, all
 9 are in the catalog, and between them they yield **9 edges with both ends on
@@ -548,7 +566,9 @@ generation from any registry.
 Two per-component conventions exist, both partial: `docs/architecture/ara/*.md`
 and `docs/architecture/kp/*.md` (e.g.
 `/architecture/ara/arax/`), and `docs/teams/*.md`. Several pages exist on disk
-but are absent from `nav:`, and the whole `teams/` tree is unlinked.
+but are absent from `nav:`, and the whole `teams/` tree is unlinked. Linking
+components to these pages is
+[#5](https://github.com/NCATSTranslator/translator-diagram/issues/5).
 
 The [Translator-All wiki](https://github.com/NCATSTranslator/Translator-All/wiki)
 carries hundreds of one-page-per-resource entries and is where most infores
