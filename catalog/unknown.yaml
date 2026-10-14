@@ -640,13 +640,3 @@ helm_charts:
       Chart.yaml carries the unedited `helm create` description. By name a
       Redis-backed cache for a Triple Pattern Fragments (TPF) server, likely
       supporting Automat's or ROBOKOP's TPF endpoints.
-
-  - name: toss
-    status: unattributed
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; name,
-      version and appVersion are the only fields present. The chart deploys
-      containers.renci.org/translator/toss, whose purpose is not
-      determinable from the chart alone.

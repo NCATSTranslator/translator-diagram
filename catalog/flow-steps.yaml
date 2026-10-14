@@ -78,5 +78,7 @@ stages:
 unplaced:
   description: >-
     Recorded, but not yet placed in a stage. PloverDB is the RTX-era query
-    engine, and where it belongs depends on what still calls it.
-  components: [ploverdb]
+    engine, and where it belongs depends on what still calls it. TOSS serves
+    the terms-of-service pages OpenAPI documents link to, and is not on the
+    path of a query.
+  components: [ploverdb, toss]
