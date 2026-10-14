@@ -229,7 +229,7 @@ class TestChartFetches:
         assert {destination.name for _, destination in jobs} == set(HELM_FILES)
 
     def test_a_component_deployed_by_two_charts_gets_both(self, tmp_path):
-        # nodenorm-es is a web server chart and a loader chart. Planning only
+        # nodenorm-redis is a web server chart, a loader chart and more. Planning only
         # the first would cache half the component and look complete doing it.
         jobs = _plan_chart_fetches(
             [_comp("svc", identifiers={"helm_chart": ["web-server", "loader"]})],
