@@ -21,7 +21,7 @@ stages:
     description: >-
       Pulls external sources in and turns them into KGX, against the
       identifiers everything else joins on.
-    components: [dingo-ingest, nodenorm-es, nodenorm-redis, cam-pipeline]
+    components: [dingo-ingest, nodenorm-es, cam-pipeline]
 
   - title: KGX storage
     description: Lands ingested KGX where the query tiers can read it.
@@ -78,7 +78,9 @@ stages:
 unplaced:
   description: >-
     Recorded, but not yet placed in a stage. PloverDB is the RTX-era query
-    engine, and where it belongs depends on what still calls it. TOSS serves
+    engine, and where it belongs depends on what still calls it. NodeNorm
+    Redis is the NodeNorm that nodenorm-es replaced, and nothing in Translator
+    uses it any more: ingest normalizes against nodenorm-es only. TOSS serves
     the terms-of-service pages OpenAPI documents link to, and is not on the
     path of a query.
-  components: [ploverdb, toss]
+  components: [ploverdb, nodenorm-redis, toss]

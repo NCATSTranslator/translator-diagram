@@ -77,7 +77,7 @@ repositories:
     visibility: public
 
 # Nothing in Translator calls it, so it has no place on the Map; it stays in
-# the Overview beside nodenorm-es.
+# the Overview, under unplaced in flow-steps.yaml.
 diagram:
   hide: true
 
