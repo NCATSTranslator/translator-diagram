@@ -1,0 +1,86 @@
+# NodeNorm Redis (nodenorm-redis)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: nodenorm-redis
+name: NodeNorm Redis
+summary: >-
+  The original Redis-backed Node Normalizer, replaced in Translator by NodeNorm
+  ES and no longer deployed or called there.
+description: |
+  The original Node Normalization service: given a CURIE, it returns the
+  canonical identifier, its equivalent identifiers and its Biolink categories,
+  from Babel's conflation and equivalent-identifier outputs loaded into Redis.
+
+  It has been removed from Translator's CI, Test and Prod environments, and no
+  part of Translator calls it any more: NodeNorm ES (`nodenorm-es`) has
+  replaced it. It is still actively maintained outside Translator.
+
+  It is three charts that are deployed together:
+
+  - `node-normalization-web-server`, the web front end;
+  - `redis-r3-external`, the seven Redis databases it reads (`id-id`,
+    `id-eq-id`, `id-categories`, `conflation-db`, `semantic-count`,
+    `info-content` and `chemical-drug-db`);
+  - `node-normalization-loader`, the job that loads a Babel release into
+    those databases.
+owner: DOGSLED
+component_type: Utility
+# The sheet still says `Removed after Refactor` on both its rows (`nodenorm`
+# and `nodenorm-loader`); it has since been removed from ci, test and prod.
+refactor_status: Already removed
+layer: Shared services
+
+identifiers:
+  infores: infores:sri-node-normalizer
+  # The Redis chart is folded in rather than given its own `third_party` file
+  # (README.md, Conventions) because the maintainer counts all three as one
+  # component: the databases exist only for this web server and loader.
+  #
+  # Its SmartAPI record (1c2eb8d02b4796c6a657c3363c0657dc) is deliberately not
+  # recorded: it still lists nodenorm.transltr.io, and a fetcher would turn
+  # that into a prod environment this component no longer has.
+  helm_chart:
+    - node-normalization-web-server
+    - redis-r3-external
+    - node-normalization-loader
+
+# The names it had while ITRB deployed it.
+itrb:
+  app: node-normalization-web-server
+  group: SRI-Ranking
+
+# No Translator deployment calls it or is called by it any more.
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+repositories:
+  - url: https://github.com/NCATSTranslator/NodeNormalization
+    role: source
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/node-normalization-web-server
+    role: helm-chart
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/redis-r3-external
+    role: helm-chart
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/node-normalization-loader
+    role: helm-chart
+    visibility: public
+
+# Nothing in Translator calls it, so it has no place on the Map; it stays in
+# the Overview beside nodenorm-es.
+diagram:
+  hide: true
+
+notes: >-
+  Removed from Translator's ci, test and prod, so no environments are
+  recorded. Replaced by nodenorm-es.
