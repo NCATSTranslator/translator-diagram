@@ -151,11 +151,23 @@ stay last in *both* directions. Layout and URL-state units live in
 
 ## Things that look wrong but aren't
 
-**This is not a module system.** The files are concatenated in `JS_FILES`
-order into one shared scope. A name declared with `const` in two files is a
-syntax error only when the bundle is checked — which is why
-`tests/test_web_assets.py` concatenates before `node --check`, and why
-`tests/web/` runs under `node --test`.
+**This is not a module system, on purpose.** The files are concatenated in
+`JS_FILES` order into one `<script>`. Each wraps its body in its own
+`(() => { … })()`, so a `const` in one file cannot collide with one in
+another; the only shared name is `TD`, which each file publishes its half of
+the page on (`TD.fmt`, `TD.table`, `TD.map`, …) and reads the others' from.
+
+ES modules were considered and not adopted. The page has to open from
+`file://`, where `import` across files is blocked, so modules would mean a
+bundler and a Node toolchain inside a build that otherwise needs only Python,
+in `build-dashboard` and in the Pages workflow alike. That belongs to the
+whole-repository decision in issue #45, not to this directory. What modules
+would have bought — load order made explicit, and a misspelled import caught
+before a browser runs it — `tests/web/namespace.test.js` checks instead: it
+runs the seven files in `JS_FILES` order and fails if a file reads a `TD` name
+while loading before an earlier file defines it, or if any `TD.x` or `TD.x.y`
+in the source names nothing. So moving a file in `JS_FILES` is safe exactly
+when that suite passes.
 
 **The page opens on every component**, having once opened on
 `Environments disagree` — which showed 7 rows of 24 and hid the platform to

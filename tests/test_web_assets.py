@@ -47,9 +47,10 @@ class TestEveryScriptParses:
         assert result.returncode == 0, result.stderr
 
     def test_the_concatenation_parses(self, node, tmp_path):
-        """Each file parses alone; the page ships them as one shared scope, so
-        a name declared with `const` in two files is a SyntaxError only here
-        -- which is the whole reason this test exists beside the one above."""
+        """Each file parses alone; the page ships them joined into one script,
+        and this checks the join. Every file wraps its body in its own
+        function today, so two `const`s cannot collide -- but a declaration
+        added outside a file's wrapper would, and only here would it show."""
         bundle = tmp_path / "bundle.js"
         bundle.write_text(_assets(JS_FILES), encoding="utf-8")
         result = subprocess.run(

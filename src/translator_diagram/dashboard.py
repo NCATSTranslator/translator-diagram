@@ -379,10 +379,10 @@ def _assets(names: tuple[str, ...]) -> str:
     custom properties the others read, and the boot script must come last.
 
     Concatenated into one block rather than loaded as modules, because the page
-    must open from file:// and `import` there needs a server. So every file
-    shares one top-level scope -- a `const` declared twice is a SyntaxError
-    that `node --check` on each file separately cannot see, which is why
-    tests/test_web_assets.py also checks the concatenation.
+    must open from file:// and `import` there needs a server. Every file
+    wraps its body in its own function, so their `const`s cannot collide; what
+    they share is the `TD` global, and tests/web/namespace.test.js checks that
+    this order gives each file the TD names it reads while loading.
     """
     return "\n".join(
         (resources.files(ASSET_PACKAGE) / name).read_text(encoding="utf-8")
