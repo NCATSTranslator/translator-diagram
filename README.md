@@ -290,11 +290,14 @@ someone who looks — it keeps a few things off an indexed page. See
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
 the public/private split this anticipates.
 
-Release lists come from the GitHub API, which allows 60 calls an hour to an
-unauthenticated address. That covers a sync of this repository twice over, but
-if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
-a higher limit. It is sent to `api.github.com` and to nothing else, and a
-throttled fetch costs some release tags, not the run.
+Release lists and repository metadata come from the GitHub API, which allows
+60 calls an hour to an unauthenticated address. A full sync spends about 46,
+so a second `--force` sync within the hour runs short. Set `GITHUB_TOKEN` in
+`.env` (see [`env.default`](env.default)) or in the environment for a limit of
+5000; with `gh` logged in, `GITHUB_TOKEN=$(gh auth token) uv run
+sync-components` does it without a file. The token is sent to `api.github.com`
+and to nothing else, and a throttled fetch costs some release tags, not the
+run.
 
 **Every column sorts.** Click a header to sort by it, click again to reverse,
 and a third click returns to stage order — which is also what the ✕ beside
@@ -496,7 +499,7 @@ translator-diagram/
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml          # uv/hatchling project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions
-├── env.default             # Template for .env (diagram only)
+├── env.default             # Template for .env: the sheet ID, a GitHub token
 ├── FUTURE.md               # Ideas with their costs worked out
 ├── AGENTS.md               # Working agreements, and where the rest is
 └── data/                   # Gitignored — every input and output goes here
