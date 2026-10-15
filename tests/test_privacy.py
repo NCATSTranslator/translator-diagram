@@ -6,8 +6,10 @@ import pathlib
 import click
 import pytest
 
+from tests.dashboard_helpers import _Probes
 from translator_diagram.components import ComponentFile
 from translator_diagram.dashboard import build_payload
+from translator_diagram.files import manifest_path
 from translator_diagram.privacy import (
     UNCLAIMED_CHART_FREE_TEXT,
     Policy,
@@ -19,7 +21,6 @@ from translator_diagram.privacy import (
     verify,
 )
 from translator_diagram.rows import build_rows
-from translator_diagram.synced_data import SyncedData
 
 
 def _policy(components=(), fields=(), environment_fields=()):
@@ -327,10 +328,7 @@ class TestInThePayload:
 
     @pytest.fixture
     def synced(self, tmp_path):
-        (tmp_path / "manifest.json").write_text(
-            json.dumps({"finished_at": "2026-09-01T00:00:00+00:00", "counts": {}})
-        )
-        return SyncedData(tmp_path)
+        return _Probes(tmp_path).build(finished_at="2026-09-01T00:00:00+00:00", counts={})
 
     def test_the_tiles_cannot_disagree_with_the_table(self, components, synced):
         """source_tally and unregistered_count are computed from the rows the
@@ -468,7 +466,7 @@ class TestVerify:
         from translator_diagram.synced_data import SyncedData
 
         sync_dir = pathlib.Path("data/sync")
-        if not (sync_dir / "manifest.json").exists():
+        if not manifest_path(sync_dir).exists():
             pytest.skip("no local sync; run sync-components")
         policy = load_policy()
         payload = build_payload(
@@ -480,7 +478,6 @@ class TestVerify:
 def test_build_rows_is_unchanged_by_the_policy_argument(tmp_path):
     """build_rows itself never redacts — the filter sits above it, so every
     existing test of row-building keeps testing the whole platform."""
-    (tmp_path / "manifest.json").write_text(json.dumps({"counts": {}}))
     components = [
         ComponentFile(
             id="one",
@@ -489,5 +486,5 @@ def test_build_rows_is_unchanged_by_the_policy_argument(tmp_path):
             refactor_status="New in Refactor",
         )
     ]
-    rows = build_rows(components, SyncedData(tmp_path))
+    rows = build_rows(components, _Probes(tmp_path).build(counts={}))
     assert [row["id"] for row in rows] == ["one"]
