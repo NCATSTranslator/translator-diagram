@@ -174,8 +174,14 @@ def manifest_fetches(manifest: Any) -> dict[str, dict[str, Any]]:
 
 
 def _hosts(probes: Any, half: str) -> dict[str, dict[str, dict[str, Any]]]:
-    """One half of `derived.json`: `{component id: {env: spec}}`, specs with a url."""
-    if not isinstance(probes, dict):
+    """One half of `derived.json`: `{component id: {env: spec}}`, specs with a url.
+
+    A spec without a url is dropped, which loses nothing: a confirmed one has
+    no deployment to reinstate, and a rejected one is carried forward only
+    when its url matches the candidate's (`sync._plan_derived_probes`).
+    """
+    by_component = probes.get(half) if isinstance(probes, dict) else None
+    if not isinstance(by_component, dict):
         return {}
     return {
         cid: {
@@ -183,7 +189,7 @@ def _hosts(probes: Any, half: str) -> dict[str, dict[str, dict[str, Any]]]:
             for env, spec in envs.items()
             if isinstance(spec, dict) and spec.get("url")
         }
-        for cid, envs in (probes.get(half) or {}).items()
+        for cid, envs in by_component.items()
         if isinstance(envs, dict)
     }
 

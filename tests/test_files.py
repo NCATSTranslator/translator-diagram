@@ -180,6 +180,10 @@ class TestCacheParsers:
         }
 
     def test_derived_tolerates_absence_and_older_shapes(self):
-        for probes in (None, [], "x", {}, {"confirmed": None}, {"confirmed": []}):
+        for probes in (
+            None, [], "x", {}, {"confirmed": None}, {"confirmed": []},
+            # Truthy and not a mapping: `or {}` let these through to `.items()`.
+            {"confirmed": ["x"], "rejected": "stale"},
+        ):
             assert confirmed_hosts(probes) == {}
             assert rejected_hosts(probes) == {}

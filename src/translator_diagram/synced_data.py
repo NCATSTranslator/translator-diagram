@@ -77,7 +77,7 @@ class SyncedData:
 
     def __init__(self, root: Path):
         self.root = root
-        self.manifest = read_json(manifest_path(root)) or {}
+        self.manifest = mapping(read_json(manifest_path(root)))
         self.smartapi = smartapi_hits(read_json(smartapi_path(root)))
         # One read, two answers. `sync` writes both halves of the same probe
         # into this file, and reading it twice would let a rebuild pick up a

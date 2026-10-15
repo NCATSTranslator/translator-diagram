@@ -9,7 +9,7 @@ import json
 
 from tests.dashboard_helpers import _cell, _comp, _Probes
 from translator_diagram.components import Deployment
-from translator_diagram.files import derived_path, smartapi_path
+from translator_diagram.files import derived_path, manifest_path, smartapi_path
 from translator_diagram.rows import build_rows
 from translator_diagram.synced_data import SyncedData
 
@@ -257,6 +257,14 @@ class TestUnexpectedShapes:
         assert SyncedData(tmp_path).smartapi == {}
         smartapi_path(tmp_path).write_text('{"hits": ["abc", {"_id": "def"}]}')
         assert list(SyncedData(tmp_path).smartapi) == ["def"]
+
+    def test_a_manifest_that_is_not_an_object(self, tmp_path):
+        # build_payload reads `manifest.get(...)`; a truncated or hand-edited
+        # manifest must cost the run's timestamps, not the build.
+        manifest_path(tmp_path).write_text("[1]")
+        synced = SyncedData(tmp_path)
+        assert synced.manifest == {}
+        assert synced.statuses == {}
 
     def test_a_derived_file_in_an_older_or_broken_shape(self, tmp_path):
         derived_path(tmp_path).write_text(json.dumps({
