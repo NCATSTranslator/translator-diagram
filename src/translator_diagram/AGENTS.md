@@ -31,7 +31,7 @@ which is how a 2000-line test file grows back.
 |---|---|
 | `files.py` | The filesystem both stacks share: `find_upward` (how `catalog/owner-colors.csv`, `catalog/flow-steps.yaml` and `config/privacy.yaml` are found from any directory in the checkout), the tolerant `read_json`/`read_yaml` readers, every path under `data/sync/` (`endpoint_key`, `releases_path`, ...) and the parsers of the cache's own files (`smartapi_hits`, `manifest_fetches`, `confirmed_hosts`, `rejected_hosts`). A leaf |
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
-| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
+| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, the `_layer_filename*` output stems, `_dedupe` (the one suffixing loop behind the ids and the stems) and `ubiquitous_clones` (the one walk behind the clone ids, which `validate` claims through it) |
 | `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
 | `loading.py` | `_parse_bool`, `parse_id_list`, `parse_externals`, `_valid_url`, `load_components`, and `download_sheet_csv` for `--google-sheet` |
 | `validation.py` | `validate` — duplicate IDs, unknown references, SVG id collisions |
