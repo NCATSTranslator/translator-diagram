@@ -227,13 +227,35 @@ def _helm_blocks(
             chart,
             synced.helm(chart, "Chart.yaml") or {},
             synced.helm(chart, "values.yaml") or {},
-            component.repository("helm-chart"),
+            _chart_repository(component, chart, len(charts)),
         )
         if detail is None:
             continue
         detail["last_changed"] = synced.chart_commit(chart)
         blocks.append(detail)
     return blocks
+
+
+def _chart_repository(
+    component: ComponentFile, chart: str, chart_count: int
+) -> str | None:
+    """The `helm-chart` repository link for one of a component's charts.
+
+    Matched on the URL's last path segment, which is the chart directory in
+    every link recorded today. `nodenorm-redis` and `cam-pipeline` record three
+    charts and three links, and taking the first link for every chart sent the
+    loader's block to the web server's directory. A component with one chart
+    keeps its one link whatever the URL ends in.
+    """
+    links = [
+        repo.get("url")
+        for repo in component.repositories
+        if repo.get("role") == "helm-chart" and repo.get("url")
+    ]
+    for url in links:
+        if url.rstrip("/").rsplit("/", 1)[-1] == chart:
+            return url
+    return links[0] if chart_count == 1 and links else None
 
 
 def _repo_document(synced: SyncedData, repo: str | None) -> dict[str, Any] | None:
