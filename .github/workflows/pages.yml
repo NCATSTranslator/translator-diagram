@@ -1,20 +1,18 @@
 # Build the dashboard, and publish it from main.
 #
-# Runs on main only: a push, the daily schedule, or a manual run, and each of
-# those deploys. A manual run on any other branch builds the page and uploads
-# it as an artifact to download and open, and deploys nothing. That is the way
-# to review a branch's page as GitHub builds it before merging:
-#
-#     gh workflow run pages.yml --ref <branch>
-#     gh run download <run id> --name dashboard --dir data/pages-preview
+# Deploys from main only: a push, the daily schedule, or a manual run on main,
+# and each of those deploys. A manual run on any other branch builds the page
+# and uploads it as an artifact to download and open, and deploys nothing. That
+# is the way to review a branch's page as GitHub builds it before merging; the
+# commands are in README.md, "The components dashboard".
 #
 # Pull requests do not trigger it. A PR is pushed to dozens of times before it
 # merges, and each build is a full sync -- about 240 requests to live
 # Translator services and 46 GitHub API calls -- of a commit that is usually
-# superseded within minutes; a local build (README.md, "The components
-# dashboard") answers the same question. What a PR build caught that ci.yml's tests do not, a failure
-# against live data, is caught as safely on main: deploy needs a successful
-# build, so a failed one leaves the published page as it was.
+# superseded within minutes; a local build answers the same question. What a
+# PR build caught that ci.yml's tests do not, a failure against live data, is
+# caught as safely on main: deploy needs a successful build, so a failed one
+# leaves the published page as it was.
 #
 # A branch cannot deploy, by design and by configuration: the github-pages
 # environment allows deployments from main only, so a deploy job on another
@@ -78,7 +76,11 @@ jobs:
         # verifies its own output before writing.
         run: uv run build-dashboard
 
+      # The downloadable copy is for reviewing a branch. main publishes the
+      # same directory through upload-pages-artifact below, and the live site
+      # is its copy, so a second upload there would only be stored twice.
       - uses: actions/upload-artifact@v4
+        if: github.ref != 'refs/heads/main'
         with:
           name: dashboard
           path: data/dashboard/
