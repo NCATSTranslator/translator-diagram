@@ -66,9 +66,12 @@
   /* A value as text, or nothing: what most rows of a definition list are. */
   const val = (value) => (filled(value) ? esc(value) : "");
 
-  /* The parts that are there, escaped, with a middle dot between them. The
-     result is HTML: never pass it to note() or esc(), which escape again. */
-  const dotJoin = (parts) => parts.filter(filled).map(esc).join(" · ");
+  /* The parts that are there, with a middle dot between them: text, which
+     note() escapes. joinHtml is the same thing escaped, for a template that
+     does not escape; handing note() the HTML one shows an `&` in a tag as
+     `&amp;` (#87), so the name says which is which. */
+  const dotJoin = (parts) => parts.filter(filled).join(" · ");
+  const joinHtml = (parts) => esc(dotJoin(parts));
 
   /* A list of small-caps tags, or nothing. */
   const tags = (items) =>
@@ -228,7 +231,7 @@
 
   function headerHtml(row) {
     const blurb = blurbFor(row);
-    const meta = dotJoin([row.refactor_status, row.hosted_at, row.component_type || row.type,
+    const meta = joinHtml([row.refactor_status, row.hosted_at, row.component_type || row.type,
       row.layer, thirdPartyText(row) ? "third-party" : ""]);
     return `<div class="dw-headtop">
         <div class="dw-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
@@ -270,8 +273,7 @@
     if (!repos.length) return row.repository ? stack([ext(row.repository)]) : "";
     return stack(repos.map((repo) => {
       const label = TD.row.repoLabel(repo.url);
-      const bits = [repo.role, repo.visibility && repo.visibility !== "public" ? repo.visibility : ""]
-        .filter(filled).join(" · ");
+      const bits = dotJoin([repo.role, repo.visibility && repo.visibility !== "public" ? repo.visibility : ""]);
       return `${ext(repo.url, label)} ${bits ? note(bits) : ""}`;
     }));
   }
@@ -309,9 +311,7 @@
     const updated = row.last_updated;
     if (!updated) return "";
     const label = TD.row.updatedLabel(updated);
-    // Joined raw, because note() escapes: dotJoin's output is already HTML,
-    // and escaping it again shows an `&` in a tag as `&amp;` (#87).
-    const bits = [label, updated.tag].filter(filled).join(" · ");
+    const bits = dotJoin([label, updated.tag]);
     return `${esc(TD.fmt.relativeAge(updated.at) || updated.date || "")} ${
       bits ? note(bits) : ""}`;
   }
@@ -342,7 +342,7 @@
     const typeExtra = row.type && row.component_type && row.type !== row.component_type
       ? ` ${note(`registry reads ${row.type}`)}` : "";
 
-    const stage = dotJoin([row.step_label, row.step_title]);
+    const stage = joinHtml([row.step_label, row.step_title]);
 
     const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
@@ -730,7 +730,7 @@
     ]);
 
     const servers = list(record.servers).map((server) => {
-      const under = dotJoin([server.location, server.description]);
+      const under = joinHtml([server.location, server.description]);
       return [
         val(server.maturity),
         `${server.url ? ext(server.url, server.url, "dw-link dw-mono") : ""}${
