@@ -288,13 +288,18 @@ class TestRendering:
             "web/AGENTS.md is gone or is now inlined: this test checks nothing"
         )
         html = render_html(build_payload([component], synced))
+        compared = 0
         for path in unshipped:
             # Bytes, not text: an unshipped binary must not crash the check.
             text = path.read_bytes().decode("utf-8", errors="replace")
             for line in text.splitlines():
                 line = line.strip()
                 if len(line) >= 40:
+                    compared += 1
                     assert line not in html, f"{path.name} reached the page: {line!r}"
+        # AGENTS.md being listed is not enough: cut to a stub, or rewrapped
+        # into short lines, it would leave the loop above nothing to compare.
+        assert compared, "no line of web/AGENTS.md is long enough to check"
 
 
 class TestEdges:
