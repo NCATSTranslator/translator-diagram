@@ -2,14 +2,15 @@
 
 The browser half of the dashboard: the CSS and JS that `CSS_FILES` and
 `JS_FILES` in `dashboard.py` concatenate and inline into the generated page.
-The repo-wide working agreements are in [../../../AGENTS.md](../../../AGENTS.md),
-and the Python side — the payload this code reads, and which module builds
-which part of it — is in [../CLAUDE.md](../CLAUDE.md).
+How to work in this repository is in
+[../../../CONTRIBUTING.md](../../../CONTRIBUTING.md), and the Python side —
+the payload this code reads, and which module builds which part of it — is in
+[../AGENTS.md](../AGENTS.md).
 
 ## Looking at the page
 
-`AGENTS.md` says to render the page and look before calling it fine, in both
-views and both themes. This is how.
+`CONTRIBUTING.md` says to render the page and look before calling it fine, in
+both views and both themes. This is how.
 
 Either browser works. Chromium's headless shell runs from the command line
 with no Python package; Firefox runs through Playwright's API, which also

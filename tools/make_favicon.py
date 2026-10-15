@@ -15,7 +15,7 @@ Windows Vista). No Pillow, which this repository does not depend on.
     uv run python tools/make_favicon.py
 
 Needs Playwright's headless Chromium shell, the one the screenshot recipe in
-src/translator_diagram/web/CLAUDE.md uses. The letters are set in the system
+src/translator_diagram/web/AGENTS.md uses. The letters are set in the system
 UI face, so a re-render on another OS draws slightly different glyphs; commit
 the .ico it writes only if you mean to change the icon.
 """
@@ -51,7 +51,7 @@ def chrome() -> str:
             "~/.cache/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell"))
     )
     if not found:
-        sys.exit("No Playwright headless Chromium shell found; see web/CLAUDE.md.")
+        sys.exit("No Playwright headless Chromium shell found; see web/AGENTS.md.")
     return found[-1]
 
 

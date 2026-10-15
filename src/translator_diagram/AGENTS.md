@@ -1,7 +1,9 @@
 # src/translator_diagram/
 
-The code for both commands. Repo-wide working agreements — how to check your work,
-what only a human can judge, `data/` as scratch space — are in
+The code for both commands. How to work in this repository — how to check your
+work, `data/` as scratch space, the conventions — is in
+[../../CONTRIBUTING.md](../../CONTRIBUTING.md), and what only an agent needs,
+such as leaving the visual verdict to a human, is in
 [../../AGENTS.md](../../AGENTS.md). This file is the module map and the decisions
 that are not visible from the line you are changing.
 
@@ -55,7 +57,7 @@ The dashboard is a second, parallel stack over the same components:
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
 | `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
 | `dashboard_cli.py` | `sync-components` and `build-dashboard` |
-| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/CLAUDE.md`](web/CLAUDE.md) has how to look at the page and the browser-side decisions |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/AGENTS.md`](web/AGENTS.md) has how to look at the page and the browser-side decisions |
 
 `web/` holds what the browser gets and nothing else — it was `data/`, which
 collided with the gitignored `/data/` scratch space at the root. The packaged

@@ -1,8 +1,8 @@
 # catalog/
 
 Everything a curator edits: the component files, `unknown.yaml`, the stage
-order, the owner colours and their schemas. The repo-wide working agreements
-are in [../AGENTS.md](../AGENTS.md). **[README.md](README.md) is the guide to
+order, the owner colours and their schemas. How to work in this repository is
+in [../CONTRIBUTING.md](../CONTRIBUTING.md). **[README.md](README.md) is the guide to
 this directory**: what each file holds, how to add a component, the rules the
 tests enforce, the conventions, and what each `unknown.yaml` status means.
 Read it rather than expecting the rules here. The case for the format is in
