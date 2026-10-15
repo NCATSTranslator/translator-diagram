@@ -1,0 +1,207 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup: ruled ledger</title>
+<style>
+/* Direction A, "ruled ledger": the current tokens, a plain ruled table, no pill
+   rows, 14px type, every row and environment column separated by a line. */
+:root {
+  color-scheme: light;
+  --page: #fff; --raised: #f2f4f7; --text: #202124; --muted: #606368;
+  --hairline: rgba(206,208,208,.6); --hairline-strong: rgba(206,208,208,.95);
+  --accent: #662e6b; --accent-soft: rgba(102,46,107,.12); --link: #3562ac;
+  --drift: rgba(82,79,129,.12); --drift-ink: #524f81; --ok: #669f38; --bad: #cc2e46;
+  --shadow-pop: 0 6px 24px rgba(32,33,36,.14), 0 1px 2px rgba(32,33,36,.1);
+  --font: system-ui, -apple-system, "Segoe UI", "Open Sans", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #161618; --raised: #1f1f22; --text: #f2f2f7; --muted: #a1a1a6;
+  --hairline: #3a3a3c; --hairline-strong: #48484a;
+  --accent: #c2abc4; --accent-soft: rgba(194,171,196,.2); --link: #84a3dc;
+  --drift: rgba(151,149,179,.22); --drift-ink: #9795b3;
+  --shadow-pop: 0 8px 28px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body { font: 14px/1.4 var(--font); color: var(--text); background: var(--page);
+  display: flex; flex-direction: column; }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); }
+
+/* Top bar */
+.topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  height: 60px; padding: 0 20px; border-bottom: 1px solid var(--hairline-strong); }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .mark { width: 30px; height: 30px; border-radius: 6px; background: var(--accent);
+  color: #fff; font: 700 14px/30px var(--font); text-align: center; }
+.brand .name { font-weight: 600; font-size: 15px; }
+.brand .sub { color: var(--muted); font-size: 13px; margin-left: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--hairline-strong); border-radius: 4px; overflow: hidden; }
+.seg span { padding: 5px 14px; font-size: 13px; }
+.seg .on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.topright { justify-self: end; display: flex; align-items: center; gap: 10px; position: relative; }
+.btn { font: 13px var(--font); color: var(--text); background: var(--page);
+  border: 1px solid var(--hairline-strong); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+details.sync { position: relative; }
+details.sync summary { list-style: none; cursor: pointer; font-size: 13px; color: var(--muted);
+  border: 1px solid var(--hairline-strong); border-radius: 4px; padding: 5px 10px; }
+details.sync summary::after { content: " ▾"; }
+.pop { position: absolute; right: 0; top: calc(100% + 6px); width: 440px; z-index: 60;
+  background: var(--page); border: 1px solid var(--hairline-strong); border-radius: 4px;
+  box-shadow: var(--shadow-pop); padding: 14px 16px; font-size: 13px; }
+.pop h3 { margin: 0 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.pop p { margin: 0 0 10px; }
+.pop table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+.pop td { padding: 3px 0; border-top: 1px solid var(--hairline); vertical-align: top; }
+.pop td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-right: 10px; font-weight: 600; }
+.pop td.pct { color: var(--muted); width: 48px; text-align: right; padding-right: 10px; }
+.pop .bar { height: 4px; background: var(--raised); margin-top: 4px; }
+.pop .bar i { display: block; height: 4px; background: var(--accent); }
+
+/* Filters */
+.filters { display: flex; align-items: center; gap: 8px; padding: 12px 20px;
+  border-bottom: 1px solid var(--hairline-strong); background: var(--raised); }
+.filters input { font: 13px var(--font); padding: 5px 10px; border: 1px solid var(--hairline-strong);
+  border-radius: 4px; width: 260px; background: var(--page); color: var(--text); }
+.filters .btn b { font-weight: 600; }
+.filters .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+/* Table */
+.wrap { flex: 1; overflow: auto; }
+table.grid { border-collapse: collapse; width: 100%; min-width: 1100px; }
+thead th { position: sticky; top: 0; z-index: 3; background: var(--page); text-align: left;
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  padding: 10px 10px 8px; border-bottom: 2px solid var(--text); }
+thead th.env { text-align: center; border-left: 1px solid var(--hairline); }
+td { padding: 7px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+td:first-child, th:first-child { padding-left: 20px; position: sticky; left: 0; background: var(--page); z-index: 2; }
+tr.band td { padding: 22px 10px 6px 20px; border-bottom: 2px solid var(--hairline-strong); background: var(--page); }
+tr.band:first-child td { padding-top: 10px; }
+.band .step { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); font-weight: 600; margin-right: 10px; }
+.band .title { font-weight: 700; font-size: 15px; }
+.band .count { color: var(--muted); margin-left: 8px; font-size: 13px; }
+.band .desc { color: var(--muted); font-size: 13px; margin-left: 12px; }
+tr.row:hover td { background: var(--raised); }
+.cname { font-weight: 600; font-size: 15px; }
+.cid { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-left: 8px; }
+.chev { display: inline-block; width: 16px; color: var(--muted); font-size: 12px; }
+.coin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.ext { font-size: 11px; border: 1px solid var(--hairline-strong); border-radius: 3px; padding: 0 5px; margin-left: 6px; color: var(--muted); }
+td.muted, .muted { color: var(--muted); }
+.age { display: block; }
+.src { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+td.env { border-left: 1px solid var(--hairline); width: 150px; text-align: center; }
+td.env.drift { background: var(--drift); }
+tr.row:hover td.env.drift { background: var(--drift); }
+.v { font-family: var(--mono); font-weight: 700; font-size: 14px; color: inherit; }
+.v.copied { font-weight: 400; color: var(--muted); }
+.v.copied::before { content: "\201C"; } .v.copied::after { content: "\201D"; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.dot.up { background: var(--ok); } .dot.down { background: var(--bad); }
+.neq { color: var(--drift-ink); font-weight: 700; margin-left: 5px; }
+.l2 { display: block; font-size: 12px; color: var(--muted); margin-top: 1px; }
+.l2 .data { color: var(--text); font-family: var(--mono); }
+.why { font-size: 12px; color: var(--muted); font-style: italic; }
+.inf { font-size: 11px; color: var(--muted); }
+/* Expanded rows */
+tr.row.open td { border-bottom-color: transparent; background: var(--raised); }
+tr.detail td { background: var(--raised); border-bottom: 0; padding: 2px 10px; font-size: 13px; }
+tr.detail td.dk { padding-left: 36px; color: var(--muted); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; line-height: 22px; }
+tr.detail td.dv { text-align: center; font-family: var(--mono); font-size: 12.5px; line-height: 22px; }
+tr.detail td.dv a { color: inherit; border-bottom: 1px dotted var(--muted); }
+tr.detail td.dv .n { color: var(--muted); font-family: var(--font); font-size: 11px; margin-left: 4px; }
+tr.detail.last td { border-bottom: 1px solid var(--hairline); padding-bottom: 8px; }
+.rel { display: inline-block; font-family: var(--mono); font-size: 11px; border: 1px solid var(--hairline-strong);
+  border-radius: 3px; padding: 0 5px; margin: 2px 4px 2px 0; }
+.rel.deployed { background: var(--accent-soft); border-color: var(--accent); }
+
+/* The real page's column ladder: Repository leaves at 1400px, Last updated at
+   1150px, Owner at 800px (base.css .drop-*). Header, body and filler cells all
+   carry the class, so an expanded row keeps its values under their columns. */
+@media (max-width: 1400px) { .drop-md { display: none; } }
+@media (max-width: 1150px) { .drop-sm { display: none; } }
+@media (max-width: 800px) { .drop-xs { display: none; } .brand .sub { display: none; } }
+</style>
+<div class="topbar">
+  <div class="brand"><span class="mark">Tr</span><span class="name">Translator components</span>
+    <span class="sub">what is running where, in which version, on which data</span></div>
+  <div class="seg"><span class="on">Overview</span><span>Map</span></div>
+  <div class="topright" id="topright"></div>
+</div>
+<div class="filters">
+  <input type="search" placeholder="Search components, versions, ids…">
+  <button class="btn">Owner <b>All</b> ▾</button>
+  <button class="btn">Show <b>All components</b> ▾</button>
+  <button class="btn">Reset</button>
+  <button class="btn">Copy link</button>
+  <span class="status">Ordered by stage · <span id="count"></span></span>
+</div>
+<div class="wrap"><table class="grid"><thead><tr>
+  <th>Component</th><th class="drop-xs">Owner</th><th class="drop-md">Repository</th><th class="drop-sm">Last updated</th>
+  <th class="env">dev</th><th class="env">ci</th><th class="env">test</th><th class="env">prod</th>
+</tr></thead><tbody id="body"></tbody></table></div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const M = window.MOCK, esc = M.esc;
+  M.applyTheme();
+  const data = await M.load();
+  const ENVS = data.environments;
+  const styles = data.owner_styles || {};
+  const coin = (o) => `<span class="coin" style="background:${(styles[o] || {}).base || "#999"}"></span>`;
+  const EXPAND = new URLSearchParams(location.search).get("expand") || "arax";
+
+  function envCell(row, env) {
+    const m = M.cell(row, env);
+    if (!m.deployed) return `<td class="env"><span class="why">${esc(m.reason || "not deployed")}</span></td>`;
+    const dot = m.reach ? `<span class="dot ${m.reach}" title="${m.reach === "up" ? "reachable" : "not reachable"}"></span>` : "";
+    if (!m.version) return `<td class="env">${dot}<span class="why">${esc(m.reason)}</span></td>`;
+    const v = m.href ? `<a class="v${m.live ? "" : " copied"}" href="${esc(m.href)}" target="_blank" rel="noopener">${esc(m.version)}</a>`
+                     : `<span class="v${m.live ? "" : " copied"}">${esc(m.version)}</span>`;
+    const neq = m.drift.length ? `<span class="neq" title="differs from the rest of this row on ${m.drift.join(", ")}">≠</span>` : "";
+    const l2 = [m.sourceShort, m.dataRelease ? `<span class="data">${esc(m.dataRelease)}</span>` : "", m.flags.inferred ? "inferred" : "", m.flags.unregistered ? "not in SmartAPI" : ""].filter(Boolean).join(" · ");
+    return `<td class="env${m.drift.length ? " drift" : ""}">${dot}${v}${neq}<span class="l2">${l2}</span></td>`;
+  }
+  function detailRows(row) {
+    const models = Object.fromEntries(ENVS.map((e) => [e, M.cell(row, e)]));
+    const labels = [...new Set(ENVS.flatMap((e) => models[e].facts.map((f) => f.label)))];
+    const fill = `<td class="drop-xs"></td><td class="drop-md"></td><td class="drop-sm"></td>`;
+    const rows = labels.map((label) => `<tr class="detail"><td class="dk">${esc(label)}</td>${fill}${
+      ENVS.map((e) => { const f = models[e].facts.find((x) => x.label === label);
+        if (!f) return `<td class="dv muted">—</td>`;
+        const val = f.href ? `<a href="${esc(f.href)}" target="_blank" rel="noopener">${esc(f.value)}</a>` : esc(f.value);
+        return `<td class="dv">${val}${f.note ? `<span class="n">${esc(f.note)}</span>` : ""}</td>`; }).join("")}</tr>`);
+    const rels = (row.releases_detail || []).slice(0, 8).map((r) => `<a class="rel${r.deployed ? " deployed" : ""}" href="${esc(r.url)}" target="_blank">${esc(r.tag)}</a>`).join("");
+    rows.push(`<tr class="detail last"><td class="dk">Releases</td>${fill}<td class="dv" colspan="${ENVS.length}" style="text-align:left">${rels || "<span class=muted>none recorded</span>"}</td></tr>`);
+    return rows.join("");
+  }
+  function rowHtml(row) {
+    const open = row.id === EXPAND;
+    const ext = (row.externals || []).map((x) => `<span class="ext">${x.direction === "in" ? "◀" : "▶"} ${esc(x.name)}</span>`).join("");
+    const upd = row.last_updated ? `<span class="age">${esc(M.relativeAge(row.last_updated.at))}</span><span class="src">${esc(row.last_updated.source)}</span>` : `<span class="muted">—</span>`;
+    const repo = row.repository ? `<a href="${esc(row.repository)}" target="_blank">${esc(row.repository.replace("https://github.com/", ""))}</a>` : `<span class="muted">—</span>`;
+    return `<tr class="row${open ? " open" : ""}"><td><span class="chev">${open ? "▾" : "▸"}</span><span class="cname">${esc(row.name)}</span>${ext}<span class="cid">${esc(row.id)}</span></td>
+      <td class="drop-xs">${coin(row.owner)}${esc(row.owner)}</td><td class="drop-md">${repo}</td><td class="drop-sm">${upd}</td>${ENVS.map((e) => envCell(row, e)).join("")}</tr>${open ? detailRows(row) : ""}`;
+  }
+  document.getElementById("body").innerHTML = M.bands(data.rows).map((b) =>
+    `<tr class="band"><td colspan="8"><span class="step">${esc(b.label)}</span><span class="title">${esc(b.title)}</span><span class="count">${b.rows.length} component${b.rows.length === 1 ? "" : "s"}</span><span class="desc">${esc(b.description || "")}</span></td></tr>` +
+    b.rows.map(rowHtml).join("")).join("");
+  document.getElementById("count").textContent = `${data.rows.length} of ${data.rows.length} components`;
+
+  const f = M.figures(data);
+  const pct = (s) => Math.round(100 * s.n / s.of);
+  document.getElementById("topright").innerHTML = `
+    <details class="sync" open><summary>Checked ${esc(M.since(f.syncedAt))}</summary><div class="pop">
+      <p>Checked <b>${esc(M.since(f.syncedAt))}</b> <span class="muted">(${esc(f.syncedAt.slice(0, 16).replace("T", " "))} UTC)</span>.
+         ${f.checks.succeeded} of ${f.checks.attempted} checks succeeded; ${f.checks.failed} failed.</p>
+      <h3>How much of the platform</h3>
+      <table>${f.shares.map((s) => `<tr><td class="n">${s.n} of ${s.of}</td><td class="pct">${pct(s)}%</td><td>${esc(s.label)}<div class="bar"><i style="width:${pct(s)}%"></i></div>
+        <a href="?versions=${s.view}">show the ${s.of - s.n} that are not</a></td></tr>`).join("")}</table>
+      <h3>Where versions came from</h3><p>${f.sources.map(esc).join(", ")}.</p>
+      <h3>OpenTelemetry</h3><p>${f.otel.total} services reporting: ${f.otel.perEnv.map(([e, n]) => `${e} ${n}`).join(" · ")}.</p>
+    </div></details><button class="btn" title="Theme">◐</button>`;
+})();
+</script>
