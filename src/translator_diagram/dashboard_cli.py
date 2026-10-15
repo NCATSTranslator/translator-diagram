@@ -15,7 +15,6 @@ from dotenv import find_dotenv, load_dotenv
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
 from .files import manifest_path
-from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, DEFAULT_WORKERS, sync
@@ -161,7 +160,9 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         "Version sources: "
         + ", ".join(f"{source} {count}" for source, count in sorted(tally.items()))
     )
-    stranded = isolated(components)
+    # Read off the rows rather than recomputed: build_rows has already walked
+    # the flow depths, and the log should name what the page marks isolated.
+    stranded = sorted(row["id"] for row in payload["rows"] if row["isolated"])
     if stranded:
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
     click.echo(f"Wrote {json_path}")

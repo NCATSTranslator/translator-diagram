@@ -94,6 +94,14 @@ class TestTheFlagDefaultsToWithholding:
         assert payload["redacted"]["components"] == 1
         assert "secret" not in json.dumps(payload)
 
+    def test_the_isolated_line_names_what_the_page_shows(self, workspace):
+        # Neither workspace component records an edge. The line is read off
+        # the published rows, so a withheld component is not listed there.
+        result, _ = _run(workspace)
+        assert "No recorded dependencies for: keeper\n" in result.output
+        result, _ = _run(workspace, "--include-private")
+        assert "No recorded dependencies for: keeper, secret\n" in result.output
+
     def test_include_private_builds_everything(self, workspace):
         result, payload = _run(workspace, "--include-private")
         assert result.exit_code == 0, result.output
