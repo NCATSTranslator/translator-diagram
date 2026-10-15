@@ -64,9 +64,11 @@ The dashboard is a second, parallel stack over the same components:
 the root. The notes sit beside the files they describe but are never served:
 the page inlines only what `CSS_FILES`, `JS_FILES` and `FAVICON_FILE` name, and
 a build writes only `index.html` and `overview.json`, which is everything Pages
-publishes. Two tests hold both in place, in `tests/test_dashboard.py` and
-`tests/test_dashboard_cli.py`, so a glob over `web/` fails CI rather than
-publishing the notes. The packaged fallback copy of `owner-colors.csv` sits at
+publishes. Tests in `tests/test_dashboard.py` and `tests/test_dashboard_cli.py`
+hold both in place: inlining the notes into the page, raw, escaped or rendered
+from Markdown, or writing them beside it, fails CI rather than publishing
+them. A build does not clear its output directory, so it names on stderr any
+file there it did not write, which a local preview would serve. The packaged fallback copy of `owner-colors.csv` sits at
 the package root instead: a colour table the diagram generator reads is not a
 web file.
 
