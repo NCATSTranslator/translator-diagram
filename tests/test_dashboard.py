@@ -3,6 +3,7 @@
 import base64
 import json
 import re
+from importlib import resources
 from pathlib import Path
 
 from tests.dashboard_helpers import _comp, _row
@@ -268,17 +269,29 @@ class TestRendering:
 
         It checks every reasonably long line of each unshipped file, not the
         file name, because a page that inlined the file would not name it."""
-        web = Path(dashboard.__file__).parent / "web"
+        # The same lookup the page's own loader uses, so this lists the files
+        # a build reads even when the package is installed rather than checked
+        # out.
+        web = resources.files(dashboard.ASSET_PACKAGE)
         shipped = {*dashboard.CSS_FILES, *dashboard.JS_FILES, dashboard.FAVICON_FILE}
+        # Dotfiles are Finder's or an editor's (.DS_Store, .swp), not the
+        # package's.
         unshipped = sorted(
-            p for p in web.iterdir() if p.is_file() and p.name not in shipped
+            (
+                p
+                for p in web.iterdir()
+                if p.is_file() and p.name not in shipped and not p.name.startswith(".")
+            ),
+            key=lambda p: p.name,
         )
         assert "AGENTS.md" in {p.name for p in unshipped}, (
             "web/AGENTS.md is gone or is now inlined: this test checks nothing"
         )
         html = render_html(build_payload([component], synced))
         for path in unshipped:
-            for line in path.read_text(encoding="utf-8").splitlines():
+            # Bytes, not text: an unshipped binary must not crash the check.
+            text = path.read_bytes().decode("utf-8", errors="replace")
+            for line in text.splitlines():
                 line = line.strip()
                 if len(line) >= 40:
                     assert line not in html, f"{path.name} reached the page: {line!r}"
