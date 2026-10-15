@@ -495,7 +495,8 @@ translator-diagram/
 │   └── privacy.yaml        # What a published build leaves out
 ├── docs/                   # The design, the metadata case and its research
 ├── tests/                  # One test file per module
-├── tools/                  # replay_sync.py: sync() offline, from a recorded cache
+├── tools/                  # replay_sync.py: sync() offline, from a recorded cache;
+│                           # make_favicon.py: renders web/favicon.ico
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml          # uv/hatchling project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions
