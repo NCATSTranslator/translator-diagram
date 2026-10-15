@@ -251,7 +251,12 @@ repository topics belong to other teams. Treat every field as hostile markup.
   at v4.0.0 or later because v3 ran `actions/upload-artifact@v4` by tag; the
   others are plain Node actions that run nothing else.
 - **Deploys are narrow.** The Pages workflow runs with `contents: read`. Only
-  the deploy job gets `pages: write`, and it runs only on `main`, which the
+  the deploy job gets more: `pages: write`, and `id-token: write`, which lets
+  it mint an OIDC token. `deploy-pages` needs it to prove to Pages which
+  repository and workflow is deploying. Nothing in this repository accepts
+  that token elsewhere, but a cloud role set up to trust this repository's
+  OIDC identity would let the job assume that role too, so grant one only with
+  this job in mind. The job runs only on `main`, which the
   `github-pages` environment enforces from its side too: it accepts
   deployments from `main` alone. A manual run on any other branch only uploads
   an artifact, and pull requests, including from forks, build nothing.
@@ -289,7 +294,9 @@ repository topics belong to other teams. Treat every field as hostile markup.
 Run through this when a pull request adds a field, a source, a fetch or a
 rendering path:
 
-- [ ] **A new payload field.** Which of the three risks does it touch? Is it
+- [ ] **A new payload field.** Does it help someone load Translator
+  (section 1) or reach a component (section 2), and is it written by someone
+  outside this repository, which makes it hostile markup (section 3)? Is it
   public at its source? If it stays published, record why in the *Considered
   and deliberately not withheld* list at the bottom of `config/privacy.yaml`.
   If it is prose, add it to `ROW_FREE_TEXT`.
