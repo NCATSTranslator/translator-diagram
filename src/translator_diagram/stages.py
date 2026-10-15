@@ -95,7 +95,9 @@ def load_stages(path: Path | None = None) -> list[Stage]:
 
 
 def in_stage_order(
-    components: list[ComponentFile], stages: list[Stage]
+    components: list[ComponentFile],
+    stages: list[Stage],
+    depths: dict[str, int] | None = None,
 ) -> list[tuple[ComponentFile, int, Stage]]:
     """Each component with the stage it belongs to and that stage's number.
 
@@ -103,9 +105,13 @@ def in_stage_order(
     that order is a judgement too, and alphabetising it would throw the
     judgement away. Anything no stage names falls to the end in data-flow
     order, which is the best guess available for something nobody has placed.
+    `depths` is `flow_depths(components)` where the caller already has it.
     """
     if not stages:
-        return [(component, 1, NO_STAGE) for component in in_flow_order(components)]
+        return [
+            (component, 1, NO_STAGE)
+            for component in in_flow_order(components, depths)
+        ]
     by_id = index_by_id(components)
     ordered: list[tuple[ComponentFile, int, Stage]] = []
     seen: set[str] = set()
@@ -116,7 +122,7 @@ def in_stage_order(
                 seen.add(component.id)
                 ordered.append((component, number, stage))
     trailing = stages[-1]
-    for component in in_flow_order(components):
+    for component in in_flow_order(components, depths):
         if component.id not in seen:
             ordered.append((component, len(stages), trailing))
     return ordered

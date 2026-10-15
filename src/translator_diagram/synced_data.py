@@ -9,6 +9,7 @@ raising — a missing file in a gitignored scratch directory is the normal case,
 not an error.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -83,19 +84,13 @@ class SyncedData:
         # confirm, with the verdict attached. Never "this is down", which is a
         # claim about a deployment we have no evidence exists.
         self.rejected = rejected_hosts(probes)
-        # Per instance, because the same values.yaml is now read for two
-        # different questions and shepherd's is 623 lines of it.
-        self._charts: dict[tuple[str, str], dict[str, Any] | None] = {}
-        # The same three lazily: a chart commit is read once per chart even
-        # though three shepherd components ask for it, the infores catalog is
-        # 500 entries of YAML that only has to be parsed if a row has an
-        # infores, and a repository description is shared the same way a
-        # release list is.
-        self._commits: dict[str, dict[str, Any] | None] = {}
-        self._repos: dict[str, dict[str, Any] | None] = {}
-        self._bodies: dict[str, Any] = {}
-        self._releases: dict[str, list[dict[str, Any]]] = {}
-        self._catalog: dict[str, dict[str, Any]] | None = None
+        # Everything below is read once per build and kept: a chart's
+        # values.yaml answers two questions and shepherd's is 623 lines of it,
+        # three shepherd components share one chart commit and one release
+        # list, and the infores catalog is 500 entries of YAML that only has
+        # to be parsed if a row has an infores. One memo, keyed by what was
+        # asked, so a new reader cannot forget to add a cache of its own.
+        self._memo: dict[tuple[str, ...], Any] = {}
         self.otel = {
             env: _service_names(read_json(otel_path(root, env)))
             for env in OTEL_ENVIRONMENTS
@@ -190,25 +185,29 @@ class SyncedData:
         body = self._body(relative)
         return body if isinstance(body, dict) else None
 
+    def _once(self, key: tuple[str, ...], load: Callable[[], Any]) -> Any:
+        """`load()` the first time `key` is asked for, the memo after that."""
+        if key not in self._memo:
+            self._memo[key] = load()
+        return self._memo[key]
+
     def _body(self, relative: str) -> Any:
         """A cached JSON body, parsed once per build: the version chain and
         `openapi_outcome` both read every OpenAPI document."""
-        if relative not in self._bodies:
-            self._bodies[relative] = read_json(self.root / relative)
-        return self._bodies[relative]
+        return self._once(("body", relative), lambda: read_json(self.root / relative))
 
     def releases(self, repo: str | None) -> list[dict[str, Any]]:
         """One repository's releases, newest first, as GitHub returned them."""
         if not repo:
             return []
-        # Cached per repository: the three shepherds share one release list.
-        if repo not in self._releases:
-            self._releases[repo] = [
+        return self._once(
+            ("releases", repo),
+            lambda: [
                 entry
                 for entry in _read_json_list(releases_path(self.root, repo))
                 if isinstance(entry, dict)
-            ]
-        return self._releases[repo]
+            ],
+        )
 
     def helm(self, chart: str, name: str) -> dict[str, Any] | None:
         """One file out of one cached chart, parsed once per build.
@@ -218,10 +217,10 @@ class SyncedData:
         else — and the three shepherd components share one chart, so an
         uncached read parsed shepherd's 623-line values.yaml six times over.
         """
-        key = (chart, name)
-        if key not in self._charts:
-            self._charts[key] = read_yaml(helm_file_path(self.root, chart, name))
-        return self._charts[key]
+        return self._once(
+            ("helm", chart, name),
+            lambda: read_yaml(helm_file_path(self.root, chart, name)),
+        )
 
     def chart_index(self) -> list[str]:
         """Every chart directory translator-devops holds, sorted."""
@@ -249,19 +248,20 @@ class SyncedData:
         nothing for it: no commit is the honest answer to a call that did not
         happen.
         """
-        if chart not in self._commits:
+        def load() -> dict[str, Any] | None:
             entries = _read_json_list(chart_commit_path(self.root, chart))
             first = entries[0] if entries and isinstance(entries[0], dict) else None
-            self._commits[chart] = _commit_facts(first)
-        return self._commits[chart]
+            return _commit_facts(first)
+
+        return self._once(("commit", chart), load)
 
     def repo_meta(self, repo: str | None) -> dict[str, Any] | None:
         """One `owner/name` repository's own document, as GitHub returned it."""
         if not repo:
             return None
-        if repo not in self._repos:
-            self._repos[repo] = read_json(repo_meta_path(self.root, repo))
-        return self._repos[repo]
+        return self._once(
+            ("repo", repo), lambda: read_json(repo_meta_path(self.root, repo))
+        )
 
     def catalog(self) -> dict[str, dict[str, Any]]:
         """The infores catalog, indexed by infores id and parsed once.
@@ -271,17 +271,18 @@ class SyncedData:
         today, and this reads a registry maintained by another project. An
         entry with no `id` is not addressable and is left out.
         """
-        if self._catalog is None:
+        def load() -> dict[str, dict[str, Any]]:
             loaded = read_yaml(infores_catalog_path(self.root)) or {}
             entries: list[Any] = next(
                 (value for value in loaded.values() if isinstance(value, list)), []
             )
-            self._catalog = {
+            return {
                 entry["id"]: entry
                 for entry in entries
                 if isinstance(entry, dict) and isinstance(entry.get("id"), str)
             }
-        return self._catalog
+
+        return self._once(("catalog",), load)
 
     def http_status(self, kind: str, component_id: str, env: str) -> int | None:
         """The status this run recorded for one document fetch, or None."""

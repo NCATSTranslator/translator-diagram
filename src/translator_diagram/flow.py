@@ -90,25 +90,30 @@ def flow_depths(components: list[ComponentFile]) -> dict[str, int]:
     return depth
 
 
-def in_flow_order(components: list[ComponentFile]) -> list[ComponentFile]:
+def in_flow_order(
+    components: list[ComponentFile], depths: dict[str, int] | None = None
+) -> list[ComponentFile]:
     """Components from the data sources to the user.
 
     Ties break on layer then id, so components that sit at the same depth stay
-    grouped by the part of the system they belong to.
+    grouped by the part of the system they belong to. `depths` is
+    `flow_depths(components)`, computed here when the caller has not already.
     """
-    depths = flow_depths(components)
+    depths = flow_depths(components) if depths is None else depths
     return sorted(
         components,
         key=lambda c: (depths[c.id], c.layer or "￿", c.id.lower()),
     )
 
 
-def isolated(components: list[ComponentFile]) -> list[str]:
+def isolated(
+    components: list[ComponentFile], depths: dict[str, int] | None = None
+) -> list[str]:
     """Ids with no recorded edges in either direction.
 
     Surfaced rather than hidden: these are the components the dependency data
     says nothing about, and on a page arguing that the data is worth recording,
-    the holes are part of the argument.
+    the holes are part of the argument. `depths` as for `in_flow_order`.
     """
-    depths = flow_depths(components)
+    depths = flow_depths(components) if depths is None else depths
     return sorted(cid for cid, d in depths.items() if d == NO_EDGES_DEPTH)

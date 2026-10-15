@@ -852,8 +852,9 @@ def sync(
     # conventional hostnames nobody registered. None could be planned before
     # wave one landed and none waits on another, so they go out in one pool.
     previous = _read_derived(root)
+    confirmed_earlier = _confirmed_deployments(previous)
     endpoint_jobs = _plan_endpoint_fetches(
-        components, by_smartapi, _confirmed_deployments(previous), root
+        components, by_smartapi, confirmed_earlier, root
     )
     index_chart_jobs = _plan_index_chart_fetches(
         root, [destination for _, destination in chart_jobs]
@@ -862,9 +863,7 @@ def sync(
     candidate_roots = _root_probed_candidates(pending, root)
     root_jobs = [
         job
-        for job in _plan_root_probes(
-            components, by_smartapi, _confirmed_deployments(previous), root
-        )
+        for job in _plan_root_probes(components, by_smartapi, confirmed_earlier, root)
         if job[1] not in candidate_roots
     ]
     echo(

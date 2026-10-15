@@ -275,10 +275,10 @@ def build_rows(
     bands could be computed from different files.
     """
     depths = flow_depths(components)
-    stranded = set(isolated(components))
+    stranded = set(isolated(components, depths))
     rows = []
     for component, step, stage in in_stage_order(
-        components, load_stages() if stages is None else stages
+        components, load_stages() if stages is None else stages, depths
     ):
         # Two ways a component reaches its registry entry, and the row has to
         # carry which one it was: an id somebody recorded, or the one record
@@ -297,9 +297,8 @@ def build_rows(
         if matched_by:
             record["_matched_by"] = matched_by
         derived = synced.derived.get(component.id, {})
-        deployments = merge_deployments(
-            component, deployments_from_smartapi(record), derived
-        )
+        registered = deployments_from_smartapi(record)
+        deployments = merge_deployments(component, registered, derived)
         charts = component.helm_charts
         helm = _helm_facts(synced, charts)
 
@@ -318,7 +317,6 @@ def build_rows(
         # from the registration" is a claim about a registration somebody
         # filed, and a record we attached ourselves by infores is not that. A
         # match we made cannot be the evidence for a gap we then report.
-        registered = set(deployments_from_smartapi(record))
         for env, cell in cells.items():
             if (
                 cell.get("deployed")
