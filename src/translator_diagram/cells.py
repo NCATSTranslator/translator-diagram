@@ -13,6 +13,7 @@ there" are different answers, and an empty cell gives neither.
 
 from typing import Any
 
+from .charts import CHART_META_FILES
 from .components import ComponentFile, Deployment, endpoint_url_in
 from .deployments import deployments_from_smartapi
 from .files import PROBE_KINDS, endpoint_key
@@ -232,18 +233,17 @@ def _helm_facts(synced: SyncedData, charts: list[str]) -> dict[str, Any]:
     and the upgrade is a per-chart version in the detail block, which the
     `helm_charts` row field already carries, rather than a longer string here.
     """
-    names = list(charts)
-    if not names:
+    if not charts:
         return {}
     tags: list[str] = []
-    for chart in names:
-        images = synced.chart_meta(chart)["images"] or {}
+    for chart in charts:
+        images = synced.helm(chart, CHART_META_FILES["images"]) or {}
         tags.extend(
             f"{spec['image'].split('/')[-1]}:{spec['version']}"
             for spec in images.values()
             if isinstance(spec, dict) and spec.get("image") and spec.get("version")
         )
-    first = synced.chart_meta(names[0])["chart"] or {}
+    first = synced.helm(charts[0], CHART_META_FILES["chart"]) or {}
     return {"version": first.get("appVersion"), "images": tags}
 
 

@@ -87,7 +87,7 @@ cli → everything above
 
 # the dashboard
 components → {charts, deployments, flow, sync, synced_data, stages, cells, rows, dashboard}
-charts → {sync, synced_data, dashboard}
+charts → {sync, synced_data, cells, dashboard}
 deployments → {sync, cells, rows}
 fetch → sync
 synced_data → {cells, rows, dashboard}

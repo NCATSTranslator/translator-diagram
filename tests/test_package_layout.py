@@ -64,7 +64,9 @@ ALLOWED = {
     # this way is what keeps any one of them small enough to hold in a head.
     "synced_data": {"charts", "components", "files", "payload_details"},
     "stages": {"components", "files", "flow"},
-    "cells": {"components", "deployments", "files", "payload_details", "synced_data"},
+    "cells": {
+        "charts", "components", "deployments", "files", "payload_details", "synced_data",
+    },
     "rows": {
         "cells", "components", "deployments", "flow", "payload_details", "stages",
         "synced_data",
