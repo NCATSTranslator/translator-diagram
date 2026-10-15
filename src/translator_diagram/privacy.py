@@ -188,7 +188,6 @@ def load_policy(path: Path | None = None) -> Policy:
     )
 
 
-
 def _redactions(
     loaded: dict[str, Any], section: str, path: Path, key: str = "name"
 ) -> tuple[Redaction, ...]:

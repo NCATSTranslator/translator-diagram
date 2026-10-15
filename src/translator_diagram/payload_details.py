@@ -620,9 +620,6 @@ def catalog_detail(entry: Any) -> dict[str, Any] | None:
     }
 
 
-# --- Shared readers --------------------------------------------------------
-
-
 # --- Reading somebody else's document -----------------------------------------
 #
 # Every upstream body here — a registry record, an OpenAPI document, a chart, a
@@ -665,7 +662,6 @@ def strings(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
-
 
 
 def number(value: Any) -> int | float | None:

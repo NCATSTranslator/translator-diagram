@@ -255,7 +255,6 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
         return _read_owner_colors(packaged)
 
 
-
 def _read_owner_colors(path: Path) -> dict[str, str]:
     """Parse one owner-colors CSV, checking every colour on the way through."""
     if not path.exists():

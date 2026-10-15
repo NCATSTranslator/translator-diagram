@@ -135,4 +135,3 @@ def test_either_edge_field_alone_is_enough(edge_field):
     )
     depths = flow_depths([upstream, downstream])
     assert depths["down"] > depths["up"]
-

@@ -243,6 +243,7 @@ class ComponentFile:
             return repo.get("url")
         return None
 
+
 def endpoint_url_in(
     component: ComponentFile, deployment: Deployment, kind: str
 ) -> str | None:
