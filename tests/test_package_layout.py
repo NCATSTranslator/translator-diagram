@@ -21,7 +21,8 @@ PACKAGE = Path(__file__).resolve().parent.parent / "src" / "translator_diagram"
 # this cannot be widened into a cycle to make a failure go away.
 ALLOWED = {
     # The filesystem both stacks share: find_upward for the hand-edited files,
-    # and the tolerant JSON/YAML readers. A leaf, so anything may use it.
+    # the tolerant JSON/YAML readers, and the sync cache's layout and parsers.
+    # A leaf, so anything may use it.
     "files": set(),
     "model": set(),
     "colors": {"files"},
@@ -58,10 +59,11 @@ ALLOWED = {
     # number) are what the modules above use to read the same documents.
     "payload_details": set(),
     # The dashboard stack, one subject per module and each layer reading only
-    # the one below it. synced_data is the only module that touches the sync
-    # cache; cells resolves one cell from it; rows assembles one component's
-    # row; dashboard assembles the payload and renders the page. Splitting it
-    # this way is what keeps any one of them small enough to hold in a head.
+    # the one below it. synced_data reads the sync cache, whose layout files
+    # holds (cells looks fetches up in it by files.endpoint_key); cells
+    # resolves one cell from it; rows assembles one component's row;
+    # dashboard assembles the payload and renders the page. Splitting it this
+    # way is what keeps any one of them small enough to hold in a head.
     "synced_data": {"charts", "components", "files", "payload_details"},
     "stages": {"components", "files", "flow"},
     "cells": {
