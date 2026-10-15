@@ -132,30 +132,20 @@
       version}${dot}</span>${source}${inferred}</td>`;
   }
 
-  /* The repository, then its latest releases — plus any older release an
-     environment on this row is running, so the version in the table always has
-     its notes one click away. A release running somewhere is marked rather
-     than merely listed; that mark is the link between this column and the four
-     to its right. */
+  /* A release as a chip, for the expanded row's strip and the tooltips. A
+     release running somewhere is marked rather than merely listed; that mark
+     is the link between the strip and the four environment columns. */
   function releaseChip(row, release) {
     return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
       href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
       data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
   }
 
-  function releaseChips(row) {
-    return (row.releases || [])
-      .filter((release) => release.url)
-      .map((release) => releaseChip(row, release))
-      .join("");
-  }
-
   function repoCell(row) {
     if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
     const label = TD.row.repoLabel(row.repository);
-    const chips = releaseChips(row);
-    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${esc(label)}</a>${
-      chips ? `<span class="releases">${chips}</span>` : ""}</td>`;
+    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${
+      esc(label)}</a></td>`;
   }
 
   function updatedCell(row) {

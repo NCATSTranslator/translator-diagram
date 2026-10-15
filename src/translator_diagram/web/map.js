@@ -502,7 +502,6 @@
     root.querySelectorAll(".mp-lane-title").forEach((text) => truncate(text, 148));
 
     wire();
-    size();
     fit(false);
     paint();
 
@@ -775,10 +774,6 @@
     nudge();
   }
 
-  function size() {
-    /* Height comes from the flex column; nothing to measure here. */
-  }
-
   /* --- Interaction ---------------------------------------------------------- */
 
   const pointers = new Map();
@@ -892,8 +887,8 @@
     document.addEventListener("keydown", onKey);
     addEventListener("resize", onResize);
     if (typeof ResizeObserver === "function") {
-      // Width only: `size()` sets the height, so watching the height would
-      // have the observer answer its own notification for ever.
+      // Width only: the height comes from the flex column, so watching it
+      // would have the observer answer its own notification for ever.
       let lastWidth = host.clientWidth;
       new ResizeObserver(() => {
         if (host.clientWidth === lastWidth) return;
@@ -930,7 +925,6 @@
     if (!box || !host || !host.classList.contains("on")) return;
     const midX = (box.clientWidth / 2 - cam.x) / cam.k;
     const midY = (box.clientHeight / 2 - cam.y) / cam.k;
-    size();
     if (!touched) { fit(false); return; }
     goal.k = cam.k;
     goal.x = box.clientWidth / 2 - midX * goal.k;
@@ -1296,7 +1290,7 @@
   map.render = function render(container) {
     if (!container) return;
     if (host !== container || !scene) build(container);
-    else { size(); paint(); }
+    else paint();
   };
 
   map.ring = ring;

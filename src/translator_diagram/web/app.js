@@ -35,7 +35,7 @@
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
     writeUrl();
-    if (!(options && options.silent)) refresh();
+    if (!(options && options.silent)) renderView();
   };
 
   /* --- Theme ----------------------------------------------------------------- */
@@ -321,14 +321,7 @@
 
   function renderView() {
     if (TD.state.view === "map") {
-      const container = document.getElementById("view-map");
-      // The map lands in a later step. Until then the switch is honest about
-      // it rather than showing an empty frame that looks like a failure.
-      if (TD.map && TD.map.render) TD.map.render(container);
-      else if (!container.querySelector(".empty-view")) {
-        container.innerHTML =
-          '<p class="empty-view">Map view is not built into this page yet.</p>';
-      }
+      TD.map.render(document.getElementById("view-map"));
       const shown = TD.table.visibleRows().length;
       setStatus(shown, (DATA.rows || []).length);
       return;
@@ -342,10 +335,6 @@
     document.getElementById("order").innerHTML = TD.table.orderHtml();
     document.getElementById("count").textContent =
       `${shown} of ${total} component${total === 1 ? "" : "s"}`;
-  }
-
-  function refresh() {
-    renderView();
   }
 
   /* --- Stat count-up ------------------------------------------------------------ */

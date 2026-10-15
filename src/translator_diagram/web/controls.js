@@ -17,6 +17,12 @@
   const ui = (TD.ui = TD.ui || {});
   const esc = (value) => TD.fmt.esc(value);
 
+  // The most room a listbox popover takes, for deciding which way it opens.
+  // Generous rather than measured: the popover is not in the layout until it
+  // opens, and flipping early costs nothing where flipping late clips.
+  const POP_MAX_HEIGHT = 330;
+  const POP_MAX_WIDTH = 260;
+
   let uid = 0;
   const nextId = (prefix) => `${prefix}-${++uid}`;
 
@@ -126,8 +132,8 @@
       // than let it open off the bottom of the screen.
       pop.classList.remove("up", "right");
       const rect = button.getBoundingClientRect();
-      if (rect.bottom + 330 > innerHeight && rect.top > 330) pop.classList.add("up");
-      if (rect.left + 260 > innerWidth) pop.classList.add("right");
+      if (rect.bottom + POP_MAX_HEIGHT > innerHeight && rect.top > POP_MAX_HEIGHT) pop.classList.add("up");
+      if (rect.left + POP_MAX_WIDTH > innerWidth) pop.classList.add("right");
     }
 
     function setOpen(next, focusWhich) {

@@ -327,7 +327,7 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
-/* The same tint the table's cells carry, and never without the ≠ beside it. */
+/* The same tint the table's cells carry; the sentence is one hover away. */
 .dw-drift {
   background: var(--drift);
   box-shadow: 0 0 0 3px var(--drift);

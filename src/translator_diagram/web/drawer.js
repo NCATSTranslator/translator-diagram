@@ -966,9 +966,7 @@
       const id = go.dataset.go;
       if (!rowById(id)) return;
       open(id, currentTab, { opener: go });
-      if (TD.map && TD.map.focus) {
-        try { TD.map.focus(id); } catch { /* the map is optional */ }
-      }
+      TD.map.focus(id);
     }
   }
 
@@ -1010,7 +1008,7 @@
     revealTab();
     // Only when it differs from the default: a link that says ?tab=overview
     // is telling the reader nothing they would not have got anyway.
-    if (TD.state) TD.commit({ tab: next === DEFAULT_TAB ? "" : next }, { silent: true });
+    TD.commit({ tab: next === DEFAULT_TAB ? "" : next }, { silent: true });
   }
 
   /* --- Open, close --------------------------------------------------------- */
@@ -1082,10 +1080,8 @@
       reflow();
     }
 
-    if (TD.state) {
-      TD.commit({ sel: id, tab: currentTab === DEFAULT_TAB ? "" : currentTab }, { silent: true });
-      syncSelection(id);
-    }
+    TD.commit({ sel: id, tab: currentTab === DEFAULT_TAB ? "" : currentTab }, { silent: true });
+    syncSelection(id);
     if (!opts.silentFocus) {
       const closeButton = root.querySelector(".dw-close");
       if (closeButton) closeButton.focus({ preventScroll: true });
@@ -1099,10 +1095,8 @@
     delete document.documentElement.dataset.drawer;
     const id = currentId;
     currentId = "";
-    if (TD.state) {
-      TD.commit({ sel: "", tab: "" }, { silent: true });  // no selection, no tab
-      syncSelection("");
-    }
+    TD.commit({ sel: "", tab: "" }, { silent: true });  // no selection, no tab
+    syncSelection("");
     reflow();
 
     // The table rebuilds its rows on every render, so the button that opened

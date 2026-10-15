@@ -291,7 +291,6 @@ tbody tr.band:first-child td { padding-top: var(--sp-1); }
 td.repo { font-size: var(--fs-meta); }
 /* The chips live in the open row's Releases line now. Twenty-six rows each
    carrying five of them was the widest thing on the page and the least read. */
-.releases { display: none; }
 .rel {
   display: inline-block;
   margin: 1px 4px 0 0;
