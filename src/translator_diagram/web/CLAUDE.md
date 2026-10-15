@@ -129,8 +129,11 @@ between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
 root never overflows at any width, and the wrap scrolls, so nothing is
 unreachable; issue #31 describes the wider 1100–1500px version of this, most
 of which is now gone. At 760px the PROD column is likewise clipped but
-reachable. None of this is visible in a screenshot: measure `scrollWidth`
-against `clientWidth` at several widths instead of judging by eye.
+reachable, and the Map's EDGES legend sits over the Translator UI / Node
+Annotator row; neither has been fixed, and neither hides anything that cannot
+be scrolled or panned to. The overflow is not visible in a screenshot: measure
+`scrollWidth` against `clientWidth` at several widths instead of judging by
+eye.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
