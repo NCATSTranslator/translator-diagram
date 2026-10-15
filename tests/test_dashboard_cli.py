@@ -211,21 +211,18 @@ class TestSyncReadsTheTokenFromDotEnv:
         assert not token_seen("GITHUB_TOKEN=\n")
 
 
-def test_the_components_directory_is_found_from_a_subdirectory(workspace):
-    # The stage file, the policy and the colours are all found by walking up
-    # from the working directory; the components directory used to be the
-    # one that was not, so a build from a subdirectory found three of the
-    # four files it needs and then stopped on the fourth.
-    runner = CliRunner()
-    with runner.isolated_filesystem(temp_dir=workspace):
-        result = runner.invoke(
-            build_main,
-            ["--sync-dir", str(workspace / "sync"),
-             "--output-dir", str(workspace / "out")],
-        )
-    assert result.exit_code == 0, result.output
-    payload = json.loads((workspace / "out" / "overview.json").read_text())
-    assert [row["id"] for row in payload["rows"]] == ["keeper"]
+def test_a_sync_from_a_subdirectory_refuses_rather_than_writing_there(
+    workspace, monkeypatch
+):
+    # The output directory is relative to the working directory, and only
+    # /data/ at the root is gitignored, so a sync that found the components by
+    # walking up would leave its cache where git can see it.
+    subdirectory = workspace / "catalog"
+    monkeypatch.chdir(subdirectory)
+    result = CliRunner().invoke(sync_main, [])
+    assert result.exit_code != 0
+    assert "No components directory" in result.output
+    assert not (subdirectory / "data").exists()
 
 
 def test_the_default_components_directory_is_the_catalogs():

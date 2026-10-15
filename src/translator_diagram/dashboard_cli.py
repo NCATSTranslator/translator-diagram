@@ -14,7 +14,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
-from .files import find_upward, manifest_path
+from .files import manifest_path
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -27,19 +27,24 @@ DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 
 
 def _load(components_dir: Path):
-    """Every component file, from `components_dir` or the nearest directory
-    above the working directory that has it — the same walk the stage file,
-    the privacy policy and the owner colours get (`files.find_upward`), so a
-    build from a subdirectory of the checkout finds all four or none."""
-    found = components_dir if components_dir.is_dir() else find_upward(components_dir)
-    if found is None:
+    """Every component file in `components_dir`, relative to the working
+    directory and never walked up to, unlike the stage file, the policy and
+    the colours (`files.find_upward`).
+
+    The walk was tried, and it turned a refusal into a run in the wrong place:
+    `--output-dir` and `--sync-dir` stay relative to the working directory, so
+    a sync from `src/` found the components and wrote its cache to
+    `src/data/sync/`, which `.gitignore` (anchored at `/data/`) does not
+    cover. Failing here is what keeps the cache at the root.
+    """
+    if not components_dir.is_dir():
         raise click.ClickException(
-            f"No components directory at {components_dir}. Run from inside "
-            f"the checkout, or pass --components."
+            f"No components directory at {components_dir}. Run from the "
+            f"repository root, or pass --components."
         )
-    components = load_components(found)
+    components = load_components(components_dir)
     if not components:
-        raise click.ClickException(f"No *.yaml files in {found}.")
+        raise click.ClickException(f"No *.yaml files in {components_dir}.")
     return components
 
 
