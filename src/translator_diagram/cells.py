@@ -16,6 +16,7 @@ from typing import Any
 from .components import ComponentFile, Deployment, endpoint_url_in
 from .deployments import deployments_from_smartapi
 from .files import PROBE_KINDS, endpoint_key
+from .payload_details import mapping, number, strings
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
@@ -126,9 +127,7 @@ def _live_openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     paths = (document or {}).get("paths")
     asyncquery = trapi.get("asyncquery")
     return {
-        "operations": [
-            name for name in (trapi.get("operations") or []) if isinstance(name, str)
-        ],
+        "operations": strings(trapi.get("operations")),
         "asyncquery": asyncquery if isinstance(asyncquery, bool) else None,
         "paths_count": len(paths) if isinstance(paths, dict) else None,
         "title": info.get("title") if isinstance(info.get("title"), str) else None,
@@ -142,8 +141,7 @@ def _blocks(document: dict[str, Any] | None, key: str) -> dict[str, Any]:
     how a hand-edited document spells "not set", and chaining `.get` through
     one is the usual way a reader raises instead of losing a field.
     """
-    value = (document or {}).get(key) if isinstance(document, dict) else None
-    return value if isinstance(value, dict) else {}
+    return mapping(mapping(document).get(key))
 
 
 def _recent_queries(value: Any) -> dict[str, Any] | None:
@@ -164,8 +162,8 @@ def _recent_queries(value: Any) -> dict[str, Any] | None:
     """
     if not isinstance(value, dict):
         return None
-    count = value.get("count")
-    if not isinstance(count, (int, float)) or isinstance(count, bool):
+    count = number(value.get("count"))
+    if count is None:
         return None
     return {
         "count": count,
@@ -175,9 +173,8 @@ def _recent_queries(value: Any) -> dict[str, Any] | None:
 
 
 def _tenth(value: Any) -> float | None:
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    return round(float(value), 1)
+    quantity = number(value)
+    return None if quantity is None else round(float(quantity), 1)
 
 
 def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:

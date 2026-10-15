@@ -42,7 +42,7 @@ ALLOWED = {
     # Chart matching sits below both sync and dashboard, which each ask it and
     # may not import each other.
     "charts": {"components"},
-    "deployments": {"components"},
+    "deployments": {"components", "payload_details"},
     # The transport under sync: one URL into one file. It knows HTTP and the
     # cache's file shapes, and nothing about what a component is.
     "fetch": {"files"},
@@ -54,22 +54,24 @@ ALLOWED = {
     "privacy": {"files"},
     # payload_details is a leaf for the same reason: dict in, dict out, so the
     # shaping can be tested without a network, a checkout or a rendered page.
+    # Its readers over somebody else's JSON (mapping, items, text, strings,
+    # number) are what the modules above use to read the same documents.
     "payload_details": set(),
     # The dashboard stack, one subject per module and each layer reading only
     # the one below it. synced_data is the only module that touches the sync
     # cache; cells resolves one cell from it; rows assembles one component's
     # row; dashboard assembles the payload and renders the page. Splitting it
     # this way is what keeps any one of them small enough to hold in a head.
-    "synced_data": {"charts", "components", "files"},
+    "synced_data": {"charts", "components", "files", "payload_details"},
     "stages": {"components", "files", "flow"},
-    "cells": {"components", "deployments", "files", "synced_data"},
+    "cells": {"components", "deployments", "files", "payload_details", "synced_data"},
     "rows": {
         "cells", "components", "deployments", "flow", "payload_details", "stages",
         "synced_data",
     },
     "dashboard": {
-        "cells", "charts", "colors", "components", "privacy", "rows", "stages",
-        "synced_data",
+        "cells", "charts", "colors", "components", "payload_details", "privacy",
+        "rows", "stages", "synced_data",
     },
     "dashboard_cli": {
         "components", "dashboard", "files", "flow", "privacy", "sync", "synced_data",

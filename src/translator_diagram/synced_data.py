@@ -33,6 +33,7 @@ from .files import (
     smartapi_hits,
     smartapi_path,
 )
+from .payload_details import mapping, text
 
 
 def _read_json_list(path: Path) -> list[Any]:
@@ -54,7 +55,7 @@ def _service_names(document: dict[str, Any] | None) -> list[str]:
     array at all — must cost that tile its number rather than take the whole
     build down on an unhashable name.
     """
-    data = (document or {}).get("data")
+    data = mapping(document).get("data")
     if not isinstance(data, list):
         return []
     return [name for name in data if isinstance(name, str)]
@@ -299,18 +300,13 @@ def _commit_facts(entry: dict[str, Any] | None) -> dict[str, Any] | None:
     """
     if not entry:
         return None
-    commit = entry.get("commit") if isinstance(entry.get("commit"), dict) else {}
-    committer = commit.get("committer") if isinstance(commit.get("committer"), dict) else {}
-    date = committer.get("date")
-    sha = entry.get("sha")
-    message = commit.get("message")
+    commit = mapping(entry.get("commit"))
+    date = text(mapping(commit.get("committer")).get("date"))
+    sha = text(entry.get("sha"))
+    message = text(commit.get("message"))
     return {
-        "date": date[:10] if isinstance(date, str) else None,
-        "sha": sha[:7] if isinstance(sha, str) else None,
-        "url": entry.get("html_url") if isinstance(entry.get("html_url"), str) else None,
-        "subject": (
-            message.splitlines()[0].strip()
-            if isinstance(message, str) and message.strip()
-            else None
-        ),
+        "date": date[:10] if date else None,
+        "sha": sha[:7] if sha else None,
+        "url": text(entry.get("html_url")),
+        "subject": message.splitlines()[0].strip() if message else None,
     }
