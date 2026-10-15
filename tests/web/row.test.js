@@ -13,7 +13,7 @@ const CORE = path.join(__dirname, "..", "..", "src", "translator_diagram", "web"
 
 globalThis.TD = {};
 vm.runInThisContext(fs.readFileSync(CORE, "utf8"), { filename: "core.js" });
-const { boot, row } = globalThis.TD;
+const { boot, row, cell } = globalThis.TD;
 
 test("byId finds a row by id, and null for an id nothing has", () => {
   boot({ rows: [{ id: "ars", name: "ARS" }, { id: "arax", name: "ARAX" }] });
@@ -59,4 +59,93 @@ test("an owner label carries the coin and the escaped name", () => {
   const html = row.ownerLabel("A&B");
   assert.ok(html.startsWith('<span class="ownercell"><span class="coin"'));
   assert.ok(html.endsWith("<span>A&amp;B</span></span>"));
+});
+
+/* --- TD.cell: one model of an environment cell ----------------------------- */
+
+const LIVE = {
+  id: "svc", smartapi_record: { registry_url: "https://smart-api.info/ui/abc" },
+  helm_charts: [{ source_url: "https://github.com/x/devops/tree/develop/helm/svc" }],
+  otel_presence: [{ service: "Svc", seen_in: ["ci"] }],
+  environments: {
+    ci: { deployed: true, version: "1.2.0", version_source: "openapi", reachable: true,
+          url: "https://svc.ci.transltr.io/", openapi_url: "https://svc.ci.transltr.io/openapi.json",
+          trapi: "1.6.0", trapi_source: "openapi", data_release: "babel 2025sep1",
+          document: "version", http_status: 200, root_status: 200, paths_count: 5,
+          trapi_operations: ["lookup", "overlay"], asyncquery: false,
+          recent_queries: { count: 1200, p50_ms: 10.5, p95_ms: 80 } },
+    test: { deployed: true, version: "1.1.0", version_source: "smartapi", reachable: false,
+            url: "https://svc.test.transltr.io/", drift: ["version", "trapi"], unregistered: true },
+    prod: { deployed: false, reason: "no such host", reason_key: "no-such-host" },
+  },
+};
+
+test("a live cell links its version to the document it was read from", () => {
+  boot({ source_labels: { openapi: "OpenAPI" } });
+  const m = cell(LIVE, "ci");
+  assert.equal(m.deployed, true);
+  assert.equal(m.version, "1.2.0");
+  assert.equal(m.live, true);
+  assert.equal(m.href, "https://svc.ci.transltr.io/openapi.json");
+  assert.equal(m.sourceLabel, "OpenAPI");
+  assert.equal(m.sourceWord, "its API document");
+  assert.equal(m.sourceShort, "API");
+  assert.equal(m.reach, "up");
+  assert.deepEqual(m.drift, []);
+  assert.equal(m.dataRelease, "babel 2025sep1");
+  assert.deepEqual(m.facts.map((f) => f.label), [
+    "TRAPI", "Data release", "Host", "API document", "Root answers", "Paths",
+    "Operations", "Async query", "Recent queries", "Telemetry",
+  ]);
+  const byLabel = Object.fromEntries(m.facts.map((f) => [f.label, f]));
+  assert.equal(byLabel.Host.value, "svc.ci.transltr.io");
+  assert.equal(byLabel.Host.href, "https://svc.ci.transltr.io/");
+  assert.equal(byLabel["API document"].note, "HTTP 200");
+  assert.equal(byLabel.Operations.value, "2");
+  assert.equal(byLabel["Async query"].value, "no");
+  assert.equal(byLabel["Recent queries"].value, "1,200 queries · p50 10.5 ms · p95 80 ms");
+  assert.equal(byLabel.Telemetry.value, "Svc");
+});
+
+test("a registry-copied cell is not live, links to the record, and carries its flags", () => {
+  boot({});
+  const m = cell(LIVE, "test");
+  assert.equal(m.live, false);
+  assert.equal(m.href, "https://smart-api.info/ui/abc");
+  assert.equal(m.reach, "down");
+  assert.deepEqual(m.drift, ["version", "trapi"]);
+  assert.deepEqual(m.flags, { inferred: false, unregistered: true });
+  // Telemetry was seen in ci only.
+  assert.ok(!m.facts.some((f) => f.label === "Telemetry"));
+});
+
+test("an undeployed cell says why, and whether the absence is a known one", () => {
+  boot({});
+  const prod = cell(LIVE, "prod");
+  assert.equal(prod.deployed, false);
+  assert.equal(prod.reason, "no such host");
+  assert.equal(prod.reasonKey, "no-such-host");
+  assert.equal(prod.knownAbsent, true);
+  assert.deepEqual(prod.facts, []);
+  const gap = cell({ environments: { dev: { deployed: false, reason: "no address on file", reason_key: "no-host" } } }, "dev");
+  assert.equal(gap.knownAbsent, false);
+});
+
+test("a missing environment, or a missing row, is an undeployed cell with no facts", () => {
+  boot({});
+  for (const m of [cell(LIVE, "dev"), cell({}, "ci"), cell(null, "ci")]) {
+    assert.equal(m.deployed, false);
+    assert.equal(m.version, "");
+    assert.equal(m.href, "");
+    assert.deepEqual(m.facts, []);
+  }
+});
+
+test("a helm-sourced version links to the chart, and a non-http host never links", () => {
+  boot({});
+  const row = { helm_charts: [{ source_url: "https://github.com/x/devops/tree/develop/helm/svc" }],
+    environments: { dev: { deployed: true, version: "2.0", version_source: "helm", url: "ftp://evil.example/" } } };
+  const m = cell(row, "dev");
+  assert.equal(m.href, "https://github.com/x/devops/tree/develop/helm/svc");
+  assert.equal(m.facts.find((f) => f.label === "Host").href, "");
 });
