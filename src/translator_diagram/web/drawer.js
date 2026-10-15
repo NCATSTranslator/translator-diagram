@@ -60,6 +60,16 @@
   const mono = (value) => `<span class="dw-mono">${esc(value)}</span>`;
   const note = (text) => `<span class="dw-note">${esc(text)}</span>`;
 
+  /* A value as text, or nothing: what most rows of a definition list are. */
+  const val = (value) => (filled(value) ? esc(value) : "");
+
+  /* The parts that are there, escaped, with a middle dot between them. */
+  const dotJoin = (parts) => parts.filter(filled).map(esc).join(" · ");
+
+  /* A list of small-caps tags, or nothing. */
+  const tags = (items) =>
+    items.map((item) => `<span class="dw-tag">${esc(item)}</span>`).join("");
+
   /* Every link out of this page opens in its own tab: the drawer holds the
      reader's place in a filtered, sorted, scrolled table, and navigating away
      from it in place loses all of that. */
@@ -124,6 +134,13 @@
     const head = stack(items.slice(0, LIST_LIMIT));
     const rest = stack(items.slice(LIST_LIMIT));
     return head + disclosure(`show all ${items.length} ${word}`, rest);
+  }
+
+  /* "5 › show": the count beside a disclosure of the items themselves, for a
+     list that is usually read as a number and occasionally as a list. */
+  function counted(items, summary) {
+    if (!items.length) return "";
+    return `${items.length} ${disclosure(summary, stack(items))}`;
   }
 
   function sections(parts, cls) {
@@ -207,11 +224,8 @@
 
   function headerHtml(row) {
     const blurb = blurbFor(row);
-    const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer,
-      thirdPartyText(row) ? "third-party" : ""]
-      .filter(filled)
-      .map(esc)
-      .join(" · ");
+    const meta = dotJoin([row.refactor_status, row.hosted_at, row.component_type || row.type,
+      row.layer, thirdPartyText(row) ? "third-party" : ""]);
     return `<div class="dw-headtop">
         <div class="dw-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
         <button type="button" class="dw-close" aria-label="Close details">
@@ -291,7 +305,7 @@
     const updated = row.last_updated;
     if (!updated) return "";
     const label = TD.row.updatedLabel(updated);
-    const bits = [label, updated.tag].filter(filled).map(esc).join(" · ");
+    const bits = dotJoin([label, updated.tag]);
     return `${esc(TD.fmt.relativeAge(updated.at) || updated.date || "")} ${
       bits ? note(bits) : ""}`;
   }
@@ -306,12 +320,11 @@
       drow("Default branch", meta.default_branch ? mono(meta.default_branch) : ""),
       drow("Last push", meta.pushed_at ? ago(meta.pushed_at) : ""),
       drow("Archived", meta.archived ? "yes" : ""),
-      drow("Licence", meta.license ? esc(meta.license) : ""),
-      drow("Open issues", filled(meta.open_issues) ? esc(meta.open_issues) : ""),
-      drow("Stars", filled(meta.stars) ? esc(meta.stars) : ""),
+      drow("Licence", val(meta.license)),
+      drow("Open issues", val(meta.open_issues)),
+      drow("Stars", val(meta.stars)),
       drow("Homepage", ext(meta.homepage)),
-      drow("Topics", topics.length
-        ? topics.map((t) => `<span class="dw-tag">${esc(t)}</span>`).join("") : ""),
+      drow("Topics", tags(topics)),
     ]);
   }
 
@@ -323,7 +336,7 @@
     const typeExtra = row.type && row.component_type && row.type !== row.component_type
       ? ` ${note(`registry reads ${row.type}`)}` : "";
 
-    const stage = [row.step_label, row.step_title].filter(filled).map(esc).join(" · ");
+    const stage = dotJoin([row.step_label, row.step_title]);
 
     const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
@@ -363,11 +376,11 @@
     const identity = dl([
       drow("Type", typeValue ? esc(typeValue) + typeExtra : "", true),
       drow("Software", softwareHtml),
-      drow("Layer", row.layer ? esc(row.layer) : "", true),
+      drow("Layer", val(row.layer), true),
       drow("Stage", stage ? `${stage}${row.step_description
         ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
       drow("Owner", row.owner ? TD.row.ownerLabel(row.owner) : "", true),
-      drow("Part of", row.part_of ? esc(row.part_of) : ""),
+      drow("Part of", val(row.part_of)),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
         ? `${itrb.app ? mono(itrb.app) : DASH}${itrb.group ? ` ${note(`group ${itrb.group}`)}` : ""}` : ""),
       drow("infores", row.infores ? mono(row.infores) : "", true),
@@ -472,10 +485,7 @@
       ].filter(Boolean).join(" · ")
       : "";
 
-    const operations = list(cell.trapi_operations);
-    const opsHtml = operations.length
-      ? `${operations.length} ${disclosure("show", stack(operations.map((op) => mono(op))))}`
-      : "";
+    const opsHtml = counted(list(cell.trapi_operations).map(mono), "show");
 
     const document = cell.document && cell.document !== "version"
       ? (DOCUMENT_WORDS[cell.document] || cell.document) : "";
@@ -491,8 +501,8 @@
       drow("TRAPI", cell.trapi
         ? `${esc(cell.trapi)}${cell.trapi_source ? ` <span class="src" data-src="${
           esc(cell.trapi_source)}">${esc(sourceLabel(cell.trapi_source))}</span>` : ""}` : ""),
-      drow("Biolink", cell.biolink ? esc(cell.biolink) : ""),
-      drow("Data release", cell.data_release ? esc(cell.data_release) : ""),
+      drow("Biolink", val(cell.biolink)),
+      drow("Data release", val(cell.data_release)),
       drow("Released", cell.released
         ? `${esc(cell.released)}${cell.release_tag
           ? ` ${cell.release_url ? ext(cell.release_url, cell.release_tag, "dw-link dw-mono")
@@ -501,14 +511,14 @@
       drow("HTTP status", httpRow),
       drow("Root", rootRow),
       drow("Reachable", reachRow),
-      drow("Document", document ? esc(document) : ""),
+      drow("Document", val(document)),
       drow("Status endpoint", cell.status_url
         ? ext(cell.status_url, TD.fmt.host(cell.status_url)) : ""),
-      drow("Location", cell.location ? esc(cell.location) : ""),
-      drow("OpenAPI title", cell.openapi_title ? esc(cell.openapi_title) : ""),
-      drow("Paths", filled(cell.paths_count) ? esc(cell.paths_count) : ""),
+      drow("Location", val(cell.location)),
+      drow("OpenAPI title", val(cell.openapi_title)),
+      drow("Paths", val(cell.paths_count)),
       drow("Async query", yesNo(cell.asyncquery)),
-      drow("Status message", cell.status_message ? esc(cell.status_message) : ""),
+      drow("Status message", val(cell.status_message)),
       drow("Recent queries", queries),
       drow("TRAPI operations", opsHtml),
     ]);
@@ -587,18 +597,18 @@
   function chartBlock(chart) {
     const services = list(chart.services).map((service) => [
       service.name ? mono(service.name) : "",
-      filled(service.replicas) ? esc(service.replicas) : "",
+      val(service.replicas),
       service.requests ? esc([service.requests.cpu, service.requests.memory].filter(filled).join(" / ")) : "",
       service.limits ? esc([service.limits.cpu, service.limits.memory].filter(filled).join(" / ")) : "",
     ]);
     const deps = list(chart.dependencies).map((dep) => [
       dep.name ? mono(dep.name) : "",
-      dep.version ? esc(dep.version) : "",
+      val(dep.version),
       dep.repository ? clip(dep.repository) : "",
     ]);
     const storage = list(chart.storage).map((entry) => [
       entry.name ? mono(entry.name) : "",
-      entry.size ? esc(entry.size) : "",
+      val(entry.size),
     ]);
     const hosts = list(chart.ingress_hosts);
     const changed = chart.last_changed;
@@ -607,7 +617,7 @@
       drow("Chart", chart.chart ? mono(chart.chart) : "", true),
       drow("Chart version", chart.chart_version ? mono(chart.chart_version) : "", true),
       drow("app version, from the chart", chart.app_version ? mono(chart.app_version) : "", true),
-      drow("Description", chart.description ? esc(chart.description) : ""),
+      drow("Description", val(chart.description)),
       // Labelled every time it is drawn. A commit that touched a chart says
       // someone meant to change what runs; it does not say a cluster took it.
       drow("Chart last changed", changed
@@ -665,7 +675,7 @@
     } this infores; none is recorded on the component: ${titles.join(", ")}`)
       + stack(candidates.map((c) =>
         `${ext(`https://smart-api.info/ui/${c.smartapi_id}`, c.smartapi_id, "dw-link dw-mono")} ${
-          c.title ? esc(c.title) : ""}`));
+          val(c.title)}`));
   }
 
   function panelSmartapi(row) {
@@ -688,10 +698,10 @@
       : [];
 
     const identity = dl([
-      drow("Title", record.title ? esc(record.title) : "", true),
+      drow("Title", val(record.title), true),
       drow("Version", record.version ? mono(record.version) : ""),
       drow("Team", teams.length ? esc(teams.join(", ")) : ""),
-      drow("Component", record.component ? esc(record.component) : ""),
+      drow("Component", val(record.component)),
       drow("infores", record.infores ? mono(record.infores) : ""),
       drow("Biolink version", record.biolink_version ? mono(record.biolink_version) : ""),
     ]);
@@ -699,19 +709,17 @@
     const trapiBlock = heading("TRAPI") + dl([
       drow("Version", trapi.version ? mono(trapi.version) : "", true),
       drow("Async query", yesNo(trapi.asyncquery)),
-      drow("Batch size limit", filled(trapi.batch_size_limit) ? esc(trapi.batch_size_limit) : ""),
-      drow("Rate limit", filled(trapi.rate_limit) ? esc(trapi.rate_limit) : ""),
+      drow("Batch size limit", val(trapi.batch_size_limit)),
+      drow("Rate limit", val(trapi.rate_limit)),
       drow("Test data", testData.length
         ? stack(testData.map(([maturity, url]) => `${esc(maturity)} ${ext(url, TD.fmt.host(url))}`)) : ""),
-      drow("Operations", operations.length
-        ? `${operations.length} ${disclosure(
-          `show all ${operations.length}`, stack(operations.map((op) => mono(op))))}` : ""),
+      drow("Operations", counted(operations.map(mono), `show all ${operations.length}`)),
     ]);
 
     const servers = list(record.servers).map((server) => {
-      const under = [server.location, server.description].filter(filled).map(esc).join(" · ");
+      const under = dotJoin([server.location, server.description]);
       return [
-        server.maturity ? esc(server.maturity) : "",
+        val(server.maturity),
         `${server.url ? ext(server.url, server.url, "dw-link dw-mono") : ""}${
           under ? `<span class="dw-sub">${under}</span>` : ""}`,
       ];
@@ -728,18 +736,17 @@
         ? disclosure(`show all ${checks.length}`, stack(checks.map((line) => esc(line)))) : ""),
     ]);
 
-    const tags = list(record.tags);
+    const recordTags = list(record.tags);
     const registration = heading("Registration") + dl([
       drow("Registered", meta.date_created ? ago(meta.date_created) : ""),
       drow("Last updated", meta.last_updated ? ago(meta.last_updated) : ""),
-      drow("By", meta.username ? esc(meta.username) : ""),
+      drow("By", val(meta.username)),
       drow("Source", meta.source_url ? ext(meta.source_url, "the registration document") : ""),
       drow("Meta knowledge graph", yesNo(meta.has_metakg)),
-      drow("Tags", tags.length
-        ? tags.map((tag) => `<span class="dw-tag">${esc(tag)}</span>`).join("") : ""),
+      drow("Tags", tags(recordTags)),
       drow("Contact", [contact.name, contact.email, contact.url].filter(filled).length
         ? [
-          contact.name ? esc(contact.name) : "",
+          val(contact.name),
           contact.email ? `<a class="dw-link" href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : "",
           contact.url ? ext(contact.url) : "",
         ].filter(Boolean).join(" · ")
@@ -769,11 +776,13 @@
       planned ? `<span class="dw-note">planned</span>` : ""}</button>`;
   }
 
+  /* The chips of a connections group, or nothing. */
+  const conns = (items) => (items.length ? `<div class="dw-conns">${items.join("")}</div>` : "");
+
   function connGroup(title, ids, plannedIds) {
     const items = list(ids).map((id) => connButton(id, false))
       .concat(list(plannedIds).map((id) => connButton(id, true)));
-    return heading(title) + (items.length ? `<div class="dw-conns">${items.join("")}</div>`
-      : muted("None recorded."));
+    return heading(title) + (conns(items) || muted("None recorded."));
   }
 
   function panelConnections(row) {
@@ -785,12 +794,9 @@
         && list((other.connections || {})[key]).indexOf(row.id) >= 0)
       .map((other) => other.id);
 
-    const externals = list(row.externals);
-    const externalsHtml = externals.length
-      ? `<div class="dw-conns">${externals.map((entry) =>
-        `<span class="dw-conn static">${TD.row.arrow(entry.direction)}
-          <span class="dw-connname">${esc(entry.name)}</span></span>`).join("")}</div>`
-      : muted("None recorded.");
+    const externalsHtml = conns(list(row.externals).map((entry) =>
+      `<span class="dw-conn static">${TD.row.arrow(entry.direction)}
+          <span class="dw-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
 
     const parts = [
       connGroup("Gets results from",
@@ -814,10 +820,10 @@
       const consumedBy = catalogEdges
         .filter((edge) => edge && edge.from === row.id).map((edge) => edge.to);
       const facts = catalog ? dl([
-        drow("Status", catalog.status ? esc(catalog.status) : ""),
-        drow("Knowledge level", catalog.knowledge_level ? esc(catalog.knowledge_level) : ""),
-        drow("Agent type", catalog.agent_type ? esc(catalog.agent_type) : ""),
-        drow("Description", catalog.description ? esc(catalog.description) : ""),
+        drow("Status", val(catalog.status)),
+        drow("Knowledge level", val(catalog.knowledge_level)),
+        drow("Agent type", val(catalog.agent_type)),
+        drow("Description", val(catalog.description)),
         drow("Cross-references", list(catalog.xref).length
           ? stack(list(catalog.xref).map((x) => mono(x))) : ""),
       ]) : "";
@@ -825,11 +831,11 @@
         + caption("the infores catalog's view, beside what this repository records")
         + facts
         + (consumes.length
-          ? `<div class="dw-sublabel">consumes</div><div class="dw-conns">${
-            consumes.map((id) => connButton(id, false)).join("")}</div>` : "")
+          ? `<div class="dw-sublabel">consumes</div>${
+            conns(consumes.map((id) => connButton(id, false)))}` : "")
         + (consumedBy.length
-          ? `<div class="dw-sublabel">consumed by</div><div class="dw-conns">${
-            consumedBy.map((id) => connButton(id, false)).join("")}</div>` : "")
+          ? `<div class="dw-sublabel">consumed by</div>${
+            conns(consumedBy.map((id) => connButton(id, false)))}` : "")
         + (!consumes.length && !consumedBy.length && !facts
           ? muted("Nothing recorded in the catalog for this component.") : ""));
     }
