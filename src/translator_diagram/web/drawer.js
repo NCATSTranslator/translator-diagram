@@ -924,15 +924,11 @@
     tabs = TD.ui.tabs({
       label: "Component details",
       tabs: TABS.map((tab) => ({ id: tab.id, label: tab.label, panel: "dw-panel" })),
+      // The panel names the tab that labels it by this id (`aria-labelledby`).
+      idPrefix: "dw-tab",
       value: currentTab,
       onChange: (value) => setTab(value, false),
     });
-    // The tabs control does not hand its buttons ids, and a tabpanel has to
-    // name the tab that labels it; assigning them here keeps controls.js
-    // untouched.
-    for (const button of tabs.el.querySelectorAll("button[data-id]")) {
-      button.id = `dw-tab-${button.dataset.id}`;
-    }
     tabsWrap.append(tabs.el);
 
     root.addEventListener("click", onClick);
