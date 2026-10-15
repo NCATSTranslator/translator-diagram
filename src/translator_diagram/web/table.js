@@ -202,8 +202,11 @@
       ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}"><span class="age">${
           esc(TD.fmt.relativeAge(updated.at))}</span> · ${esc(updated.tag || "release")}</span>`
       : "";
+    // The release chips sit here too, shown only once the row is open: this is
+    // the column they come from, so they need no label of their own.
+    const chips = releaseChipsAll(row);
     return `<td class="repo drop-md">${link(row.repository, esc(TD.row.repoLabel(row.repository)))}${
-      released}</td>`;
+      released}${chips ? `<span class="rels">${chips}</span>` : ""}</td>`;
   }
 
   /* One registration usually covers every environment, so it is a column of
@@ -345,24 +348,35 @@
      free-standing grid made a reader match "ci" to "ci" by eye, four times,
      for every field.
 
-     The label sits in the first column, which is sticky, and the other
-     non-environment columns are empty cells carrying that column's drop
-     class, so they leave the table with their column. A colspan cannot do
-     this: a hidden cell generates no box, so a colspan row keeps claiming the
-     columns that have gone and shifts every value one column right.
+     The label sits immediately left of the first environment column, so the
+     word and the values it names touch. Which cell that is depends on the
+     width — SmartAPI, Owner and the rest drop out at the breakpoints — so
+     the label is written into every non-environment cell, each carrying its
+     column's drop class, and CSS shows the rightmost one still on screen
+     (the ladder in table.css and drawer.css). A colspan cannot do this: a
+     hidden cell generates no box, so a colspan row keeps claiming the
+     columns that have gone and shifts every value one column right. It was
+     once put in the first column instead, and read as detached from the
+     numbers it named.
 
      Version is deliberately absent: it is the row directly above. */
-  const fillers = () => COLUMNS
-    .filter((column) => !column.env && column.key !== "name")
-    .map((column) => `<td class="${column.drop || ""}"></td>`)
-    .join("");
+  function labelCells(row, label, about) {
+    const help = about
+      ? `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
+           data-fact="${esc(label)}" aria-label="Where ${esc(label)} comes from">?</button>`
+      : "";
+    return COLUMNS
+      .filter((column) => !column.env)
+      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${
+        esc(label)}${help}</span></td>`)
+      .join("");
+  }
 
   function detailAttrs(row, group, flags) {
     const classes = ["detail"].concat(
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
-      flags.cls ? [flags.cls] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
@@ -382,25 +396,22 @@
   }
 
   /* Only the facts some environment answered, each in its environment's
-     column. The releases go under Repository, where the repository is, so
-     that row leaves the table with the column. */
+     column. The releases are not here: they are in the Repository cell of
+     the row above, shown once it is open. */
   function detailRowsHtml(row, group) {
     const models = Object.fromEntries(TD.ENVS.map((env) => [env, TD.cell(row, env)]));
-    const labels = [...new Set(TD.ENVS.flatMap((env) => models[env].facts.map((f) => f.label)))];
-    const make = labels.map((label) => (flags) =>
-      `<tr ${detailAttrs(row, group, flags)}><td class="dk">${esc(label)}</td>${fillers()}${
-        TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === label))).join("")
-      }</tr>`);
-    const chips = releaseChipsAll(row);
-    if (chips) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, { ...flags, cls: "drop-md" })}><td class="dk">Releases</td>${
-        COLUMNS.filter((column) => !column.env && column.key !== "name")
-          .map((column) => `<td class="${column.drop || ""}${column.key === "repo" ? " rels" : ""}">${
-            column.key === "repo" ? chips : ""}</td>`).join("")
-      }${TD.ENVS.map(() => `<td class="dv"></td>`).join("")}</tr>`);
+    const facts = [];
+    for (const env of TD.ENVS) {
+      for (const fact of models[env].facts) {
+        if (!facts.some((f) => f.label === fact.label)) facts.push(fact);
+      }
     }
+    const make = facts.map((fact) => (flags) =>
+      `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, fact.label, fact.about)}${
+        TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === fact.label))).join("")
+      }</tr>`);
     if (!make.length) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}><td class="dk"></td>${fillers()}<td
+      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, "", "")}<td
         class="dv note" colspan="${TD.ENVS.length}">Nothing else is recorded for this component.</td></tr>`);
     }
     return make
@@ -505,6 +516,14 @@
       const key = target.dataset.src;
       return `<div><b>${esc(TD.fmt.sourceLabel(key))}</b></div><div class="note">${
         esc(SOURCE_NOTES[key] || "Where this value was read from.")}</div>`;
+    }
+    if (kind === "fact") {
+      const row = rowById(target.dataset.id);
+      const label = target.dataset.fact;
+      const fact = row && TD.ENVS
+        .map((env) => TD.cell(row, env).facts.find((f) => f.label === label)).find(Boolean);
+      if (!fact) return "";
+      return `<div><b>${esc(fact.label)}</b></div><div class="note">${esc(fact.about)}</div>`;
     }
     if (kind === "rel") {
       const row = rowById(target.dataset.id);

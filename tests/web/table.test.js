@@ -24,7 +24,8 @@ const { table } = TD;
 const cell = (version, extra) => ({ deployed: true, version, ...extra });
 const ROWS = [
   { id: "ars", name: "ARS", owner: "NCATS", step: 1, step_label: "Step 1", step_title: "Front door",
-    smartapi_record: { id: "abc" },
+    smartapi_record: { id: "abc" }, repository: "https://github.com/x/ars",
+    releases_detail: [{ tag: "v1.0", url: "https://github.com/x/ars/releases/tag/v1.0", deployed: true }],
     environments: { ci: cell("1.0"), prod: cell("1.0", { reachable: false }) } },
   { id: "arax", name: "ARAX", owner: "CATRAX", step: 2, step_label: "Step 2", step_title: "ARAs",
     smartapi_record: { id: "def" },
@@ -101,11 +102,21 @@ test("a sort by date draws no bands, and no rows draws the empty message", () =>
 
 test("an expanded row shows only the fields some environment answered", () => {
   reset();
-  const arax = table.detailRowsHtml(ROWS[1], "Step 2", true);
+  const arax = table.detailRowsHtml(ROWS[1], "Step 2");
   assert.match(arax, /TRAPI/);
   assert.doesNotMatch(arax, /Biolink/);
-  const ars = table.detailRowsHtml(ROWS[0], "Step 1", true);
+  // The label is written into every non-environment cell, each with its
+  // column's drop class, so CSS can show the one beside the first environment.
+  assert.match(arax, /class="dk dk-smartapi drop-sm"/);
+  assert.match(arax, /class="dk dk-name "/);
+  // And a (?) that says where the row comes from.
+  assert.match(arax, /class="help" data-tip="fact" data-id="arax"\s+data-fact="TRAPI"/);
+  const ars = table.detailRowsHtml(ROWS[0], "Step 1");
   assert.match(ars, /Nothing else is recorded/);
+  // Releases are not a detail row: they sit in the Repository cell, for CSS
+  // to show once the row is open.
+  assert.doesNotMatch(ars, /v1\.0/);
+  assert.match(table.bodyHtml([ROWS[0]]), /class="rels"><a class="rel deployed"[^>]*>v1\.0</);
 });
 
 test("an environment cell says why it has no version, and marks drift", () => {

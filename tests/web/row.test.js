@@ -94,9 +94,11 @@ test("a live cell links its version to the document it was read from", () => {
   assert.deepEqual(m.drift, []);
   assert.equal(m.dataRelease, "babel 2025sep1");
   assert.deepEqual(m.facts.map((f) => f.label), [
-    "TRAPI", "Data release", "Host", "API document", "Root answers", "Paths",
+    "TRAPI", "Data release", "Host", "API document", "Root URL", "Paths",
     "Operations", "Async query", "Recent queries", "Telemetry",
   ]);
+  // Every fact explains where it comes from, for the (?) beside its label.
+  assert.ok(m.facts.every((f) => typeof f.about === "string" && f.about.length > 20));
   const byLabel = Object.fromEntries(m.facts.map((f) => [f.label, f]));
   assert.equal(byLabel.Host.value, "svc.ci.transltr.io");
   assert.equal(byLabel.Host.href, "https://svc.ci.transltr.io/");

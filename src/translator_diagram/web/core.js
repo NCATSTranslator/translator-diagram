@@ -262,7 +262,7 @@
   };
 
   const DOCUMENT_WORDS = {
-    version: "carries a version",
+    version: "has a version",
     "no-version": "document has no version",
     "not-json": "serves HTML, not JSON",
   };
@@ -285,24 +285,39 @@
     const source = cell.version_source || "";
     const otel = ((row || {}).otel_presence || [])
       .filter((p) => (p.seen_in || []).includes(env)).map((p) => p.service);
+    // Each fact says where it comes from (`about`): the (?) beside its label
+    // in the expanded row shows that sentence, so a new fact explains itself.
     const facts = [
-      { label: "TRAPI", value: cell.trapi, src: cell.trapi_source },
-      { label: "Biolink", value: cell.biolink },
-      { label: "Data release", value: cell.data_release, href: href(cell.status_url) },
-      { label: "Released", value: cell.released, href: href(cell.release_url), note: cell.release_tag },
-      { label: "Host", value: cell.url ? host(cell.url) : "", href: href(cell.url), mono: true },
-      { label: "Location", value: cell.location },
+      { label: "TRAPI", value: cell.trapi, src: cell.trapi_source,
+        about: "The TRAPI version the deployment's own API document declares (x-trapi.version), or failing that the SmartAPI registration's copy." },
+      { label: "Biolink", value: cell.biolink,
+        about: "The Biolink Model version the API document declares (x-translator.biolink-version), or failing that the registration's." },
+      { label: "Data release", value: cell.data_release, href: href(cell.status_url),
+        about: "From the deployment's /status page: the Babel release it has loaded, and the Biolink model tag where the page reports one." },
+      { label: "Released", value: cell.released, href: href(cell.release_url), note: cell.release_tag,
+        about: "The GitHub release whose tag matches the version running here, and the day it was published." },
+      { label: "Host", value: cell.url ? host(cell.url) : "", href: href(cell.url), mono: true,
+        about: "The deployment's address, from its catalog file or from the SmartAPI registration." },
+      { label: "Location", value: cell.location,
+        about: "Who hosts it: the catalog file's word, or the registration's x-location." },
       { label: "API document", value: DOCUMENT_WORDS[cell.document] || "",
-        href: href(cell.openapi_url), note: cell.http_status != null ? `HTTP ${cell.http_status}` : "" },
-      { label: "Root answers", value: cell.root_status != null ? `HTTP ${cell.root_status}` : "" },
-      { label: "Title", value: cell.openapi_title },
-      { label: "Paths", value: cell.paths_count },
-      { label: "Operations", value: (cell.trapi_operations || []).length || "" },
+        href: href(cell.openapi_url), note: cell.http_status != null ? `HTTP ${cell.http_status}` : "",
+        about: "What fetching the OpenAPI document returned this sync: a version, a document with none, or a web page instead of JSON, with the HTTP status." },
+      { label: "Root URL", value: cell.root_status != null ? `HTTP ${cell.root_status}` : "",
+        about: "The HTTP status the deployment's own URL answered with this sync; what says it is up when there is no document to read." },
+      { label: "Title", value: cell.openapi_title, about: "The title the API document gives itself." },
+      { label: "Paths", value: cell.paths_count, about: "How many paths the API document lists." },
+      { label: "Operations", value: (cell.trapi_operations || []).length || "",
+        about: "How many TRAPI operations the API document declares (x-trapi.operations)." },
       { label: "Async query",
-        value: typeof cell.asyncquery === "boolean" ? (cell.asyncquery ? "yes" : "no") : "" },
-      { label: "Recent queries", value: recentQueries(cell.recent_queries) },
-      { label: "Status message", value: cell.status_message },
-      { label: "Telemetry", value: otel.join(", ") },
+        value: typeof cell.asyncquery === "boolean" ? (cell.asyncquery ? "yes" : "no") : "",
+        about: "Whether the API document declares support for asynchronous queries (x-trapi.asyncquery)." },
+      { label: "Recent queries", value: recentQueries(cell.recent_queries),
+        about: "From the /status page: how many queries the service has answered lately, and its median and 95th-percentile latency." },
+      { label: "Status message", value: cell.status_message,
+        about: "The sentence the /status page reports about the service." },
+      { label: "Telemetry", value: otel.join(", "),
+        about: "The service names this component reports under that were seen at this environment's OpenTelemetry collector." },
     ]
       .filter((f) => f.value != null && f.value !== "")
       .map((f) => ({ ...f, value: String(f.value) }));

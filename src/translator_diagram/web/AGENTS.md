@@ -218,6 +218,13 @@ absence the page is sure of (no such host, no server listed, not a hosted
 service) is left white, while "no address on file" — the page's own gap — is
 grey.
 
+**The expanded row's label sits beside the environments, not in the first
+column.** It is written into every non-environment cell and CSS shows the
+rightmost one still on screen (`td.dk-smartapi .dkl` and the ladder under it
+in `table.css`, with the drawer-open steps in `drawer.css`). The first-column
+label was tried in #90 and read as detached from the numbers it named; the
+ladder is more rules, and the right answer.
+
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different
 components means nothing. Cells rank in tiers — running a release we can date,

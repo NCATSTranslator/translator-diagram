@@ -193,6 +193,32 @@ code {
   border-bottom: 1px solid var(--hairline);
 }
 .filters .spacer { flex: 1 1 auto; }
+/* The tint legend. The words match cellState in table.js; the colours are
+   the board tokens in tokens.css. */
+.legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--sp-3);
+  margin-left: var(--sp-2);
+  font-size: var(--fs-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.legend .sw {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  border: 1px solid var(--hairline-strong);
+  vertical-align: -2px;
+}
+.legend .sw.same { background: var(--same); }
+.legend .sw.diff { background: var(--diff); }
+.legend .sw.nov { background: var(--nov); }
+.legend .sw.down { background: var(--down); }
+.legend .sw.off { background: var(--off); }
+.legend .sw.copied { width: 18px; border-style: dashed; border-radius: var(--r-pill); }
 .filters .status {
   display: flex;
   align-items: baseline;
@@ -281,6 +307,7 @@ code {
 @media (max-width: 800px) {
   .drop-xs { display: none; }
   .brandmark .tagline { display: none; }
+  .legend { display: none; }
   .topbar { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .page { padding: var(--sp-4) var(--sp-3) 0; }
 }

@@ -226,7 +226,10 @@ A single self-contained HTML page with two views over the same payload:
 
 Click a row or a map node to open the drawer (Overview · Environments ·
 Releases · Helm · SmartAPI · Connections). Expand a row inline with the
-chevron for a side-by-side environment read without leaving the table.
+chevron for a side-by-side environment read without leaving the table: one
+line per fact, each with a (?) that says where its values come from, and the
+component's releases under its repository. A legend beside the filters says
+what the cell colours mean.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/

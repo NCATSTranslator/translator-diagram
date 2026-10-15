@@ -148,6 +148,14 @@
           <span id="f-owner"></span><span id="f-view"></span>
           <button type="button" class="btn" id="reset">Reset</button>
           <button type="button" class="btn" id="copy">Copy link</button>
+          <span class="legend" aria-label="What the environment cells' colours mean">
+            <span><i class="sw same"></i>same as the rest of the row</span>
+            <span><i class="sw diff"></i>differs</span>
+            <span><i class="sw nov"></i>up, no version</span>
+            <span><i class="sw down"></i>down</span>
+            <span><i class="sw off"></i>no address on file</span>
+            <span><i class="sw copied"></i>copied from a registry or chart</span>
+          </span>
           <span class="spacer"></span>
           <span class="status">
             <span class="order" id="order"></span>

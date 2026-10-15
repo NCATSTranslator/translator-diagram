@@ -185,7 +185,7 @@ tbody tr.band:first-child td { padding-top: var(--sp-2); }
   padding: 0 8px;
   border-radius: var(--r-pill);
   background: var(--raised);
-  color: var(--muted);
+  color: var(--text);
   font-size: var(--fs-meta);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -253,6 +253,13 @@ tbody tr.row.open .csub { white-space: normal; }
 /* --- Repository and SmartAPI cells ---------------------------------------- */
 
 td.repo a, td.sapi a { text-decoration: underline; text-underline-offset: 2px; }
+/* The release chips, under the repository they came from, once the row is
+   open. Always in the markup: opening a row inserts its detail rows and
+   nothing else, so the cell cannot be re-rendered then. */
+td.repo .rels { display: none; margin-top: 4px; line-height: 20px; }
+tbody tr.row.open td.repo .rels { display: block; }
+td.repo .rels .rel { margin: 1px 4px 1px 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.repo a.rel { text-decoration: none; }
 /* A repository slug has no spaces; let it break rather than widen the table
    past the window (issue #31). */
 td.repo { overflow-wrap: anywhere; }
@@ -401,14 +408,51 @@ tbody tr.detail > td:first-child { position: sticky; left: 0; z-index: 2; }
 tbody tr.detail.detail-first > td { padding-top: var(--sp-1); }
 tbody tr.detail.detail-last > td { padding-bottom: var(--sp-2); border-bottom: 1px solid var(--hairline); }
 
+/* The label is written into every non-environment cell and shown in exactly
+   one: the rightmost still on screen, so it sits against the first
+   environment column with no gap between the word and the numbers it names.
+   The ladder is the reverse of the drop order — SmartAPI goes at 1150,
+   Owner at 800 (Repository goes at 1400, but SmartAPI is still to its right).
+   drawer.css has the same three steps for the widths with the drawer open. */
 tbody tr.detail > td.dk {
-  padding-left: calc(var(--cell-pad-left) + 24px);
+  text-align: right;
+  padding-right: var(--sp-3);
   font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   color: var(--muted);
   white-space: nowrap;
 }
+.dkl { display: none; }
+td.dk-smartapi .dkl { display: inline; }
+@media (max-width: 1150px) {
+  td.dk-smartapi .dkl { display: none; }
+  td.dk-owner .dkl { display: inline; }
+}
+@media (max-width: 800px) {
+  td.dk-owner .dkl { display: none; }
+  td.dk-name .dkl { display: inline; }
+}
+/* The (?) beside a label: where this row's values come from, on hover, on
+   focus and so on a click. */
+.help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  padding: 0;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-coin);
+  background: none;
+  color: var(--muted);
+  font: 600 9px/1 var(--font);
+  letter-spacing: 0;
+  cursor: help;
+  vertical-align: 1px;
+}
+.help:hover, .help:focus-visible { color: var(--accent); border-color: var(--accent); }
 .dv {
   text-align: center;
   font-family: var(--mono);
@@ -423,9 +467,6 @@ tbody tr.detail > td.dk {
 /* Hosts break only where table.js put a <wbr> — after a dot — so a narrow
    column wraps "shepherd.test." / "transltr.io" rather than "…transltr.i / o". */
 .dv.mono { font-size: var(--fs-label); overflow-wrap: normal; word-break: normal; }
-/* The release chips, under the repository they came from. */
-td.rels { line-height: var(--detail-h); }
-td.rels .rel { margin: 1px 4px 1px 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rel:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 /* Running in one of the environments on this row: the link between this
    column and the four to its right, and the only release worth the ink. */

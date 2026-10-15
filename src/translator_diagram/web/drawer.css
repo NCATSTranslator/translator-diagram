@@ -62,6 +62,15 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 @media (max-width: 1840px) { html[data-drawer="open"] .drop-md { display: none; } }
 @media (max-width: 1590px) { html[data-drawer="open"] .drop-sm { display: none; } }
 @media (max-width: 1240px) { html[data-drawer="open"] .drop-xs { display: none; } }
+/* The expanded row's label ladder (table.css) follows the same steps. */
+@media (max-width: 1590px) {
+  html[data-drawer="open"] td.dk-smartapi .dkl { display: none; }
+  html[data-drawer="open"] td.dk-owner .dkl { display: inline; }
+}
+@media (max-width: 1240px) {
+  html[data-drawer="open"] td.dk-owner .dkl { display: none; }
+  html[data-drawer="open"] td.dk-name .dkl { display: inline; }
+}
 
 /* --- Header --------------------------------------------------------------- */
 
