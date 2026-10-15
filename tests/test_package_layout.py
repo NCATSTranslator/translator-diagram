@@ -62,7 +62,7 @@ ALLOWED = {
     # this way is what keeps any one of them small enough to hold in a head.
     "synced_data": {"charts", "components", "files"},
     "stages": {"components", "files", "flow"},
-    "cells": {"components", "deployments", "synced_data"},
+    "cells": {"components", "deployments", "files", "synced_data"},
     "rows": {
         "cells", "components", "deployments", "flow", "payload_details", "stages",
         "synced_data",
@@ -72,7 +72,7 @@ ALLOWED = {
         "synced_data",
     },
     "dashboard_cli": {
-        "components", "dashboard", "flow", "privacy", "sync", "synced_data",
+        "components", "dashboard", "files", "flow", "privacy", "sync", "synced_data",
     },
 }
 

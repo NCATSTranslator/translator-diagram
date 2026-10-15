@@ -258,14 +258,6 @@ def _chart_repository(
     return links[0] if chart_count == 1 and links else None
 
 
-def _repo_document(synced: SyncedData, repo: str | None) -> dict[str, Any] | None:
-    """The cached GitHub document for an `owner/name` slug, or nothing."""
-    if not repo:
-        return None
-    owner, _, name = repo.partition("/")
-    return synced.repo_meta(owner, name)
-
-
 # --- The assembler ---------------------------------------------------------
 
 def build_rows(
@@ -455,7 +447,7 @@ def build_rows(
                 # a push is not a release, and ranking it beside one would date
                 # a component by somebody editing its README.
                 "repository_meta": repo_meta_detail(
-                    _repo_document(synced, source_repo)
+                    synced.repo_meta(source_repo)
                 ),
                 # What the platform's own registry says this thing *is*, as
                 # opposed to what it is doing: status, knowledge level, agent

@@ -56,3 +56,84 @@ def read_yaml(path: Path) -> dict[str, Any] | None:
     except (OSError, yaml.YAMLError, UnicodeDecodeError):
         return None
     return loaded if isinstance(loaded, dict) else None
+
+
+# --- The sync cache's layout -------------------------------------------------
+#
+# Every file `sync-components` writes under `data/sync/`, named in one place so
+# the code that writes a file and the code that reads it back cannot disagree
+# about where it is. `tests/test_files.py` pins the literal layout; nothing
+# else spells it out.
+
+MANIFEST = "manifest.json"
+SMARTAPI = "smartapi.json"
+DERIVED = "derived.json"
+INFORES_CATALOG = "infores_catalog.yaml"
+HELM_INDEX = "helm/index.json"
+
+# The per-deployment files, in the order `cells._probe_statuses` walks them:
+# the root probe of the deployment URL itself, then the two documents.
+PROBE_KINDS = ("root", "openapi", "status")
+
+
+def manifest_path(root: Path) -> Path:
+    """Every attempt this run made, failed ones included."""
+    return root / MANIFEST
+
+
+def smartapi_path(root: Path) -> Path:
+    """The SmartAPI registry's answer, as it came back."""
+    return root / SMARTAPI
+
+
+def derived_path(root: Path) -> Path:
+    """The conventional hostnames probed: confirmed and rejected, with verdicts."""
+    return root / DERIVED
+
+
+def infores_catalog_path(root: Path) -> Path:
+    return root / INFORES_CATALOG
+
+
+def helm_index_path(root: Path) -> Path:
+    """The translator-devops `helm/` directory listing."""
+    return root / HELM_INDEX
+
+
+def endpoint_key(kind: str, component_id: str, env: str) -> str:
+    """The manifest's `path` for one deployment's root probe or document.
+
+    The one relative-string form: endpoints and root probes are looked up in
+    the manifest by this key (the 200 gate), where everything else is reached
+    by path alone.
+    """
+    return f"{kind}/{component_id}/{env}.json"
+
+
+def endpoint_path(root: Path, kind: str, component_id: str, env: str) -> Path:
+    return root / endpoint_key(kind, component_id, env)
+
+
+def otel_path(root: Path, env: str) -> Path:
+    """One OpenTelemetry collector's service list."""
+    return root / "otel" / f"{env}.json"
+
+
+def releases_path(root: Path, repo: str) -> Path:
+    """One source repository's GitHub releases; `repo` is `owner/name`."""
+    return root / "releases" / f"{repo}.json"
+
+
+def repo_meta_path(root: Path, repo: str) -> Path:
+    """One source repository's own GitHub document; `repo` is `owner/name`."""
+    return root / "repos" / f"{repo}.json"
+
+
+def helm_file_path(root: Path, chart: str, name: str) -> Path:
+    """One file out of one chart: `Chart.yaml`, `values.yaml` or the images list."""
+    return root / "helm" / chart / name
+
+
+def chart_commit_path(root: Path, chart: str) -> Path:
+    """The last commit touching one chart's directory."""
+    return root / "helm" / chart / "commit.json"

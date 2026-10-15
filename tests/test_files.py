@@ -3,7 +3,24 @@ reading JSON or YAML that may be missing or malformed."""
 
 from pathlib import Path
 
-from translator_diagram.files import find_upward, read_json, read_yaml
+from translator_diagram.files import (
+    PROBE_KINDS,
+    chart_commit_path,
+    derived_path,
+    endpoint_key,
+    endpoint_path,
+    find_upward,
+    helm_file_path,
+    helm_index_path,
+    infores_catalog_path,
+    manifest_path,
+    otel_path,
+    read_json,
+    read_yaml,
+    releases_path,
+    repo_meta_path,
+    smartapi_path,
+)
 
 
 class TestFindUpward:
@@ -70,3 +87,43 @@ class TestReadYaml:
         assert read_yaml(tmp_path / "bad.yaml") is None
         (tmp_path / "list.yaml").write_text("- a\n- b\n")
         assert read_yaml(tmp_path / "list.yaml") is None
+
+
+class TestCacheLayout:
+    """The one place the sync cache's layout is spelled out.
+
+    Code and the test builders both go through these functions, so a change
+    to a path here is the only way to move a file, and this is where it shows.
+    """
+
+    def test_the_fixed_files(self, tmp_path):
+        assert manifest_path(tmp_path) == tmp_path / "manifest.json"
+        assert smartapi_path(tmp_path) == tmp_path / "smartapi.json"
+        assert derived_path(tmp_path) == tmp_path / "derived.json"
+        assert infores_catalog_path(tmp_path) == tmp_path / "infores_catalog.yaml"
+        assert helm_index_path(tmp_path) == tmp_path / "helm" / "index.json"
+
+    def test_one_deployments_files_are_keyed_by_kind_component_and_env(self, tmp_path):
+        assert endpoint_key("openapi", "svc", "ci") == "openapi/svc/ci.json"
+        assert endpoint_key("root", "svc", "prod") == "root/svc/prod.json"
+        assert endpoint_path(tmp_path, "status", "svc", "test") == (
+            tmp_path / "status" / "svc" / "test.json"
+        )
+        assert PROBE_KINDS == ("root", "openapi", "status")
+
+    def test_otel_collectors_are_keyed_by_env(self, tmp_path):
+        assert otel_path(tmp_path, "ci") == tmp_path / "otel" / "ci.json"
+
+    def test_github_files_are_keyed_by_the_owner_name_slug(self, tmp_path):
+        # The slug keeps its slash, so a repository is a directory: the three
+        # shepherds share `releases/TranslatorSRI/shepherd.json`.
+        assert releases_path(tmp_path, "a/b") == tmp_path / "releases" / "a" / "b.json"
+        assert repo_meta_path(tmp_path, "a/b") == tmp_path / "repos" / "a" / "b.json"
+
+    def test_chart_files_sit_under_the_chart(self, tmp_path):
+        assert helm_file_path(tmp_path, "arax", "Chart.yaml") == (
+            tmp_path / "helm" / "arax" / "Chart.yaml"
+        )
+        assert chart_commit_path(tmp_path, "arax") == (
+            tmp_path / "helm" / "arax" / "commit.json"
+        )

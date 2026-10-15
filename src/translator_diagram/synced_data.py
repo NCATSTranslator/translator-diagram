@@ -13,7 +13,21 @@ from typing import Any
 
 from .charts import CHART_META_FILES, chart_dirs
 from .components import Deployment
-from .files import read_json, read_yaml
+from .files import (
+    chart_commit_path,
+    derived_path,
+    endpoint_key,
+    helm_file_path,
+    helm_index_path,
+    infores_catalog_path,
+    manifest_path,
+    otel_path,
+    read_json,
+    read_yaml,
+    releases_path,
+    repo_meta_path,
+    smartapi_path,
+)
 
 
 def _read_json_list(path: Path) -> list[Any]:
@@ -46,11 +60,11 @@ class SyncedData:
 
     def __init__(self, root: Path):
         self.root = root
-        self.manifest = read_json(root / "manifest.json") or {}
+        self.manifest = read_json(manifest_path(root)) or {}
         # Shape-checked at every level, as `sync` checks it: the registry is
         # somebody else's service, and a 200 carrying an error object or a
         # changed shape must cost the SmartAPI facts, not the build.
-        payload = read_json(root / "smartapi.json")
+        payload = read_json(smartapi_path(root))
         hits = payload.get("hits") if isinstance(payload, dict) else None
         self.smartapi = {
             hit["_id"]: hit
@@ -60,7 +74,7 @@ class SyncedData:
         # One read, two answers. `sync` writes both halves of the same probe
         # into this file, and reading it twice would let a rebuild pick up a
         # confirmation from one moment and a rejection from another.
-        probes = read_json(root / "derived.json")
+        probes = read_json(derived_path(root))
         probes = probes if isinstance(probes, dict) else {}
         self.derived = {
             cid: {
@@ -99,7 +113,7 @@ class SyncedData:
         self._releases: dict[str, list[dict[str, Any]]] = {}
         self._catalog: dict[str, dict[str, Any]] | None = None
         self.otel = {
-            env: _service_names(read_json(root / "otel" / f"{env}.json"))
+            env: _service_names(read_json(otel_path(root, env)))
             for env in ("ci", "test", "prod")
         }
         self.statuses = {
@@ -132,7 +146,7 @@ class SyncedData:
         Not named `root`: this class already has one, the sync directory
         itself, and a method shadowing it would be a bug that reads as a name.
         """
-        relative = f"root/{component_id}/{env}.json"
+        relative = endpoint_key("root", component_id, env)
         if relative not in self.statuses:
             return None
         probe = read_json(self.root / relative)
@@ -153,7 +167,7 @@ class SyncedData:
         where a 200 was not a document, `"no-version"` where it was a document
         with no `info.version`, and `"version"` where there is one to show.
         """
-        relative = f"openapi/{component_id}/{env}.json"
+        relative = endpoint_key("openapi", component_id, env)
         fetch = self.statuses.get(relative)
         if not fetch or fetch.get("status") != 200 or fetch.get("error"):
             return None
@@ -185,7 +199,7 @@ class SyncedData:
         one when GitHub rate-limits a run would lose real information and say
         nothing new in its place.
         """
-        relative = f"{kind}/{component_id}/{env}.json"
+        relative = endpoint_key(kind, component_id, env)
         fetch = self.statuses.get(relative)
         if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
             return None
@@ -209,7 +223,7 @@ class SyncedData:
         if repo not in self._releases:
             self._releases[repo] = [
                 entry
-                for entry in _read_json_list(self.root / "releases" / f"{repo}.json")
+                for entry in _read_json_list(releases_path(self.root, repo))
                 if isinstance(entry, dict)
             ]
         return self._releases[repo]
@@ -224,12 +238,12 @@ class SyncedData:
         """
         key = (chart, name)
         if key not in self._charts:
-            self._charts[key] = read_yaml(self.root / "helm" / chart / name)
+            self._charts[key] = read_yaml(helm_file_path(self.root, chart, name))
         return self._charts[key]
 
     def chart_index(self) -> list[str]:
         """Every chart directory translator-devops holds, sorted."""
-        return chart_dirs(read_json(self.root / "helm" / "index.json"))
+        return chart_dirs(read_json(helm_index_path(self.root)))
 
     def chart_meta(self, chart: str) -> dict[str, Any | None]:
         """One chart's three cached files, keyed the way the matcher reads them.
@@ -256,19 +270,18 @@ class SyncedData:
         happen.
         """
         if chart not in self._commits:
-            entries = _read_json_list(self.root / "helm" / chart / "commit.json")
+            entries = _read_json_list(chart_commit_path(self.root, chart))
             first = entries[0] if entries and isinstance(entries[0], dict) else None
             self._commits[chart] = _commit_facts(first)
         return self._commits[chart]
 
-    def repo_meta(self, owner: str, name: str) -> dict[str, Any] | None:
-        """One source repository's own document, as GitHub returned it."""
-        if not owner or not name:
+    def repo_meta(self, repo: str | None) -> dict[str, Any] | None:
+        """One `owner/name` repository's own document, as GitHub returned it."""
+        if not repo:
             return None
-        key = f"{owner}/{name}"
-        if key not in self._repos:
-            self._repos[key] = read_json(self.root / "repos" / owner / f"{name}.json")
-        return self._repos[key]
+        if repo not in self._repos:
+            self._repos[repo] = read_json(repo_meta_path(self.root, repo))
+        return self._repos[repo]
 
     def catalog(self) -> dict[str, dict[str, Any]]:
         """The infores catalog, indexed by infores id and parsed once.
@@ -279,7 +292,7 @@ class SyncedData:
         entry with no `id` is not addressable and is left out.
         """
         if self._catalog is None:
-            loaded = read_yaml(self.root / "infores_catalog.yaml") or {}
+            loaded = read_yaml(infores_catalog_path(self.root)) or {}
             entries: list[Any] = next(
                 (value for value in loaded.values() if isinstance(value, list)), []
             )
@@ -290,8 +303,10 @@ class SyncedData:
             }
         return self._catalog
 
-    def http_status(self, relative: str) -> int | None:
-        return (self.statuses.get(relative) or {}).get("status")
+    def http_status(self, kind: str, component_id: str, env: str) -> int | None:
+        """The status this run recorded for one document fetch, or None."""
+        fetch = self.statuses.get(endpoint_key(kind, component_id, env))
+        return (fetch or {}).get("status")
 
 
 def _commit_facts(entry: dict[str, Any] | None) -> dict[str, Any] | None:

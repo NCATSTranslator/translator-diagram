@@ -15,6 +15,7 @@ from typing import Any
 
 from .components import ComponentFile, Deployment, endpoint_url_in
 from .deployments import deployments_from_smartapi
+from .files import PROBE_KINDS, endpoint_key
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
@@ -369,8 +370,8 @@ def _probe_statuses(
     """
     return [
         fetch.get("status")
-        for kind in ("root", "openapi", "status")
-        if (fetch := synced.statuses.get(f"{kind}/{component_id}/{env}.json"))
+        for kind in PROBE_KINDS
+        if (fetch := synced.statuses.get(endpoint_key(kind, component_id, env)))
     ]
 
 
@@ -437,8 +438,9 @@ def build_cell(
     )
 
     openapi_url = endpoint_url_in(component, deployment, "openapi")
-    relative = f"openapi/{component.id}/{env}.json"
-    http_status = synced.http_status(relative) if openapi_url else None
+    http_status = (
+        synced.http_status("openapi", component.id, env) if openapi_url else None
+    )
     probe = synced.root_probe(component.id, env) or {}
     reachable = _reachable(_probe_statuses(synced, component.id, env))
     cell = {

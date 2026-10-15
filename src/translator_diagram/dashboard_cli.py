@@ -14,6 +14,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
+from .files import manifest_path
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -79,7 +80,7 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
         f"{counts['succeeded']}/{counts['attempted']} fetches succeeded "
         f"({counts['cached']} from cache, {counts['failed']} failed)."
     )
-    click.echo(f"Wrote {output_dir / 'manifest.json'}")
+    click.echo(f"Wrote {manifest_path(output_dir)}")
     if counts["succeeded"] == 0:
         raise click.ClickException(
             "Every fetch failed — check the network rather than the data."
@@ -108,9 +109,10 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     at all, so it cannot regress into a full build by being edited.
     """
     components = _load(components_dir)
-    if not (sync_dir / "manifest.json").exists():
+    manifest = manifest_path(sync_dir)
+    if not manifest.exists():
         raise click.ClickException(
-            f"No manifest at {sync_dir / 'manifest.json'}. Run sync-components first."
+            f"No manifest at {manifest}. Run sync-components first."
         )
     synced = SyncedData(sync_dir)
     policy = None if include_private else load_policy()
