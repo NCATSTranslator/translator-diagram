@@ -24,8 +24,6 @@ from .components import (
     Deployment,
     endpoint_url_in,
     github_repo,
-    read_json,
-    read_yaml,
 )
 from .deployments import (
     deployments_from_smartapi,
@@ -44,6 +42,7 @@ from .fetch import (
     now,
     probe_to,
 )
+from .files import read_json, read_yaml
 
 SMARTAPI_QUERY = (
     "https://smart-api.info/api/query"

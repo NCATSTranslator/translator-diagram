@@ -1,6 +1,6 @@
 """The import direction from AGENTS.md, enforced rather than described.
 
-Nine modules only stay nine modules if imports keep running one way. A wrong
+Two dozen modules only stay two dozen modules if imports keep running one way. A wrong
 turn — legend reaching back into render, say — still works at runtime right up
 until it doesn't, and by then the layering exists only in prose.
 
@@ -20,8 +20,11 @@ PACKAGE = Path(__file__).resolve().parent.parent / "src" / "translator_diagram"
 # is a deliberate act: test_the_layering_is_acyclic below still has to pass, so
 # this cannot be widened into a cycle to make a failure go away.
 ALLOWED = {
+    # The filesystem both stacks share: find_upward for the hand-edited files,
+    # and the tolerant JSON/YAML readers. A leaf, so anything may use it.
+    "files": set(),
     "model": set(),
-    "colors": set(),
+    "colors": {"files"},
     "naming": {"model"},
     "loading": {"model"},
     "validation": {"model", "naming"},
@@ -42,13 +45,13 @@ ALLOWED = {
     "deployments": {"components"},
     # The transport under sync: one URL into one file. It knows HTTP and the
     # cache's file shapes, and nothing about what a component is.
-    "fetch": {"components"},
+    "fetch": {"files"},
     "flow": {"components"},
-    "sync": {"charts", "components", "deployments", "fetch"},
-    # privacy is a leaf: it filters plain dictionaries, so it needs to know
-    # nothing about where they came from, and dashboard can apply it without
-    # anything in the graph moving.
-    "privacy": set(),
+    "sync": {"charts", "components", "deployments", "fetch", "files"},
+    # privacy filters plain dictionaries, so it needs to know nothing about
+    # where they came from, and dashboard can apply it without anything in the
+    # graph moving. It reaches files only to find its policy.
+    "privacy": {"files"},
     # payload_details is a leaf for the same reason: dict in, dict out, so the
     # shaping can be tested without a network, a checkout or a rendered page.
     "payload_details": set(),
@@ -57,8 +60,8 @@ ALLOWED = {
     # cache; cells resolves one cell from it; rows assembles one component's
     # row; dashboard assembles the payload and renders the page. Splitting it
     # this way is what keeps any one of them small enough to hold in a head.
-    "synced_data": {"charts", "components"},
-    "stages": {"components", "flow"},
+    "synced_data": {"charts", "components", "files"},
+    "stages": {"components", "files", "flow"},
     "cells": {"components", "deployments", "synced_data"},
     "rows": {
         "cells", "components", "deployments", "flow", "payload_details", "stages",

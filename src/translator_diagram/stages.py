@@ -11,7 +11,8 @@ from typing import Any
 
 import click
 
-from .components import ComponentFile, read_yaml
+from .components import ComponentFile
+from .files import find_upward, read_yaml
 from .flow import in_flow_order
 
 STAGES_PATH = Path("catalog/flow-steps.yaml")
@@ -19,15 +20,6 @@ STAGES_PATH = Path("catalog/flow-steps.yaml")
 
 UNPLACED_TITLE = "Not yet placed"
 
-
-def _find_stages() -> Path | None:
-    """catalog/flow-steps.yaml in the working directory or the nearest parent."""
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / STAGES_PATH
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
@@ -45,14 +37,15 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     `unplaced` block so a new component cannot quietly sort last.
 
     With no path, the file is looked for in the working directory and every
-    directory above it — the same walk `load_owner_colors` and `load_policy`
-    do, so building from a subdirectory of the checkout behaves the same way.
+    directory above it (`find_upward`, the same walk `load_owner_colors` and
+    `load_policy` do), so building from a subdirectory of the checkout behaves
+    the same way.
     A missing file is an error rather than an empty list: `in_stage_order`
     falls back to data-flow order, which is the ordering this file exists to
     replace, so degrading quietly would publish the wrong page and say
     nothing. An empty file is still allowed — that one is somebody's decision.
     """
-    found = path if path is not None else _find_stages()
+    found = path if path is not None else find_upward(STAGES_PATH)
     if found is None:
         raise click.ClickException(
             f"No stage file at {STAGES_PATH}. It sets the row order, "

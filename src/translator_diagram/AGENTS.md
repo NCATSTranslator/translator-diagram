@@ -29,6 +29,7 @@ which is how a 2000-line test file grows back.
 
 | Module | What's there |
 |---|---|
+| `files.py` | The filesystem both stacks share: `find_upward` (how `catalog/owner-colors.csv`, `catalog/flow-steps.yaml` and `config/privacy.yaml` are found from any directory in the checkout) and the tolerant `read_json`/`read_yaml` readers. A leaf |
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
 | `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
 | `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
@@ -43,7 +44,7 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS` |
 | `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
 | `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
@@ -75,6 +76,9 @@ table the diagram generator reads is not a web file.
 **Imports run one way**, and a new one must not break it:
 
 ```text
+# shared
+files → {colors, privacy, stages, fetch, sync, synced_data}
+
 # the diagram
 model → naming → {validation, export, render}
 colors → {render, legend}
@@ -82,7 +86,7 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {charts, deployments, fetch, flow, sync, synced_data, stages, cells, rows, dashboard}
+components → {charts, deployments, flow, sync, synced_data, stages, cells, rows, dashboard}
 charts → {sync, synced_data, dashboard}
 deployments → {sync, cells, rows}
 fetch → sync
@@ -113,10 +117,11 @@ than `render.py` for exactly this reason: `render` and `legend` both need
 `EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
 other.
 
-**The two halves meet only at `colors`.** `model.py` parses a sheet row and
-`components.py` parses a YAML file; they describe the same components but not
-the same data, and neither imports the other. Merging them is what issue #19
-is for — doing it early would mean one of the two losing fields it needs.
+**The two halves meet only at `colors` and the `files` leaf.** `model.py`
+parses a sheet row and `components.py` parses a YAML file; they describe the
+same components but not the same data, and neither imports the other. Merging
+them is what issue #19 is for — doing it early would mean one of the two losing
+fields it needs.
 
 `tests/test_package_layout.py` enforces it, so a wrong-direction import fails
 CI rather than sitting there working. Widening its `ALLOWED` map to silence a
@@ -194,12 +199,13 @@ from them, and `flow_steps` was deleted rather than left as a second answer.
 
 A component no stage names lands in a trailing band, and
 `tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
-the same contract as `unknown.yaml`. The file is required, found by the same
-upward walk `load_owner_colors` and `load_policy` use, and `build-dashboard`
-fails without it. `in_stage_order` *does* still fall back to `in_flow_order`
-with no bands, and that fallback is exactly why a missing file is refused: a
-build run from outside a checkout would otherwise publish the derived order the
-file exists to replace, and look finished doing it.
+the same contract as `unknown.yaml`. The file is required, found by
+`files.find_upward` the way `load_owner_colors` and `load_policy` find
+theirs, and `build-dashboard` fails without it. `in_stage_order` *does* still
+fall back to `in_flow_order` with no bands, and that fallback is exactly why a
+missing file is refused: a build run from outside a checkout would otherwise
+publish the derived order the file exists to replace, and look finished doing
+it.
 
 **Change owner node colours** → edit `catalog/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:

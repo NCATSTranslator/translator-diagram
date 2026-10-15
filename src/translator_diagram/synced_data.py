@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from .charts import CHART_META_FILES, chart_dirs
-from .components import Deployment, read_json, read_yaml
+from .components import Deployment
+from .files import read_json, read_yaml
 
 
 def _read_json_list(path: Path) -> list[Any]:

@@ -7,19 +7,16 @@ from pathlib import Path
 
 import click
 
+from .files import find_upward
+
 # Owner → fill color mapping lives in a CSV rather than in code so that
 # non-Python edits can change it. Row order in the CSV doubles as legend order
 # in the diagram.
 #
-# Looked for in the working directory and the directories above it, so a
-# checkout's own colours win from anywhere inside it; the packaged copy is the
-# fallback that makes an installed generate-diagram work. --owner-colors
-# overrides both.
-#
-# Walking the parents keeps this lookup in step with the .env lookup in
-# loading.py, which uses find_dotenv(usecwd=True) and so walks them too.
-# Without it, running from a subdirectory of the checkout took the sheet ID
-# from the repo's .env but the colours from the packaged copy.
+# Looked for in the working directory and the directories above it
+# (`find_upward`), so a checkout's own colours win from anywhere inside it; the
+# packaged copy is the fallback that makes an installed generate-diagram work.
+# --owner-colors overrides both.
 OWNER_COLORS_PATH = Path("catalog") / "owner-colors.csv"
 # At the package root rather than under web/: this is a colour table the
 # diagram generator reads, and nothing about it belongs to a browser.
@@ -248,22 +245,13 @@ def load_owner_colors(path: Path | None = None) -> dict[str, str]:
     """
     if path is not None:
         return _read_owner_colors(path)
-    found = _find_owner_colors()
+    found = find_upward(OWNER_COLORS_PATH)
     if found is not None:
         return _read_owner_colors(found)
     package, member = PACKAGED_OWNER_COLORS
     with resources.as_file(resources.files(package) / member) as packaged:
         return _read_owner_colors(packaged)
 
-
-def _find_owner_colors() -> Path | None:
-    """catalog/owner-colors.csv in the working directory or the nearest parent."""
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / OWNER_COLORS_PATH
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def _read_owner_colors(path: Path) -> dict[str, str]:

@@ -11,7 +11,6 @@ Nothing here imports anything else in the package, and nothing here reaches
 the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -292,36 +291,6 @@ def github_repo(url: str | None) -> str | None:
         return None
     match = GITHUB_REPO.match(url.strip())
     return f"{match['owner']}/{match['name']}" if match else None
-
-
-_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-
-
-def read_json(path: Path) -> Any:
-    """A cached JSON body, or None when it is missing or is not JSON.
-
-    Shared by `sync` and the dashboard, which both read the sync cache. Several
-    Translator endpoints answer 200 with an HTML error page and a throttled
-    GitHub call answers with an object where a list was asked for, so callers
-    still check the shape they get back.
-    """
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
-
-
-def read_yaml(path: Path) -> dict[str, Any] | None:
-    """A YAML mapping, or None when it is missing, malformed or not a mapping.
-
-    libyaml's loader where it is installed: the infores catalog alone takes
-    0.14 s through the pure-Python one and 0.02 s through it.
-    """
-    try:
-        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
-    except (OSError, yaml.YAMLError, UnicodeDecodeError):
-        return None
-    return loaded if isinstance(loaded, dict) else None
 
 
 def _parse_environments(raw: dict[str, Any]) -> dict[str, Deployment]:

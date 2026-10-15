@@ -34,6 +34,8 @@ from typing import Any
 import click
 import yaml
 
+from .files import find_upward
+
 CONFIG_POLICY_PATH = Path("config/privacy.yaml")
 """Where the policy lives, relative to the working directory or a parent.
 
@@ -169,10 +171,10 @@ def load_policy(path: Path | None = None) -> Policy:
     """Read the policy, or fail saying which file was missing.
 
     With no path, `config/privacy.yaml` in the working directory or any
-    directory above it — the same walk `load_owner_colors` does, so running
-    from a subdirectory of the checkout behaves the same way.
+    directory above it (`find_upward`, the same walk `load_owner_colors` does),
+    so running from a subdirectory of the checkout behaves the same way.
     """
-    found = path if path is not None else _find_policy()
+    found = path if path is not None else find_upward(CONFIG_POLICY_PATH)
     if found is None:
         raise click.ClickException(
             f"No privacy policy at {CONFIG_POLICY_PATH}. A published build "
@@ -207,14 +209,6 @@ def load_policy(path: Path | None = None) -> Policy:
         environment_fields=_redactions(loaded, "environment_fields", found),
     )
 
-
-def _find_policy() -> Path | None:
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_POLICY_PATH
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def _redactions(
