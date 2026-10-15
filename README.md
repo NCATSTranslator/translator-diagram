@@ -308,7 +308,7 @@ someone who looks — it keeps a few things off an indexed page. See
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
 the public/private split this anticipates.
 
-[`docs/Security.md`](docs/Security.md) collects what the page publishes, what it
+[`docs/security.md`](docs/security.md) collects what the page publishes, what it
 withholds, and the security questions still open.
 
 Release lists and repository metadata come from the GitHub API, which allows

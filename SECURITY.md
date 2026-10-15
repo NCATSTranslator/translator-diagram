@@ -10,7 +10,7 @@ Report it privately instead: on this repository's **Security** tab, choose
 
 ## What is already known
 
-[`docs/Security.md`](docs/Security.md) records the security questions the
+[`docs/security.md`](docs/security.md) records the security questions the
 published dashboard raises. It lists what is already handled, what a change
 must not reintroduce, and what is still open. Check there first, and add to it
 when a pull request changes what the page publishes or fetches.
