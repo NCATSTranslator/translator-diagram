@@ -10,7 +10,12 @@ from .legend import _build_edge_legend_graph, _build_owners_graph
 from .loading import download_sheet_csv, load_components
 from .model import index_by_id
 from .naming import _layer_filenames
-from .render import _compute_active_set, build_graph, build_layer_subgraph
+from .render import (
+    _compute_active_set,
+    build_graph,
+    build_layer_subgraph,
+    layer_members,
+)
 from .validation import validate
 
 # Refactor status values that indicate active components
@@ -162,11 +167,7 @@ def main(
         active_statuses = {
             s.strip() for s in refactor_status.split(",") if s.strip()
         }
-        active_count = sum(
-            # Must match _compute_active_set, which also drops hidden rows.
-            1 for c in components
-            if c.refactor_status in active_statuses and not c.hide
-        )
+        active_count = len(_compute_active_set(components, active_statuses))
         click.echo(
             f"Filtering to {active_count} components with status: "
             + ", ".join(sorted(active_statuses))
@@ -225,14 +226,7 @@ def main(
             )
             stems = _layer_filenames(layers)
             for layer_value in layers:
-                in_layer_count = sum(
-                    1 for c in components
-                    if c.id in _active_set
-                    and c.layer == layer_value
-                    and not c.ubiquitous
-                    and not c.hide
-                )
-                if in_layer_count == 0:
+                if not layer_members(components, layer_value, _active_set):
                     click.echo(
                         f"  Skipping '{layer_value}' "
                         "(no active non-ubiquitous components)."

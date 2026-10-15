@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .charts import chart_dirs, chart_meta, unclaimed_charts
+from .charts import CHART_META_FILES, chart_dirs, chart_meta, unclaimed_charts
 from .components import (
     ComponentFile,
     Deployment,
@@ -105,7 +105,9 @@ DEVOPS_RAW = (
     "https://raw.githubusercontent.com/helxplatform/translator-devops"
     "/develop/helm/{chart}/{file}"
 )
-HELM_FILES = ("Chart.yaml", "values.yaml", "ncats-images-meta.yaml")
+# The three files fetched per claimed chart: `charts.CHART_META_FILES` is the
+# one list, keyed by what the matcher calls each.
+HELM_FILES = tuple(CHART_META_FILES.values())
 
 DEVOPS_HELM_INDEX = (
     "https://api.github.com/repos/helxplatform/translator-devops"

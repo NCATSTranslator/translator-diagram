@@ -6,12 +6,13 @@ import threading
 from datetime import UTC, datetime
 
 from tests.dashboard_helpers import FakeFetcher
-from translator_diagram.components import ComponentFile, Deployment
+from translator_diagram.components import OTEL_ENVIRONMENTS, ComponentFile, Deployment
 from translator_diagram.fetch import _headers
 from translator_diagram.sync import (
     DEVOPS_HELM_INDEX,
     HELM_FILES,
     INFORES_CATALOG,
+    OTEL_COLLECTORS,
     SMARTAPI_QUERY,
     _chart_totals,
     _confirm_derived,
@@ -979,3 +980,10 @@ class TestCandidatesShareWaveTwo:
                       fetcher=fetcher, max_age=0)
         assert fetcher.urls.count("https://svc.ci.transltr.io/") == 1
         assert [f.path for f in report.fetches].count("root/svc/ci.json") == 1
+
+
+def test_one_collector_per_otel_environment():
+    # `SyncedData.otel` reads one file per OTEL_ENVIRONMENTS entry, and sync
+    # fetches one collector per OTEL_COLLECTORS entry; the two must agree or a
+    # collector is fetched and never read, or read and never fetched.
+    assert set(OTEL_COLLECTORS) == set(OTEL_ENVIRONMENTS)

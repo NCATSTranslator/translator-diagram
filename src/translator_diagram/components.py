@@ -21,6 +21,9 @@ import yaml
 # Our environment ladder, in the order a change travels along it. Also the
 # column order in the dashboard, so it is defined once, here.
 ENVIRONMENTS = ("dev", "ci", "test", "prod")
+# The environments with an OpenTelemetry collector: `sync.OTEL_COLLECTORS`
+# names one per entry, and `SyncedData.otel` reads one file per entry.
+OTEL_ENVIRONMENTS = ("ci", "test", "prod")
 
 # Where an endpoint lives when the component file does not say. Only applied
 # when the key is *absent*: an explicit null means someone checked and this
@@ -230,10 +233,14 @@ class ComponentFile:
 
     # -- links ------------------------------------------------------------
 
+    def repositories_with_role(self, role: str) -> list[dict[str, str]]:
+        """Every recorded repository with `role`, in the order recorded."""
+        return [repo for repo in self.repositories if repo.get("role") == role]
+
     def repository(self, role: str = "source") -> str | None:
-        for repo in self.repositories:
-            if repo.get("role") == role:
-                return repo.get("url")
+        """The first recorded repository URL with `role`, or None."""
+        for repo in self.repositories_with_role(role):
+            return repo.get("url")
         return None
 
 def endpoint_url_in(

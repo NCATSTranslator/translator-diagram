@@ -440,6 +440,17 @@ def build_graph(
     return dot
 
 
+def layer_members(
+    components: list[Component], layer_value: str, active_set: set[str]
+) -> set[str]:
+    """The ids drawn *in* one layer's sub-figure: active, in the layer, and
+    with a node of their own (ubiquitous components have none)."""
+    return {
+        c.id for c in components
+        if c.id in active_set and c.layer == layer_value and not c.ubiquitous and not c.hide
+    }
+
+
 def build_layer_subgraph(
     components: list[Component],
     layer_value: str,
@@ -449,10 +460,7 @@ def build_layer_subgraph(
     colors: ColorAssigner,
 ) -> graphviz.Digraph:
     """Build a legend-free sub-diagram showing one layer and its direct neighbors."""
-    in_layer = {
-        c.id for c in components
-        if c.id in active_set and c.layer == layer_value and not c.ubiquitous and not c.hide
-    }
+    in_layer = layer_members(components, layer_value, active_set)
 
     # Direct neighbors (both directions) that are outside this layer
     out_of_layer: set[str] = set()

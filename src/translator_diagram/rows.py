@@ -223,10 +223,11 @@ def _helm_blocks(
     """
     blocks = []
     for chart in charts:
+        meta = synced.chart_meta(chart)
         detail = helm_detail(
             chart,
-            synced.helm(chart, "Chart.yaml") or {},
-            synced.helm(chart, "values.yaml") or {},
+            meta["chart"] or {},
+            meta["values"] or {},
             _chart_repository(component, chart, len(charts)),
         )
         if detail is None:
@@ -248,9 +249,8 @@ def _chart_repository(
     keeps its one link whatever the URL ends in.
     """
     links = [
-        repo.get("url")
-        for repo in component.repositories
-        if repo.get("role") == "helm-chart" and repo.get("url")
+        url for repo in component.repositories_with_role("helm-chart")
+        if (url := repo.get("url"))
     ]
     for url in links:
         if url.rstrip("/").rsplit("/", 1)[-1] == chart:

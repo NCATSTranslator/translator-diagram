@@ -237,13 +237,13 @@ def _helm_facts(synced: SyncedData, charts: list[str]) -> dict[str, Any]:
         return {}
     tags: list[str] = []
     for chart in names:
-        images = synced.helm(chart, "ncats-images-meta.yaml") or {}
+        images = synced.chart_meta(chart)["images"] or {}
         tags.extend(
             f"{spec['image'].split('/')[-1]}:{spec['version']}"
             for spec in images.values()
             if isinstance(spec, dict) and spec.get("image") and spec.get("version")
         )
-    first = synced.helm(names[0], "Chart.yaml") or {}
+    first = synced.chart_meta(names[0])["chart"] or {}
     return {"version": first.get("appVersion"), "images": tags}
 
 

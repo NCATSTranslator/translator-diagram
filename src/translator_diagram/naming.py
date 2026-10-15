@@ -7,6 +7,7 @@ owns the check that no two of them collide; this module hands out the names.
 """
 
 import re
+from collections.abc import Iterator
 
 import click
 
@@ -49,9 +50,19 @@ def _unique_svg_id(text: str, taken: dict[str, str]) -> str:
     silently merges into the first's node or cluster. taken maps each id
     handed out to the text that claimed it, and callers share one dict.
     """
-    base = _svg_id(text)
+    return _dedupe(_svg_id(text), text, taken)
+
+
+def _dedupe(base: str, owner: str, taken: dict[str, str]) -> str:
+    """`base`, or `base_2`, `base_3`, ... — the first not held by a different owner.
+
+    `taken` maps each name handed out to whoever claimed it, so the same
+    owner asking twice gets the same answer and a different owner gets the
+    next free suffix. Shared by the SVG ids and the layer filename stems,
+    which collide the same way for the same reason.
+    """
     candidate, n = base, 1
-    while taken.setdefault(candidate, text) != text:
+    while taken.setdefault(candidate, owner) != owner:
         n += 1
         candidate = f"{base}_{n}"
     return candidate
@@ -85,17 +96,31 @@ def _svg_node_ids(components: list[Component]) -> dict[str, list[str]]:
         c.id: ([] if c.ubiquitous else [_svg_id(c.id)])
         for c in components if not c.hide
     }
-    for comp in components:
-        if comp.hide or comp.ubiquitous:
-            continue
-        for ref in comp.all_refs():
-            match = index.get(ref.lower())
-            if match is None or not match.ubiquitous or match.hide:
-                continue
-            clone = _clone_svg_id(comp.id, match.id)
-            if clone not in ids[match.id]:
-                ids[match.id].append(clone)
+    for caller, target in ubiquitous_clones(components, index):
+        clone = _clone_svg_id(caller.id, target.id)
+        if clone not in ids[target.id]:
+            ids[target.id].append(clone)
     return ids
+
+
+def ubiquitous_clones(
+    components: list[Component], index: dict[str, Component]
+) -> Iterator[tuple[Component, Component]]:
+    """Every (caller, ubiquitous target) pair a clone is drawn for.
+
+    A ubiquitous component has no node of its own: a clone sits beside each
+    caller that references it. Hidden components appear on neither side, and
+    a ubiquitous caller has no node to put a clone beside. A caller that
+    references the same target twice yields it twice; whoever names the
+    clone dedupes, since the id is the same both times.
+    """
+    for caller in components:
+        if caller.hide or caller.ubiquitous:
+            continue
+        for ref in caller.all_refs():
+            target = index.get(ref.lower())
+            if target is not None and target.ubiquitous and not target.hide:
+                yield caller, target
 
 
 def _layer_filename(layer: str) -> str:
@@ -115,10 +140,7 @@ def _layer_filenames(layers: list[str]) -> dict[str, str]:
     stems: dict[str, str] = {}
     for layer in layers:
         base = _layer_filename(layer)
-        stem, n = base, 1
-        while taken.setdefault(stem, layer) != layer:
-            n += 1
-            stem = f"{base}_{n}"
+        stem = _dedupe(base, layer, taken)
         if stem != base:
             click.echo(
                 f"WARNING: layer names '{taken[base]}' and '{layer}' both give "

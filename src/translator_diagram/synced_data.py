@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .charts import chart_dirs, chart_meta
-from .components import Deployment
+from .components import OTEL_ENVIRONMENTS, Deployment
 from .files import (
     chart_commit_path,
     confirmed_hosts,
@@ -98,7 +98,7 @@ class SyncedData:
         self._catalog: dict[str, dict[str, Any]] | None = None
         self.otel = {
             env: _service_names(read_json(otel_path(root, env)))
-            for env in ("ci", "test", "prod")
+            for env in OTEL_ENVIRONMENTS
         }
         self.statuses = manifest_fetches(self.manifest)
 
