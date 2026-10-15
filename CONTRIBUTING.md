@@ -14,10 +14,12 @@ uv run ruff check      # Python lint
 uv run rumdl check .   # Markdown lint
 ```
 
-All of these run on every pull request (`.github/workflows/ci.yml`), and
-`pages.yml` builds the dashboard as a downloadable artifact as well. The JS
-tests in `tests/web/` run under `node --test` from inside `pytest`; without
-Node 18 or later on `PATH` they skip rather than fail, and CI has one.
+All of these run on every pull request (`.github/workflows/ci.yml`).
+`pages.yml`, which builds the dashboard, does not: it deploys from `main`, and
+runs on a branch only when asked to, as README.md's *The components dashboard*
+describes. The JS tests in `tests/web/` run under `node --test` from inside
+`pytest`; without Node 18 or later on `PATH` they skip rather than fail, and CI
+has one.
 
 The commands, as you will run them while working:
 

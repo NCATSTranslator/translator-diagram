@@ -1,0 +1,80 @@
+# CAM Pipeline (cam-pipeline)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: cam-pipeline
+name: CAM Pipeline
+summary: >-
+  The retired pipeline that built the Causal Activity Model (CAM) database, and
+  CAM-KP API, the retired TRAPI service over it.
+description: |
+  Builds an RDF triplestore of Causal Activity Models: GO-CAMs from Gene
+  Ontology curators, and models translated from Reactome pathways and
+  Comparative Toxicogenomics Database chemical–gene interactions.
+
+  It is retired and will not be updated. It was three charts:
+
+  - `cam-pipeline-builder`, the job that builds the database;
+  - `cam-pipeline-web-server`, which serves it;
+  - `cam-kp-api`, the TRAPI 1.3 API over it, retired several years ago.
+
+  Its data is now served by Automat as `automat-cam-kp`, which loads what this
+  pipeline produced.
+owner: DOGSLED
+refactor_status: Already removed
+
+identifiers:
+  # cam-kp-api's infores. Automat serves the same data under its own,
+  # infores:automat-cam-kp, which belongs to the automat component.
+  infores: infores:cam-kp
+  helm_chart:
+    - cam-pipeline-builder
+    - cam-pipeline-web-server
+    - cam-kp-api
+
+# The sheet's only row for any of this is `cam-kp-api` (owner DOGSLED,
+# Already removed), and these are the ITRB names it gives.
+itrb:
+  app: DEPRECATED - cam-kp-api
+  group: SRI-Ranking
+
+# Nothing in Translator calls it any more. automat-cam-kp, which loads its
+# data, has no component file yet, so that edge is an external for now.
+connections:
+  gets_results_from: []
+  calls: []
+  externals:
+    - direction: out
+      name: automat-cam-kp
+
+repositories:
+  - url: https://github.com/ExposuresProvider/cam-pipeline
+    role: source
+    visibility: public
+    note: The pipeline that builds the database.
+  - url: https://github.com/ExposuresProvider/cam-kp-api
+    role: source
+    visibility: public
+    note: The TRAPI API over it. Archived.
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/cam-pipeline-builder
+    role: helm-chart
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/cam-pipeline-web-server
+    role: helm-chart
+    visibility: public
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/cam-kp-api
+    role: helm-chart
+    visibility: public
+
+# Retired, so it has no place on the Map; it stays in the Overview.
+diagram:
+  hide: true
+
+notes: >-
+  Retired and not deployed anywhere, so no environments are recorded.

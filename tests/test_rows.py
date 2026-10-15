@@ -521,6 +521,31 @@ class TestTheMetadataBlock:
         assert [r["tag"] for r in row["releases_detail"]] == ["v2.0.0"]
         assert row["releases_detail"][0]["body_excerpt"] == "Notes here"
 
+    def test_each_helm_block_links_its_own_chart(self, synced, component):
+        # nodenorm-redis records three charts and three links; every block
+        # used to get the first one.
+        base = "https://github.com/helxplatform/translator-devops/tree/develop/helm"
+        for chart in ("web", "loader"):
+            (synced.root / "helm" / chart).mkdir(parents=True)
+            (synced.root / "helm" / chart / "Chart.yaml").write_text(f"name: {chart}\n")
+        component.identifiers = {"helm_chart": ["web", "loader"]}
+        component.repositories = [
+            {"url": f"{base}/web", "role": "helm-chart"},
+            {"url": f"{base}/loader/", "role": "helm-chart"},
+        ]
+        blocks = build_rows([component], synced)[0]["helm_charts"]
+        assert {b["chart"]: b["source_url"] for b in blocks} == {
+            "web": f"{base}/web", "loader": f"{base}/loader/"}
+
+    def test_one_chart_keeps_its_one_link_whatever_it_ends_in(self, synced, component):
+        (synced.root / "helm" / "shepherd").mkdir(parents=True)
+        (synced.root / "helm" / "shepherd" / "Chart.yaml").write_text("name: shepherd\n")
+        component.identifiers = {"helm_chart": "shepherd"}
+        component.repositories = [
+            {"url": "https://github.com/a/deploy/tree/main/charts", "role": "helm-chart"}]
+        [block] = build_rows([component], synced)[0]["helm_charts"]
+        assert block["source_url"] == "https://github.com/a/deploy/tree/main/charts"
+
     def test_the_smartapi_record_is_shaped_for_the_panel(self, synced, component):
         record = build_rows([component], synced)[0]["smartapi_record"]
         assert record["id"] == "abc"

@@ -1,0 +1,9 @@
+# This repository is maintained by gaurav, who owns all of it by default.
+# The "Protect default branch" ruleset requires a code owner's approval on
+# every pull request into main, so a change to a path is approved by whoever
+# is listed last for it below.
+#
+# If you want responsibility for part of the code, add yourself: put a line
+# for that path below this one, with your GitHub username. A later line wins
+# over an earlier one, so keep the catch-all first.
+* @gaurav

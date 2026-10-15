@@ -148,20 +148,43 @@ class SyncReport:
         }
 
 
+def _record_for(
+    component: ComponentFile, by_smartapi: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """The registry record the page will attach to this component, or `{}`.
+
+    `smartapi_record_for`, the same lookup `build_rows` makes: by recorded id,
+    or by infores where exactly one record claims it. Looking up by id alone
+    here left the infores-matched components — dogpark-tier-0 among them —
+    showing registered deployments that sync never fetched or probed.
+    """
+    record, _, _ = smartapi_record_for(component, list(by_smartapi.values()))
+    return record or {}
+
+
 def _plan_endpoint_fetches(
     components: Iterable[ComponentFile],
     by_smartapi: dict[str, dict[str, Any]],
+    derived: dict[str, dict[str, Deployment]],
     root: Path,
 ) -> list[tuple[str, Path]]:
-    """Every (url, destination) for the OpenAPI and status endpoints."""
+    """Every (url, destination) for the OpenAPI and status endpoints.
+
+    A host confirmed by an earlier run's derived probe (`derived`) gets its
+    `/status` only. Its OpenAPI document is fetched by this run's
+    `_confirm_derived`, which re-derives and re-checks it into the same file,
+    and two fetches of one path in one pool would race to write it.
+    """
     jobs: list[tuple[str, Path]] = []
     for component in components:
-        record = by_smartapi.get(component.smartapi_id or "", {})
+        registered = deployments_from_smartapi(_record_for(component, by_smartapi))
+        known = merge_deployments(component, registered)
         deployments = merge_deployments(
-            component, deployments_from_smartapi(record)
+            component, registered, derived.get(component.id, {})
         )
         for env, deployment in deployments.items():
-            for kind in ("openapi", "status"):
+            kinds = ("openapi", "status") if env in known else ("status",)
+            for kind in kinds:
                 url = endpoint_url_in(component, deployment, kind)
                 if url:
                     jobs.append((url, root / kind / component.id / f"{env}.json"))
@@ -193,10 +216,9 @@ def _plan_root_probes(
     """
     jobs: list[tuple[str, Path]] = []
     for component in components:
-        record = by_smartapi.get(component.smartapi_id or "", {})
         deployments = merge_deployments(
             component,
-            deployments_from_smartapi(record),
+            deployments_from_smartapi(_record_for(component, by_smartapi)),
             derived.get(component.id, {}),
         )
         for env, deployment in deployments.items():
@@ -452,6 +474,8 @@ def _confirm_derived(
     fetcher: Fetcher,
     root: Path,
     max_age: int,
+    *,
+    age_for: Callable[[str, Path], int] | None = None,
 ) -> tuple[FetchResult | None, bool]:
     """Contact a derived host, and keep it only if it is really this component.
 
@@ -474,25 +498,32 @@ def _confirm_derived(
     such host" and "we never looked" are different gaps and only the first is
     a finding. Six of the ten candidates this repository derives fall in here,
     and they were the six the page could say nothing about.
+
+    `age_for` is `sync`'s cache rule: a cached file counts only if the
+    previous run fetched it from this same URL. A candidate whose derived
+    hostname changed would otherwise be judged on the document its old
+    hostname served, and accepted or rejected on someone else's evidence.
     """
+    def age(url: str, destination: Path) -> int:
+        return age_for(url, destination) if age_for else max_age
+
     url = _confirmation_url(component, candidate)
     if not url:
         # Nothing to check an answer against — no infores, or no OpenAPI
         # document to ask for one. Probe the root so the rejection carries a
         # verdict, and reject it whatever comes back: an unverifiable 200 is
         # exactly the guess this function exists not to make.
+        probed = root / "root" / component.id / f"{candidate.env}.json"
         return (
             probe_to(
-                candidate.url,
-                root / "root" / component.id / f"{candidate.env}.json",
-                fetcher,
-                max_age=max_age,
-                root=root,
+                candidate.url, probed, fetcher,
+                max_age=age(candidate.url, probed), root=root,
             ),
             False,
         )
     destination = root / "openapi" / component.id / f"{candidate.env}.json"
-    result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
+    result = fetch_to(
+        url, destination, fetcher, max_age=age(url, destination), root=root)
     if not result.ok:
         return result, False
     # A guessed hostname answers with whatever it likes — a JSON array, or
@@ -527,9 +558,7 @@ def _plan_derived_probes(
     pending = []
     for component in components:
         known = merge_deployments(
-            component, deployments_from_smartapi(
-                by_smartapi.get(component.smartapi_id or "", {})
-            )
+            component, deployments_from_smartapi(_record_for(component, by_smartapi))
         )
         for env, candidate in derive_deployments(known).items():
             stale = rejected_before.get(component.id, {}).get(env)
@@ -819,11 +848,13 @@ def sync(
     # every chart the index just named, the deployment roots, and the
     # conventional hostnames nobody registered. None could be planned before
     # wave one landed and none waits on another, so they go out in one pool.
-    endpoint_jobs = _plan_endpoint_fetches(components, by_smartapi, root)
+    previous = _read_derived(root)
+    endpoint_jobs = _plan_endpoint_fetches(
+        components, by_smartapi, _confirmed_deployments(previous), root
+    )
     index_chart_jobs = _plan_index_chart_fetches(
         root, [destination for _, destination in chart_jobs]
     )
-    previous = _read_derived(root)
     pending, rejected = _plan_derived_probes(components, by_smartapi, previous, max_age)
     candidate_roots = _root_probed_candidates(pending, root)
     root_jobs = [
@@ -845,7 +876,10 @@ def sync(
         echo(f"Probing {len(pending)} conventional hostnames ...")
     with ThreadPoolExecutor(max_workers=workers) as pool:
         probing = [
-            pool.submit(_confirm_derived, component, candidate, fetcher, root, max_age)
+            pool.submit(
+                _confirm_derived, component, candidate, fetcher, root, max_age,
+                age_for=age_for,
+            )
             for component, _, candidate in pending
         ]
         run_all(
