@@ -167,9 +167,12 @@ def main(
         active_statuses = {
             s.strip() for s in refactor_status.split(",") if s.strip()
         }
-        active_count = len(_compute_active_set(components, active_statuses))
+    # One set for the echo and the layer loop below, so the count printed is
+    # the set the sub-figures are drawn from.
+    active_set = _compute_active_set(components, active_statuses)
+    if active_statuses is not None:
         click.echo(
-            f"Filtering to {active_count} components with status: "
+            f"Filtering to {len(active_set)} components with status: "
             + ", ".join(sorted(active_statuses))
         )
 
@@ -212,7 +215,6 @@ def main(
     # Per-layer sub-figures
     if layer_column:
         _index = index_by_id(components)
-        _active_set = _compute_active_set(components, active_statuses)
         layers = sorted({c.layer for c in components if c.layer})
         if not layers:
             click.echo(
@@ -226,14 +228,14 @@ def main(
             )
             stems = _layer_filenames(layers)
             for layer_value in layers:
-                if not layer_members(components, layer_value, _active_set):
+                if not layer_members(components, layer_value, active_set):
                     click.echo(
                         f"  Skipping '{layer_value}' "
                         "(no active non-ubiquitous components)."
                     )
                     continue
                 layer_dot = build_layer_subgraph(
-                    components, layer_value, _active_set, _index, direction, colors
+                    components, layer_value, active_set, _index, direction, colors
                 )
                 stem = f"{output_name}_{stems[layer_value]}"
                 layer_dot_path = output_dir / f"{stem}.dot"
