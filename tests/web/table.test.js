@@ -119,6 +119,37 @@ test("an expanded row shows only the fields some environment answered", () => {
   assert.match(table.bodyHtml([ROWS[0]]), /class="rels"><a class="rel deployed"[^>]*>v1\.0</);
 });
 
+test("a cell's state follows the model: known absences are white, a lone deployment is not green", () => {
+  reset();
+  const state = (m, peers = 2) => table.cellState({ deployed: false, knownAbsent: false, reach: "", version: "", drift: [], ...m }, peers);
+  assert.equal(state({ knownAbsent: true }), "none");
+  assert.equal(state({}), "off");
+  assert.equal(state({ deployed: true, reach: "down", version: "1.0" }), "down");
+  assert.equal(state({ deployed: true, reach: "up" }), "nov");
+  assert.equal(state({ deployed: true, version: "1.0", drift: ["version"] }), "diff");
+  assert.equal(state({ deployed: true, version: "1.0" }), "same");
+  assert.equal(state({ deployed: true, version: "1.0" }, 1), "one");
+});
+
+test("the repository and SmartAPI cells carry their dates and the registry's probe", () => {
+  reset();
+  const row = {
+    ...ROWS[0],
+    last_updated: { at: "2026-10-01T00:00:00Z", date: "2026-10-01", source: "release", tag: "v1.0" },
+    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc", status: { uptime_status: "fail" } },
+  };
+  const html = table.bodyHtml([row]);
+  assert.match(html, /class="repo drop-md"><a[^>]*href="https:\/\/github\.com\/x\/ars"/);
+  assert.match(html, /class="l2" data-tip="upd" data-id="ars"><span class="age">[^<]+<\/span> · v1\.0/);
+  assert.match(html, /class="sapi drop-sm"><span class="dot down" aria-label="registry probe: fail"><\/span><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>registered/);
+  // Registered, but the date came from the registry: it goes under "registered".
+  const registry = { ...row, last_updated: { ...row.last_updated, source: "registry", tag: null } };
+  assert.match(table.bodyHtml([registry]), /registered<\/a><span class="l2" data-tip="upd" data-id="ars">changed/);
+  // No record: say so, or count the candidates.
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]), /not registered/);
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null, smartapi_candidates: [{}, {}] }]), /2 possible records/);
+});
+
 test("an environment cell says why it has no version, and marks drift", () => {
   reset();
   assert.match(table.envCell(ROWS[2], "prod"), /no version endpoint to read/);

@@ -152,6 +152,17 @@ so two shots minutes apart differ there and nowhere else. PIL's
 `ImageChops.difference(a, b).getbbox()` names the box; a box confined to
 the top bar's right end is the clock.
 
+**To shoot a tooltip, hover it synthetically.** The headless shell's window is
+never focused, so `element.focus()` fires no `focusin` and the tooltip stays
+hidden; `dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))` on
+the element does open it. Pick the *visible* element: an expanded row writes
+its label and (?) into every non-environment cell and shows one, so
+`querySelector` finds a hidden copy with a zero-size box and the tooltip
+lands at the top-left corner. Filter by `offsetParent`. And do not scroll
+first: the page hides the tooltip on any scroll, so size the window to hold
+the row instead. Run such loops under `bash`: in `zsh`, a loop variable
+named `path` overwrites `PATH`.
+
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.
 
