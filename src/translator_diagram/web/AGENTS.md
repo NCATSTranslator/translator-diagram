@@ -146,12 +146,19 @@ saw and let them look.
 ## Testing JS with judgement in it
 
 There is no JS harness here, and that has not stopped anything being tested.
-Slice the block out of `table.js` or `core.js`, stub `document`/`localStorage`/
-`matchMedia`, and run it under `node` from the scratchpad — that is how the
-theme cycle was checked against both system preferences, and how the sort
-comparators were driven over the real `overview.json` to prove undated rows
-stay last in *both* directions. Layout and URL-state units live in
-`tests/web/` and run under `node --test` via `tests/test_web_assets.py`.
+The rule is that judgement is a pure function and the DOM is a thin layer
+over it: the filter, the band grouping, the detail-field pruning and the
+cell rendering in `table.js`, the edge kind, node version, reachability and
+tooltip buckets in `map.js`, the catalog edge direction and probe evidence
+in `drawer.js`, and the theme cycle, the finding sentence and the clock
+formatting in `core.js` are all exported and driven under `node --test` from
+`tests/web/`, which `tests/test_web_assets.py` runs. Anything that needs a
+clock or the system preference takes it as an argument (`relativeAge(iso,
+now)`, `TD.theme.next(choice, systemDark)`), so "a future timestamp says
+today" is a test rather than a stub. What is still untested is the DOM
+itself — the drawer's focus return, the row expansion animation — which
+issue #22 tracks. `TD.row` is where a fact about a row is said once for
+every view.
 
 ## Things that look wrong but aren't
 
@@ -168,7 +175,7 @@ in `build-dashboard` and in the Pages workflow alike. That belongs to the
 whole-repository decision in issue #45, not to this directory. What modules
 would have bought — load order made explicit, and a misspelled import caught
 before a browser runs it — `tests/web/namespace.test.js` checks instead: it
-runs the seven files in `JS_FILES` order and fails if a file reads a `TD` name
+runs the files in `JS_FILES` order and fails if a file reads a `TD` name
 while loading before an earlier file defines it, or if any `TD.x` or `TD.x.y`
 in the source names nothing. So moving a file in `JS_FILES` is safe exactly
 when that suite passes.
@@ -198,6 +205,6 @@ row underneath it.
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a
-dead button. `nextTheme` therefore reads `prefers-color-scheme` to decide
-which way to go first, and the one click that does not change the appearance
-is the trip back to auto, which says so in the button's title.
+dead button. `TD.theme.next` (core.js) therefore takes the system preference
+to decide which way to go first, and the one click that does not change the
+appearance is the trip back to auto, which says so in the button's title.
