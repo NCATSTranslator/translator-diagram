@@ -37,6 +37,15 @@ function reset(patch) {
   table.ensureColumns();
 }
 
+test("the search forgets a version when its environment leaves the payload", () => {
+  reset({ q: "2.1" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
+  // The same row objects, booted without ci: the cached search text must not
+  // still carry ci's version.
+  TD.boot({ rows: ROWS, environments: ["prod"] });
+  assert.deepEqual(table.visibleRows(), []);
+});
+
 test("the search matches ids, names and versions, case-insensitively", () => {
   reset({ q: "ARA" });
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);

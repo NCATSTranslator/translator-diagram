@@ -58,11 +58,17 @@
   const DEFAULT_VIEW = "all";
 
   /* Everything the search box can match on a row, lowercased and joined once.
-     Keyed by the row object, so a new payload gets new haystacks and a
-     keystroke does not rebuild twenty-seven arrays. */
-  const haystacks = new WeakMap();
+     Keyed by the row object, so a keystroke does not rebuild twenty-seven
+     arrays, and dropped whenever TD.ENVS changes: the versions in it are read
+     per environment, and a payload can reuse its rows with a different list. */
+  let haystacks = new WeakMap();
+  let haystackEnvs = null;
 
   function haystack(row) {
+    if (haystackEnvs !== TD.ENVS) {
+      haystacks = new WeakMap();
+      haystackEnvs = TD.ENVS;
+    }
     let text = haystacks.get(row);
     if (text === undefined) {
       text = [
