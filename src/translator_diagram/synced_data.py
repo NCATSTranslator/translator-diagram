@@ -46,24 +46,30 @@ class SyncedData:
     def __init__(self, root: Path):
         self.root = root
         self.manifest = read_json(root / "manifest.json") or {}
-        payload = read_json(root / "smartapi.json") or {}
+        # Shape-checked at every level, as `sync` checks it: the registry is
+        # somebody else's service, and a 200 carrying an error object or a
+        # changed shape must cost the SmartAPI facts, not the build.
+        payload = read_json(root / "smartapi.json")
+        hits = payload.get("hits") if isinstance(payload, dict) else None
         self.smartapi = {
-            hit["_id"]: hit for hit in payload.get("hits", []) if hit.get("_id")
+            hit["_id"]: hit
+            for hit in (hits if isinstance(hits, list) else [])
+            if isinstance(hit, dict) and hit.get("_id")
         }
         # One read, two answers. `sync` writes both halves of the same probe
         # into this file, and reading it twice would let a rebuild pick up a
         # confirmation from one moment and a rejection from another.
-        probes = read_json(root / "derived.json") or {}
+        probes = read_json(root / "derived.json")
+        probes = probes if isinstance(probes, dict) else {}
         self.derived = {
             cid: {
                 env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
                 for env, spec in envs.items()
+                if isinstance(spec, dict) and spec.get("url")
             }
             for cid, envs in (probes.get("confirmed") or {}).items()
+            if isinstance(envs, dict)
         }
-        # The other half: hosts the convention predicted and the probe did not
-        # confirm. "We looked here and this is not it" — never "this is down",
-        # which is a claim about a deployment we have no evidence exists.
         # The other half: hosts the convention predicted and the probe did not
         # confirm, with the verdict attached — how the candidate was turned
         # away, which is what tells "there is no such host" from "there is one
@@ -76,6 +82,7 @@ class SyncedData:
                 if isinstance(spec, dict) and spec.get("url")
             }
             for cid, envs in (probes.get("rejected") or {}).items()
+            if isinstance(envs, dict)
         }
         # Per instance, because the same values.yaml is now read for two
         # different questions and shepherd's is 623 lines of it.
@@ -181,7 +188,10 @@ class SyncedData:
         fetch = self.statuses.get(relative)
         if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
             return None
-        return self._body(relative)
+        # A 200 can carry any JSON at all — an array, a bare string — and every
+        # reader of these bodies indexes them as objects.
+        body = self._body(relative)
+        return body if isinstance(body, dict) else None
 
     def _body(self, relative: str) -> Any:
         """A cached JSON body, parsed once per build: the version chain and
