@@ -196,12 +196,13 @@ when that suite passes.
 `Environments disagree` — which showed 7 rows of 24 and hid the platform to
 make a point about drift, so someone looking up one component found it missing
 from a page that never said it was filtered. Drift is still the first thing the
-page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `table.js`, listed in that order so
-the default reads first, with `DEFAULT_VIEW` naming it. `differ` means any of
-the three tinted axes, not versions alone. It replaced a "Drift only" toggle
-rather than joining it: two controls that select the same rows cannot be told
-apart by a reader.
+page says, in the sync panel's shares. The views (`all`, `differ`, `known`,
+`none`, `unreachable`, `unregistered`, `no-smartapi`) live in `SHOW_VIEWS` in
+`table.js`, listed in that order so the default reads first, with
+`DEFAULT_VIEW` naming it. `differ` means any of the three tinted axes, not
+versions alone. It replaced a "Drift only" toggle rather than joining it: two
+controls that select the same rows cannot be told apart by a reader. The last
+three are the complements of the sync panel's shares, which link to them.
 
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different

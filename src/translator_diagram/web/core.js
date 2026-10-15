@@ -448,7 +448,7 @@
   /* --- URL state --------------------------------------------------------- */
 
   const VIEWS = ["overview", "map"];
-  const VERSIONS = ["all", "differ", "known", "none"];
+  const VERSIONS = ["all", "differ", "known", "none", "unreachable", "unregistered", "no-smartapi"];
   const BASE_SORTS = ["name", "owner", "repo", "smartapi"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
 

@@ -24,9 +24,11 @@ const { table } = TD;
 const cell = (version, extra) => ({ deployed: true, version, ...extra });
 const ROWS = [
   { id: "ars", name: "ARS", owner: "NCATS", step: 1, step_label: "Step 1", step_title: "Front door",
-    environments: { ci: cell("1.0"), prod: cell("1.0") } },
+    smartapi_record: { id: "abc" },
+    environments: { ci: cell("1.0"), prod: cell("1.0", { reachable: false }) } },
   { id: "arax", name: "ARAX", owner: "CATRAX", step: 2, step_label: "Step 2", step_title: "ARAs",
-    environments: { ci: cell("2.1", { drift: ["version"] }), prod: cell("2.0", { trapi: "1.5" }) } },
+    smartapi_record: { id: "def" },
+    environments: { ci: cell("2.1", { drift: ["version"], unregistered: true }), prod: cell("2.0", { trapi: "1.5" }) } },
   { id: "ui", name: "UI", owner: "UI", step: 3, step_label: "Step 3", step_title: "Front end",
     environments: { prod: { deployed: true, reachable: true, reason: "no version endpoint to read", reason_key: "no-endpoint" } } },
 ];
@@ -61,6 +63,12 @@ test("the owner filter and the version views narrow the rows", () => {
   reset({ versions: "differ" });
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
   reset({ versions: "none" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["ui"]);
+  reset({ versions: "unreachable" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["ars"]);
+  reset({ versions: "unregistered" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
+  reset({ versions: "no-smartapi" });
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["ui"]);
 });
 
@@ -109,7 +117,7 @@ test("an environment cell says why it has no version, and marks drift", () => {
   assert.match(table.envCell(ROWS[2], "prod"), /class="env nov"/);
   assert.match(table.envCell(ROWS[0], "ci"), /class="env same"/);
   const drifting = table.envCell(ROWS[1], "ci");
-  assert.match(drifting, /class="env drift diff"/);
+  assert.match(drifting, /class="env drift diff/);
   assert.match(drifting, /≠/);
   assert.match(drifting, /aria-label="disagrees with the row"/);
   assert.doesNotMatch(table.envCell(ROWS[1], "prod"), /drift/);

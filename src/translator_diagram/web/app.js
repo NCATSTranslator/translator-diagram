@@ -167,7 +167,7 @@
     versionBox = TD.ui.listbox({
       label: "Show",
       value: TD.state.versions,
-      options: Object.entries(TD.table.VERSION_VIEWS)
+      options: Object.entries(TD.table.SHOW_VIEWS)
         .map(([key, view]) => ({ value: key, label: view.label })),
       onChange: (value) => TD.commit({ versions: value }),
     });

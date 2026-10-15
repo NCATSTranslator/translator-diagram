@@ -49,12 +49,26 @@
 
      "Environments disagree" is any of the three tinted axes, not versions
      alone: a component whose version matches everywhere while its TRAPI
-     version does not is exactly as interesting. */
-  const VERSION_VIEWS = {
+     version does not is exactly as interesting.
+
+     The last three are the complements of the sync panel's shares: each
+     share says how much of the platform has a property, and links here to
+     list the rows that do not. The URL parameter is still `versions`, for
+     the links already in the wild. */
+  const SHOW_VIEWS = {
     all: { label: "All components", test: () => true },
     differ: { label: "Environments disagree", test: hasDrift },
     known: { label: "Any version known", test: (row) => knownVersions(row).size > 0 },
     none: { label: "No version known", test: (row) => knownVersions(row).size === 0 },
+    unreachable: {
+      label: "Not reachable",
+      test: (row) => TD.ENVS.some((env) => TD.cell(row, env).reach === "down"),
+    },
+    unregistered: {
+      label: "Absent from SmartAPI record",
+      test: (row) => TD.ENVS.some((env) => TD.cell(row, env).flags.unregistered),
+    },
+    "no-smartapi": { label: "No SmartAPI record", test: (row) => !row.smartapi_record },
   };
   const DEFAULT_VIEW = "all";
 
@@ -90,7 +104,7 @@
     const owners = s.owner || [];
     return (TD.DATA.rows || [])
       .filter((row) => !owners.length || owners.indexOf(row.owner) >= 0)
-      .filter((VERSION_VIEWS[s.versions] || VERSION_VIEWS[DEFAULT_VIEW]).test)
+      .filter((SHOW_VIEWS[s.versions] || SHOW_VIEWS[DEFAULT_VIEW]).test)
       .filter((row) => !needle || haystack(row).includes(needle));
   }
 
@@ -161,7 +175,7 @@
           esc(m.drift.join(", "))}">≠</span>`
       : "";
     const second = [
-      `<span class="src" data-src="${esc(m.source)}" data-tip="src">${esc(m.sourceShort)}</span>`,
+      m.source ? `<span class="src" data-src="${esc(m.source)}" data-tip="src">${esc(m.sourceShort)}</span>` : "",
       m.dataRelease ? `<span class="data">${esc(m.dataRelease)}</span>` : "",
       m.flags.inferred ? '<span class="inf">inferred</span>' : "",
       m.flags.unregistered ? '<span class="inf">not in SmartAPI</span>' : "",
@@ -618,7 +632,7 @@
     if (!COLUMNS.some((column) => column.env)) buildColumns();
   };
   table.COLUMNS = COLUMNS;
-  table.VERSION_VIEWS = VERSION_VIEWS;
+  table.SHOW_VIEWS = SHOW_VIEWS;
   table.DEFAULT_VIEW = DEFAULT_VIEW;
   table.orderHtml = orderHtml;
   table.visibleRows = visibleRows;

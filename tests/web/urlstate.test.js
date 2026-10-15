@@ -56,6 +56,8 @@ test("every field round-trips", () => {
 
 test("a leading question mark is accepted", () => {
   assert.equal(TD.url.parse("?versions=none").versions, "none");
+  assert.equal(TD.url.parse("?versions=unreachable").versions, "unreachable");
+  assert.equal(TD.url.parse("?versions=no-smartapi").versions, "no-smartapi");
 });
 
 test("commas stay readable in a shared link", () => {
