@@ -113,6 +113,9 @@
   // Whether the camera has been moved on purpose — by a wheel, a drag, or a
   // selection flying to a node. A resize re-fits only while it has not.
   let touched = false;
+  // The box size the camera was last placed against, so a resize knows how
+  // far the middle moved.
+  const seen = { w: 0, h: 0 };
   const MAX_K = 3;
 
   /* --- Data --------------------------------------------------------------- */
@@ -726,6 +729,8 @@
     // An explicit fit is the reader saying "start again from the whole
     // picture", so the next resize is free to keep fitting it.
     touched = false;
+    seen.w = box.clientWidth;
+    seen.h = box.clientHeight;
     const height = scene.bounds.h * k;
     goal.k = k;
     goal.x = (box.clientWidth - scene.bounds.w * k) / 2;
@@ -921,17 +926,24 @@
      and the drawer opening is a resize, so following a `?sel=` link zoomed to
      the component and then immediately zoomed back out. It re-fits only while
      nobody has moved the camera; after that it keeps the scale and holds
-     whatever was in the middle of the view in the middle of it. */
+     whatever was in the middle of the view in the middle of it.
+
+     It moves the camera and its goal by the same half of the size change, so
+     a flight in progress still lands centred. It once snapped the goal to the
+     camera instead, which stopped the flight a selection starts: the drawer
+     sends its second reflow 340ms after opening, mid-flight. That version
+     also measured the middle against the new size, so it never held it. */
   function onResize() {
     if (!box || !host || !host.classList.contains("on")) return;
-    const midX = (box.clientWidth / 2 - cam.x) / cam.k;
-    const midY = (box.clientHeight / 2 - cam.y) / cam.k;
     if (!touched) { fit(false); return; }
-    goal.k = cam.k;
-    goal.x = box.clientWidth / 2 - midX * goal.k;
-    goal.y = box.clientHeight / 2 - midY * goal.k;
-    cam.x = goal.x;
-    cam.y = goal.y;
+    const dx = (box.clientWidth - seen.w) / 2;
+    const dy = (box.clientHeight - seen.h) / 2;
+    seen.w = box.clientWidth;
+    seen.h = box.clientHeight;
+    cam.x += dx;
+    cam.y += dy;
+    goal.x += dx;
+    goal.y += dy;
     applyCamera();
   }
 
