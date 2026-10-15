@@ -13,7 +13,7 @@ directory or above it switches it to reading `CLAUDE.md` files alone, and one
 in a subdirectory hides that directory's `AGENTS.md`. Either way these notes
 drop out silently, so put new ones in the nearest `AGENTS.md`.
 `tests/test_agent_files.py` fails on either file anywhere in the
-repository, a personal `CLAUDE.local.md` included.
+checkout, a gitignored personal `CLAUDE.local.md` included.
 
 This file is what applies to every session. The detail that only matters once
 you are in a particular directory lives beside that directory, so it is read
