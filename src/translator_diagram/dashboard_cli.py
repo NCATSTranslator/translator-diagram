@@ -14,7 +14,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
-from .files import manifest_path
+from .files import find_upward, manifest_path
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
@@ -27,14 +27,19 @@ DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 
 
 def _load(components_dir: Path):
-    if not components_dir.is_dir():
+    """Every component file, from `components_dir` or the nearest directory
+    above the working directory that has it — the same walk the stage file,
+    the privacy policy and the owner colours get (`files.find_upward`), so a
+    build from a subdirectory of the checkout finds all four or none."""
+    found = components_dir if components_dir.is_dir() else find_upward(components_dir)
+    if found is None:
         raise click.ClickException(
-            f"No components directory at {components_dir}. Run from the "
-            f"repository root, or pass --components."
+            f"No components directory at {components_dir}. Run from inside "
+            f"the checkout, or pass --components."
         )
-    components = load_components(components_dir)
+    components = load_components(found)
     if not components:
-        raise click.ClickException(f"No *.yaml files in {components_dir}.")
+        raise click.ClickException(f"No *.yaml files in {found}.")
     return components
 
 
