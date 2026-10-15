@@ -154,3 +154,30 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
     click.echo(f"Wrote {json_path}")
     click.echo(f"Wrote {html_path}")
+    _warn_about_leftovers(output_dir, {html_path, json_path})
+
+
+def _warn_about_leftovers(output_dir: Path, written: set[Path]) -> None:
+    """Name what is in the output directory that this build did not write.
+
+    A preview serves the whole directory, so a leftover there — an earlier
+    build's file, a copy made by hand — is served beside the page. Warned
+    about rather than deleted: --output-dir can name any directory, and the
+    screenshot recipe in web/AGENTS.md puts a themed copy of index.html there
+    on purpose. CI always builds into a fresh checkout, so Pages never sees
+    one.
+    """
+    leftovers = sorted(
+        p.relative_to(output_dir).as_posix()
+        for p in output_dir.rglob("*")
+        if p.is_file() and p not in written
+    )
+    if leftovers:
+        shown = ", ".join(leftovers[:5])
+        if len(leftovers) > 5:
+            shown += f" and {len(leftovers) - 5} more"
+        click.echo(
+            f"Also in {output_dir}, not written by this build: {shown}. "
+            "A preview served from there serves them too.",
+            err=True,
+        )

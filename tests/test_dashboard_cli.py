@@ -121,6 +121,17 @@ class TestTheOutputIsOnlyThePage:
         written = {p.relative_to(workspace / "out").as_posix()
                    for p in (workspace / "out").rglob("*")}
         assert written == {"index.html", "overview.json"}
+        assert "not written by this build" not in result.output
+
+    def test_a_build_names_what_it_found_there_and_did_not_write(self, workspace):
+        """A leftover is served beside the page by a preview, so the build
+        says so — and leaves it, since --output-dir can name any directory."""
+        (workspace / "out" / "notes").mkdir(parents=True)
+        (workspace / "out" / "notes" / "AGENTS.md").write_text("stale")
+        result, _ = _run(workspace)
+        assert result.exit_code == 0, result.output
+        assert "not written by this build: notes/AGENTS.md." in result.output
+        assert (workspace / "out" / "notes" / "AGENTS.md").exists()
 
 
 class TestAMissingPolicyStopsTheBuild:
