@@ -68,9 +68,9 @@ publishes. Tests in `tests/test_dashboard.py` and `tests/test_dashboard_cli.py`
 hold both in place: inlining the notes into the page, raw, escaped or rendered
 from Markdown, or writing them beside it, fails CI rather than publishing
 them. A build does not clear its output directory, so it names on stderr any
-file there it did not write, which a local preview would serve. The packaged fallback copy of `owner-colors.csv` sits at
-the package root instead: a colour table the diagram generator reads is not a
-web file.
+file there it did not write, which a local preview would serve. The packaged
+fallback copy of `owner-colors.csv` sits at the package root instead: a colour
+table the diagram generator reads is not a web file.
 
 **Imports run one way**, and a new one must not break it:
 
