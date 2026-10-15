@@ -53,8 +53,9 @@ private build is for is
   daily and on every push to `main` by `.github/workflows/pages.yml`. The HTML
   carries `<meta name="robots" content="noindex, nofollow">`: anyone with the
   link can reach it, but search engines should not list it.
-- **Pull request builds.** The same page, uploaded as a downloadable workflow
-  artifact, with the privacy policy applied.
+- **Branch builds.** A manual run of the same workflow on any other branch
+  uploads the same page as a downloadable workflow artifact, with the privacy
+  policy applied. Pull requests do not build it.
 - **This repository.** Component files, `unknown.yaml`, the privacy policy,
   and the sync code, including the URLs it contacts.
 - **The diagram** (`generate-diagram`). Not published automatically today.
@@ -101,10 +102,11 @@ an attack hurt most", so each one should stay a considered choice.
 
 ### The sync must not become the load
 
-`sync-components` runs daily, on every push to `main`, and on every pull request
-push. Each run fetches every recorded endpoint and root, with 12 workers and a
-30 second timeout. It also *derives* likely hostnames for environments nobody
-recorded and probes them (`derive_deployments`, `_confirm_derived`).
+`sync-components` runs daily, on every push to `main`, and on each manual run
+of the workflow, from any branch. Each run fetches every recorded endpoint and
+root, with 12 workers and a 30 second timeout. It also *derives* likely
+hostnames for environments nobody recorded and probes them
+(`derive_deployments` in `deployments.py`, `_confirm_derived` in `sync.py`).
 
 Each fetch identifies itself with a `User-Agent` naming this repository, and
 results are cached under `data/sync/`. Any change that adds fetches, workers,
@@ -138,11 +140,20 @@ triggers or retries should state what it adds per run.
 - **A full build has its own directory.** `build-dashboard --include-private`
   writes to `data/dashboard-private/`, so it cannot overwrite the publishable
   build in `data/dashboard/` and be served or shared from there by mistake. An
-  explicit `--output-dir` still overrides this. Who the full build is for is
-  still [#34](https://github.com/NCATSTranslator/translator-diagram/issues/34).
+  explicit `--output-dir` still overrides this. Either way, `build-dashboard`
+  names on stderr any file in its output directory that it did not write, since
+  a preview serves it beside the page. Who the full build is for is still
+  [#34](https://github.com/NCATSTranslator/translator-diagram/issues/34).
+- **The agent notes stay off the page.** `src/translator_diagram/web/` holds
+  `AGENTS.md`, with screenshot recipes and internal decisions, beside the files
+  the page inlines. Tests in `tests/test_dashboard.py` and
+  `tests/test_dashboard_cli.py` fail if it is inlined, raw, escaped or rendered,
+  or written beside the page.
 - **Credentials stay where they belong.**
   - `GITHUB_TOKEN` is sent to `api.github.com` and nowhere else (`_headers` in
-    `sync.py`). In Actions it is the default read-only workflow token.
+    `fetch.py`). Locally it comes from the environment or a gitignored `.env`;
+    in Actions it is the default workflow token, which the Pages workflow's
+    `contents: read` limits to reading.
   - `GOOGLE_SHEET_ID` is read from a `.env` in the working directory or a
     parent (`loading.py`), and `.env` is gitignored.
   - All cached and generated output lives under the gitignored `data/`.
@@ -215,7 +226,10 @@ repository topics belong to other teams. Treat every field as hostile markup.
 ### Addressed
 
 - **Escaping.** Every value is escaped (`TD.fmt.esc`) before it is put into
-  HTML.
+  HTML. The one exception is a component's `description`, which
+  `TD.fmt.prose` renders from a small Markdown subset, `code` and links only:
+  every other character is escaped, and its links pass the check below.
+  `tests/web/prose.test.js` covers it.
 - **Links.** Only `http` and `https` URLs become links (`TD.fmt.href` on the
   dashboard, `_valid_url` in the diagram). Anything else, such as a
   `javascript:` server URL in a registry record, renders as text.
@@ -233,18 +247,27 @@ repository topics belong to other teams. Treat every field as hostile markup.
   moved tag cannot run new code with Pages deploy permission.
   `.github/dependabot.yml` proposes updated pins weekly.
 - **Deploys are narrow.** The Pages workflow runs with `contents: read`. Only
-  the deploy job gets `pages: write`, and it runs only for `main` or a manual
-  dispatch. Pull requests, including from forks, only upload an artifact.
+  the deploy job gets `pages: write`, and it runs only on `main`, which the
+  `github-pages` environment enforces from its side too: it accepts
+  deployments from `main` alone. A manual run on any other branch only uploads
+  an artifact, and pull requests, including from forks, build nothing.
+- **Every change to `main` goes through a pull request.** The *Protect
+  default branch* ruleset requires one, approved by a code owner, and
+  [`.github/CODEOWNERS`](../.github/CODEOWNERS) names the owner of every path,
+  workflows included. Its one bypass, for the repository's owner, applies to
+  pull requests only, so even that cannot push to `main` directly.
 
 ### Do not introduce
 
 - **A new `innerHTML` interpolation that skips `esc`**, or an `href` or `src`
   that skips `TD.fmt.href`. Around twenty `innerHTML` assignments depend on
-  this discipline, and the drawer and table have no test harness
+  this discipline. `tests/web/` covers the pure helpers, but the code that
+  builds the drawer, table and map has no test harness
   ([#22](https://github.com/NCATSTranslator/translator-diagram/issues/22)).
 - **External scripts, stylesheets, fonts or images** loaded at view time.
-- **A new deploy trigger.** The deploy job's `if:` is written so that adding
-  one requires an edit to it. Keep it that way.
+- **A deploy from anywhere but `main`.** The deploy job's `if:` names `main`
+  alone, whichever event started the run, and the `github-pages` environment
+  refuses other branches. Keep both.
 
 ### Open
 
@@ -252,9 +275,10 @@ repository topics belong to other teams. Treat every field as hostile markup.
   style. A `<meta http-equiv="Content-Security-Policy">` with hashes, or
   `script-src 'self'` once assets are split out, would limit the damage of an
   escaping mistake.
-- **A manual dispatch can deploy any branch** to the live URL. That is useful
-  for review, but it means anyone with write access can publish arbitrary
-  content there until the next deploy from `main`.
+- **`main` accepts force pushes, and CI is not a required check.** The ruleset
+  blocks deleting `main` and requires an approved pull request, but has no
+  *Block force pushes* rule and no required status checks, so a reviewed pull
+  request can merge with failing tests.
 
 ## Checklist for a change
 
@@ -273,8 +297,7 @@ rendering path:
 - [ ] **A new rendering path.** Is every value escaped and every link checked?
   Does it load nothing external?
 - [ ] **A workflow change.** A new action is pinned to a commit SHA with its
-  version in a comment, and a new deploy trigger is a deliberate edit to the
-  deploy job's `if:`.
+  version in a comment, and the deploy job still deploys from `main` alone.
 - [ ] **A new internal tool or host.** Add it to `config/privacy.yaml` in the
   same pull request.
 - [ ] **This document.** Move anything you addressed out of *Open*, and add
@@ -291,7 +314,9 @@ These have not been looked at closely. Add to this list freely.
 - Release note excerpts. The scrub only removes withheld component ids, so a
   release that mentions a hostname, a password reset or an unpatched issue is
   published as written.
-- `unknown.yaml` and the component files, for internal URLs committed by hand.
+- [`catalog/unknown.yaml`](../catalog/unknown.yaml) and the component files in
+  [`catalog/components/`](../catalog/components/), for internal URLs committed
+  by hand.
 - Whether the connection graph plus Helm capacity identifies a single point of
   failure that the platform would rather not advertise.
 - Dependency supply chain: `uv.lock` is enforced with `--locked`, but nothing
