@@ -601,7 +601,7 @@
       g.append(svg("path", { class: "mp-line", d: "M1 4 H 21" }));
       swatch.append(g);
       label.append(swatch);
-      label.append(TD.ui.el("span", null, kind.label));
+      label.append(TD.ui.el("span", null, esc(kind.label)));
       legend.append(label);
     });
     return legend;

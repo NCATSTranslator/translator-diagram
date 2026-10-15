@@ -337,8 +337,10 @@
       return button;
     });
 
-    // `current` is passed on the first paint, which runs before `radio` exists.
-    function measure(current = radio.value) {
+    // Given `current` by the paint, the first of which runs before `radio`
+    // exists; the public measure() below passes it, so a caller handing this
+    // to a listener cannot have an Event read as the value.
+    function measure(current) {
       const active = buttons.find((button) => button.dataset.value === current) || buttons[0];
       if (!active || !active.offsetWidth) return;
       indicator.style.width = `${active.offsetWidth}px`;
@@ -353,7 +355,7 @@
 
     return {
       el: root,
-      measure,
+      measure: () => measure(radio.value),
       get value() { return radio.value; },
       set(next) { radio.set(next); },
     };
