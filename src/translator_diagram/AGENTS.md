@@ -29,7 +29,7 @@ which is how a 2000-line test file grows back.
 
 | Module | What's there |
 |---|---|
-| `files.py` | The filesystem both stacks share: `find_upward` (how `catalog/owner-colors.csv`, `catalog/flow-steps.yaml` and `config/privacy.yaml` are found from any directory in the checkout) and the tolerant `read_json`/`read_yaml` readers. A leaf |
+| `files.py` | The filesystem both stacks share: `find_upward` (how `catalog/owner-colors.csv`, `catalog/flow-steps.yaml` and `config/privacy.yaml` are found from any directory in the checkout), the tolerant `read_json`/`read_yaml` readers, every path under `data/sync/` (`endpoint_key`, `releases_path`, ...) and the parsers of the cache's own files (`smartapi_hits`, `manifest_fetches`, `confirmed_hosts`, `rejected_hosts`). A leaf |
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
 | `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
 | `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
@@ -52,7 +52,7 @@ The dashboard is a second, parallel stack over the same components:
 | `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the two waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
-| `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
+| `synced_data.py` | `SyncedData` — the build's reader of the sync cache (`files.py` holds the layout and the parsers it shares with `sync`), and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
 | `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |

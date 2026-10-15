@@ -1,7 +1,8 @@
 """Reading what `sync-components` left behind, and nothing else.
 
-`SyncedData` is the only thing that touches the sync cache, and it is where the
-200 gate lives: a body answers for a cell only when *this* run recorded a hit
+`SyncedData` is the build's reader of the sync cache (`sync` reads its own
+previous run through the same `files` parsers), and it is where the 200 gate
+lives: a body answers for a cell only when *this* run recorded a hit
 for it, so a document cached before a service started 404ing cannot answer for
 the current one. Every reader returns `None` or an empty container rather than
 raising — a missing file in a gitignored scratch directory is the normal case,
@@ -11,21 +12,25 @@ not an error.
 from pathlib import Path
 from typing import Any
 
-from .charts import CHART_META_FILES, chart_dirs
+from .charts import chart_dirs, chart_meta
 from .components import Deployment
 from .files import (
     chart_commit_path,
+    confirmed_hosts,
     derived_path,
     endpoint_key,
     helm_file_path,
     helm_index_path,
     infores_catalog_path,
+    manifest_fetches,
     manifest_path,
     otel_path,
     read_json,
     read_yaml,
+    rejected_hosts,
     releases_path,
     repo_meta_path,
+    smartapi_hits,
     smartapi_path,
 )
 
@@ -61,44 +66,22 @@ class SyncedData:
     def __init__(self, root: Path):
         self.root = root
         self.manifest = read_json(manifest_path(root)) or {}
-        # Shape-checked at every level, as `sync` checks it: the registry is
-        # somebody else's service, and a 200 carrying an error object or a
-        # changed shape must cost the SmartAPI facts, not the build.
-        payload = read_json(smartapi_path(root))
-        hits = payload.get("hits") if isinstance(payload, dict) else None
-        self.smartapi = {
-            hit["_id"]: hit
-            for hit in (hits if isinstance(hits, list) else [])
-            if isinstance(hit, dict) and hit.get("_id")
-        }
+        self.smartapi = smartapi_hits(read_json(smartapi_path(root)))
         # One read, two answers. `sync` writes both halves of the same probe
         # into this file, and reading it twice would let a rebuild pick up a
         # confirmation from one moment and a rejection from another.
         probes = read_json(derived_path(root))
-        probes = probes if isinstance(probes, dict) else {}
         self.derived = {
             cid: {
                 env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
                 for env, spec in envs.items()
-                if isinstance(spec, dict) and spec.get("url")
             }
-            for cid, envs in (probes.get("confirmed") or {}).items()
-            if isinstance(envs, dict)
+            for cid, envs in confirmed_hosts(probes).items()
         }
         # The other half: hosts the convention predicted and the probe did not
-        # confirm, with the verdict attached — how the candidate was turned
-        # away, which is what tells "there is no such host" from "there is one
-        # and it is not this component". Never "this is down", which is a claim
-        # about a deployment we have no evidence exists.
-        self.rejected = {
-            cid: {
-                env: spec
-                for env, spec in envs.items()
-                if isinstance(spec, dict) and spec.get("url")
-            }
-            for cid, envs in (probes.get("rejected") or {}).items()
-            if isinstance(envs, dict)
-        }
+        # confirm, with the verdict attached. Never "this is down", which is a
+        # claim about a deployment we have no evidence exists.
+        self.rejected = rejected_hosts(probes)
         # Per instance, because the same values.yaml is now read for two
         # different questions and shepherd's is 623 lines of it.
         self._charts: dict[tuple[str, str], dict[str, Any] | None] = {}
@@ -116,9 +99,7 @@ class SyncedData:
             env: _service_names(read_json(otel_path(root, env)))
             for env in ("ci", "test", "prod")
         }
-        self.statuses = {
-            fetch["path"]: fetch for fetch in self.manifest.get("fetches", [])
-        }
+        self.statuses = manifest_fetches(self.manifest)
 
     def openapi(self, component_id: str, env: str) -> dict[str, Any] | None:
         return self._endpoint_body("openapi", component_id, env)
@@ -253,9 +234,7 @@ class SyncedData:
         the cache being proportional rather than a gap, and `charts.chart_matches`
         treats a missing document as a rule that cannot fire.
         """
-        return {
-            key: self.helm(chart, name) for key, name in CHART_META_FILES.items()
-        }
+        return chart_meta(self.helm, chart)
 
     def chart_commit(self, chart: str) -> dict[str, Any] | None:
         """When the chart directory last changed, and what the change said.

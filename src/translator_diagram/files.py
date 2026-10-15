@@ -137,3 +137,64 @@ def helm_file_path(root: Path, chart: str, name: str) -> Path:
 def chart_commit_path(root: Path, chart: str) -> Path:
     """The last commit touching one chart's directory."""
     return root / "helm" / chart / "commit.json"
+
+
+# --- The shapes of the cache's own files ------------------------------------
+#
+# `sync` reads its previous run and `SyncedData` reads the finished one, and
+# for a while each had its own copy of these loops with its own guards. The
+# files are JSON we wrote ourselves, but an older run's shape, a hand edit or
+# a truncated write all reach the same readers, so every parser takes whatever
+# `read_json` returned and answers with an empty container rather than raising.
+
+
+def smartapi_hits(payload: Any) -> dict[str, dict[str, Any]]:
+    """The registry's records, keyed by `_id`, from a `smartapi.json` body.
+
+    Shape-checked at every level: the registry is somebody else's service,
+    and a 200 carrying an error object or a changed shape must cost the
+    SmartAPI facts, not the build or the sync.
+    """
+    hits = payload.get("hits") if isinstance(payload, dict) else None
+    return {
+        hit["_id"]: hit
+        for hit in (hits if isinstance(hits, list) else [])
+        if isinstance(hit, dict) and hit.get("_id")
+    }
+
+
+def manifest_fetches(manifest: Any) -> dict[str, dict[str, Any]]:
+    """Every attempt a manifest records, keyed by the cache path it wrote to."""
+    fetches = manifest.get("fetches") if isinstance(manifest, dict) else None
+    return {
+        fetch["path"]: fetch
+        for fetch in (fetches if isinstance(fetches, list) else [])
+        if isinstance(fetch, dict) and isinstance(fetch.get("path"), str) and fetch["path"]
+    }
+
+
+def _hosts(probes: Any, half: str) -> dict[str, dict[str, dict[str, Any]]]:
+    """One half of `derived.json`: `{component id: {env: spec}}`, specs with a url."""
+    if not isinstance(probes, dict):
+        return {}
+    return {
+        cid: {
+            env: spec
+            for env, spec in envs.items()
+            if isinstance(spec, dict) and spec.get("url")
+        }
+        for cid, envs in (probes.get(half) or {}).items()
+        if isinstance(envs, dict)
+    }
+
+
+def confirmed_hosts(probes: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    """Conventional hostnames an earlier probe confirmed: `{url, location}` each."""
+    return _hosts(probes, "confirmed")
+
+
+def rejected_hosts(probes: Any) -> dict[str, dict[str, dict[str, Any]]]:
+    """Conventional hostnames a probe turned away, with the verdict attached:
+    how the candidate was rejected, which is what tells "there is no such
+    host" from "there is one and it is not this component"."""
+    return _hosts(probes, "rejected")

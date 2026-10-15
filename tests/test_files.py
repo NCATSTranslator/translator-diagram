@@ -6,6 +6,7 @@ from pathlib import Path
 from translator_diagram.files import (
     PROBE_KINDS,
     chart_commit_path,
+    confirmed_hosts,
     derived_path,
     endpoint_key,
     endpoint_path,
@@ -13,12 +14,15 @@ from translator_diagram.files import (
     helm_file_path,
     helm_index_path,
     infores_catalog_path,
+    manifest_fetches,
     manifest_path,
     otel_path,
     read_json,
     read_yaml,
+    rejected_hosts,
     releases_path,
     repo_meta_path,
+    smartapi_hits,
     smartapi_path,
 )
 
@@ -127,3 +131,55 @@ class TestCacheLayout:
         assert chart_commit_path(tmp_path, "arax") == (
             tmp_path / "helm" / "arax" / "commit.json"
         )
+
+
+class TestCacheParsers:
+    """The guards both readers of these files now share.
+
+    Each parser takes whatever `read_json` returned. The cases here are the
+    union of what `sync` and `SyncedData` each used to tolerate on their own,
+    so neither can crash on a shape the other survived.
+    """
+
+    def test_smartapi_hits_keyed_by_id_and_shape_checked(self):
+        payload = {"hits": [{"_id": "a", "info": {}}, {"info": {}}, "junk", {"_id": ""}]}
+        assert smartapi_hits(payload) == {"a": {"_id": "a", "info": {}}}
+        assert smartapi_hits(None) == {}
+        assert smartapi_hits({"hits": {"not": "a list"}}) == {}
+        assert smartapi_hits("<html>") == {}
+
+    def test_manifest_fetches_keyed_by_path(self):
+        manifest = {"fetches": [
+            {"path": "openapi/svc/ci.json", "status": 200},
+            {"status": 404},              # no path: nothing to key on
+            {"path": "", "status": 200},  # an empty one neither
+            "junk",
+        ]}
+        assert manifest_fetches(manifest) == {
+            "openapi/svc/ci.json": {"path": "openapi/svc/ci.json", "status": 200}
+        }
+        assert manifest_fetches(None) == {}
+        assert manifest_fetches({"fetches": "no"}) == {}
+        assert manifest_fetches([]) == {}
+
+    def test_derived_halves_keep_specs_with_a_url_only(self):
+        probes = {
+            "confirmed": {
+                "svc": {"ci": {"url": "https://svc.ci/", "location": "ITRB"},
+                        "test": {"location": "no url"},
+                        "prod": "junk"},
+                "old": ["an older shape"],
+            },
+            "rejected": {"svc": {"dev": {"url": "https://svc.dev/", "status": None}}},
+        }
+        assert confirmed_hosts(probes) == {
+            "svc": {"ci": {"url": "https://svc.ci/", "location": "ITRB"}}
+        }
+        assert rejected_hosts(probes) == {
+            "svc": {"dev": {"url": "https://svc.dev/", "status": None}}
+        }
+
+    def test_derived_tolerates_absence_and_older_shapes(self):
+        for probes in (None, [], "x", {}, {"confirmed": None}, {"confirmed": []}):
+            assert confirmed_hosts(probes) == {}
+            assert rejected_hosts(probes) == {}

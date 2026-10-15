@@ -18,7 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .charts import CHART_META_FILES, chart_dirs, unclaimed_charts
+from .charts import chart_dirs, chart_meta, unclaimed_charts
 from .components import (
     ComponentFile,
     Deployment,
@@ -44,17 +44,21 @@ from .fetch import (
 )
 from .files import (
     chart_commit_path,
+    confirmed_hosts,
     derived_path,
     endpoint_path,
     helm_file_path,
     helm_index_path,
     infores_catalog_path,
+    manifest_fetches,
     manifest_path,
     otel_path,
     read_json,
     read_yaml,
+    rejected_hosts,
     releases_path,
     repo_meta_path,
+    smartapi_hits,
     smartapi_path,
 )
 
@@ -256,13 +260,10 @@ def _confirmed_deployments(
     """
     return {
         cid: {
-            env: Deployment(
-                env=env, url=spec["url"], location=spec.get("location")
-            )
-            for env, spec in (envs or {}).items()
-            if isinstance(spec, dict) and spec.get("url")
+            env: Deployment(env=env, url=spec["url"], location=spec.get("location"))
+            for env, spec in envs.items()
         }
-        for cid, envs in (previous.get("confirmed") or {}).items()
+        for cid, envs in confirmed_hosts(previous).items()
     }
 
 
@@ -427,13 +428,10 @@ def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str,
     error — this runs at the end of a sync to print two lines, and it must not
     be able to fail a run that has already fetched everything.
     """
-    return {
-        chart: {
-            key: read_yaml(helm_file_path(root, chart, name))
-            for key, name in CHART_META_FILES.items()
-        }
-        for chart in charts
-    }
+    def read_file(chart: str, name: str) -> dict[str, Any] | None:
+        return read_yaml(helm_file_path(root, chart, name))
+
+    return {chart: chart_meta(read_file, chart) for chart in charts}
 
 
 def _previous_urls(root: Path) -> dict[str, str]:
@@ -445,13 +443,10 @@ def _previous_urls(root: Path) -> dict[str, str]:
     answer a different question, and the new field would appear to be missing
     upstream until someone thought to run --force.
     """
-    manifest = read_json(manifest_path(root))
-    if not isinstance(manifest, dict):
-        return {}
     return {
-        fetch["path"]: fetch["url"]
-        for fetch in manifest.get("fetches", [])
-        if isinstance(fetch, dict) and fetch.get("path") and fetch.get("url")
+        path: fetch["url"]
+        for path, fetch in manifest_fetches(read_json(manifest_path(root))).items()
+        if fetch.get("url")
     }
 
 
@@ -566,7 +561,7 @@ def _plan_derived_probes(
     Returns the candidates to probe as (component, env, candidate), and the
     fresh rejections carried forward instead of being probed again.
     """
-    rejected_before = previous.get("rejected", {})
+    rejected_before = rejected_hosts(previous)
     rejected: dict[str, dict[str, Any]] = {}
     pending = []
     for component in components:
@@ -616,7 +611,7 @@ def _record_derived(
     (`_confirm_derived`). Returns every request the probes made, for the
     manifest.
     """
-    confirmed_before = previous.get("confirmed", {})
+    confirmed_before = confirmed_hosts(previous)
     results: list[FetchResult] = []
     derived: dict[str, dict[str, Any]] = {}
     for component, env, candidate, (result, accepted) in confirmed:
@@ -842,19 +837,10 @@ def sync(
         # file is whatever came back. Parsing it in the open would end the run
         # after the registries, the charts and the release lists had all
         # succeeded — the opposite of "a service being down is data".
-        try:
-            payload = json.loads(registry.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            payload = None
+        payload = read_json(registry)
         if not isinstance(payload, dict):
             echo("  smartapi.json is not a registry response — continuing without it")
-            payload = {}
-        hits = payload.get("hits")
-        by_smartapi = {
-            hit["_id"]: hit
-            for hit in (hits if isinstance(hits, list) else [])
-            if isinstance(hit, dict) and hit.get("_id")
-        }
+        by_smartapi = smartapi_hits(payload)
         echo(f"  {len(by_smartapi)} SmartAPI records")
 
     # Wave two: the endpoints those registries point at, a Chart.yaml for
