@@ -86,11 +86,12 @@ code:
 ## Where a fact comes from, and which wins
 
 The page's main promise is that it never shows a fact it did not fetch, and it
-always says which source a fact came from. Four orderings carry that:
+always says which source a fact came from. Five orderings carry that:
 
 | Question | Order, best first | Where |
 |---|---|---|
 | Where is it deployed? | recorded in the file › registered in SmartAPI › derived from the ITRB hostname convention | `deployments.merge_deployments` |
+| Which SmartAPI record is a component's? | its recorded id › the one record claiming its `infores`, and none if several do. `sync` plans its fetches from the same answer | `deployments.smartapi_record_for` |
 | Is a derived host real? | only if the document it serves reports the component's own `infores` | `sync._confirm_derived` |
 | What version is running? | OpenAPI `info` › `/status` › SmartAPI › Helm, badged with which | `cells.build_cell`, `SOURCE_LABELS` |
 | Does a cached body count? | only if *this* run fetched it with a 200 | `SyncedData` |

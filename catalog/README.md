@@ -87,6 +87,13 @@ about the ci and test it is also deployed to. `answer-appraiser` is the live
 example — its record lists production only — so its `environments:` block
 carries the two SmartAPI does not cover and leaves prod to the fetcher.
 
+**An infores can bring a SmartAPI record with it.** Where a file records no
+`identifiers.smartapi`, the one registry record that claims its `infores` is
+attached as though it had been recorded, deployments and all; where several
+claim it, none is. That is usually what you want, and it is why a stale
+registration matters: `nodenorm-redis` has its infores commented out until its
+record stops listing a host it no longer runs on.
+
 **`summary`, `description` and `notes` answer different questions.**
 
 - `summary` — *what is this?* One line, plain text, that makes sense on its
