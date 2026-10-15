@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 from translator_diagram.components import load_components
+from translator_diagram.files import manifest_path
 from translator_diagram.sync import sync
 
 TIMESTAMPS = {"started_at", "finished_at", "fetched_at", "checked_at"}
@@ -33,7 +34,7 @@ TIMESTAMPS = {"started_at", "finished_at", "fetched_at", "checked_at"}
 
 def replayer(snapshot: Path):
     """A Fetcher that answers from the snapshot's manifest and files."""
-    manifest = json.loads((snapshot / "manifest.json").read_text())
+    manifest = json.loads(manifest_path(snapshot).read_text())
     recorded = {f["url"]: f for f in manifest["fetches"]}
 
     def replay(url):
@@ -42,7 +43,7 @@ def replayer(snapshot: Path):
             raise RuntimeError(f"unrecorded: {url}")
         if entry["error"]:
             raise RuntimeError(entry["error"])
-        if entry["path"].startswith("root/"):
+        if entry["path"].split("/", 1)[0] == "root":   # endpoint_key("root", ...)
             # A root probe saved a summary, not the page; replay what it saw.
             summary = json.loads((snapshot / entry["path"]).read_text())
             return summary["status"], b"", summary["content_type"]

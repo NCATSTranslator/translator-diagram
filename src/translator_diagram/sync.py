@@ -42,7 +42,21 @@ from .fetch import (
     now,
     probe_to,
 )
-from .files import read_json, read_yaml
+from .files import (
+    chart_commit_path,
+    derived_path,
+    endpoint_path,
+    helm_file_path,
+    helm_index_path,
+    infores_catalog_path,
+    manifest_path,
+    otel_path,
+    read_json,
+    read_yaml,
+    releases_path,
+    repo_meta_path,
+    smartapi_path,
+)
 
 SMARTAPI_QUERY = (
     "https://smart-api.info/api/query"
@@ -186,7 +200,7 @@ def _plan_endpoint_fetches(
             for kind in kinds:
                 url = endpoint_url_in(component, deployment, kind)
                 if url:
-                    jobs.append((url, root / kind / component.id / f"{env}.json"))
+                    jobs.append((url, endpoint_path(root, kind, component.id, env)))
     return jobs
 
 
@@ -222,7 +236,7 @@ def _plan_root_probes(
         )
         for env, deployment in deployments.items():
             jobs.append(
-                (deployment.url, root / "root" / component.id / f"{env}.json")
+                (deployment.url, endpoint_path(root, "root", component.id, env))
             )
     return jobs
 
@@ -288,7 +302,7 @@ def _plan_release_fetches(
 ) -> list[tuple[str, Path]]:
     """Every (url, destination) for a source repository's GitHub releases."""
     return [
-        (GITHUB_RELEASES.format(repo=repo), root / "releases" / f"{repo}.json")
+        (GITHUB_RELEASES.format(repo=repo), releases_path(root, repo))
         for repo in _source_repos(components)
     ]
 
@@ -306,7 +320,7 @@ def _plan_chart_fetches(
     way the API is, so the cost was the race, not the budget.
     """
     return [
-        (DEVOPS_RAW.format(chart=chart, file=name), root / "helm" / chart / name)
+        (DEVOPS_RAW.format(chart=chart, file=name), helm_file_path(root, chart, name))
         for chart in _claimed_charts(components)
         for name in HELM_FILES
     ]
@@ -327,14 +341,14 @@ def _plan_repo_meta(
 ) -> list[tuple[str, Path]]:
     """Every (url, destination) for a source repository's own metadata."""
     return [
-        (GITHUB_REPO_META.format(repo=repo), root / "repos" / f"{repo}.json")
+        (GITHUB_REPO_META.format(repo=repo), repo_meta_path(root, repo))
         for repo in _source_repos(components)
     ]
 
 
 def _chart_names(root: Path) -> list[str]:
     """Chart directory names from the cached index, tolerating its absence."""
-    return chart_dirs(read_json(root / "helm" / "index.json"))
+    return chart_dirs(read_json(helm_index_path(root)))
 
 
 def _plan_index_chart_fetches(
@@ -356,7 +370,7 @@ def _plan_index_chart_fetches(
     already = set(planned)
     jobs = []
     for chart in _chart_names(root):
-        destination = root / "helm" / chart / "Chart.yaml"
+        destination = helm_file_path(root, chart, "Chart.yaml")
         if destination not in already:
             jobs.append(
                 (DEVOPS_RAW.format(chart=chart, file="Chart.yaml"), destination)
@@ -377,7 +391,7 @@ def _plan_chart_commits(
     return [
         (
             DEVOPS_CHART_COMMIT.format(chart=chart),
-            root / "helm" / chart / "commit.json",
+            chart_commit_path(root, chart),
         )
         for chart in _claimed_charts(components)
     ]
@@ -415,7 +429,7 @@ def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str,
     """
     return {
         chart: {
-            key: read_yaml(root / "helm" / chart / name)
+            key: read_yaml(helm_file_path(root, chart, name))
             for key, name in CHART_META_FILES.items()
         }
         for chart in charts
@@ -431,7 +445,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
     answer a different question, and the new field would appear to be missing
     upstream until someone thought to run --force.
     """
-    manifest = read_json(root / "manifest.json")
+    manifest = read_json(manifest_path(root))
     if not isinstance(manifest, dict):
         return {}
     return {
@@ -443,7 +457,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
 
 def _read_derived(root: Path) -> dict[str, Any]:
     """The previous run's derived.json, tolerating absence or an older shape."""
-    loaded = read_json(root / "derived.json")
+    loaded = read_json(derived_path(root))
     return loaded if isinstance(loaded, dict) else {}
 
 
@@ -512,7 +526,7 @@ def _confirm_derived(
         # document to ask for one. Probe the root so the rejection carries a
         # verdict, and reject it whatever comes back: an unverifiable 200 is
         # exactly the guess this function exists not to make.
-        probed = root / "root" / component.id / f"{candidate.env}.json"
+        probed = endpoint_path(root, "root", component.id, candidate.env)
         return (
             probe_to(
                 candidate.url, probed, fetcher,
@@ -520,7 +534,7 @@ def _confirm_derived(
             ),
             False,
         )
-    destination = root / "openapi" / component.id / f"{candidate.env}.json"
+    destination = endpoint_path(root, "openapi", component.id, candidate.env)
     result = fetch_to(
         url, destination, fetcher, max_age=age(url, destination), root=root)
     if not result.ok:
@@ -583,7 +597,7 @@ def _root_probed_candidates(
     and two in one pool would race to write one file.
     """
     return {
-        root / "root" / component.id / f"{env}.json"
+        endpoint_path(root, "root", component.id, env)
         for component, env, candidate in pending
         if _confirmation_url(component, candidate) is None
     }
@@ -656,7 +670,7 @@ def _record_derived(
             if env in rejected.get(cid, {}):
                 continue
             derived.setdefault(cid, {}).setdefault(env, spec)
-    (root / "derived.json").write_text(
+    derived_path(root).write_text(
         json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
         encoding="utf-8",
     )
@@ -791,15 +805,15 @@ def sync(
         f"infores catalog, the chart index, {len(release_jobs)} GitHub release "
         f"lists and {len(repo_jobs)} repository descriptions ..."
     )
-    registry_jobs = [(SMARTAPI_QUERY, root / "smartapi.json")]
+    registry_jobs = [(SMARTAPI_QUERY, smartapi_path(root))]
     registry_jobs += [
-        (url, root / "otel" / f"{env}.json") for env, url in OTEL_COLLECTORS.items()
+        (url, otel_path(root, env)) for env, url in OTEL_COLLECTORS.items()
     ]
     registry_results = run(
         registry_jobs
         + [
-            (INFORES_CATALOG, root / "infores_catalog.yaml"),
-            (DEVOPS_HELM_INDEX, root / "helm" / "index.json"),
+            (INFORES_CATALOG, infores_catalog_path(root)),
+            (DEVOPS_HELM_INDEX, helm_index_path(root)),
         ]
         + chart_jobs
         + commit_jobs
@@ -822,14 +836,14 @@ def sync(
         )
 
     by_smartapi = {}
-    smartapi_path = root / "smartapi.json"
-    if smartapi_path.exists():
+    registry = smartapi_path(root)
+    if registry.exists():
         # Several Translator hosts answer 200 with an HTML error page, and this
         # file is whatever came back. Parsing it in the open would end the run
         # after the registries, the charts and the release lists had all
         # succeeded — the opposite of "a service being down is data".
         try:
-            payload = json.loads(smartapi_path.read_text(encoding="utf-8"))
+            payload = json.loads(registry.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             payload = None
         if not isinstance(payload, dict):
@@ -910,7 +924,7 @@ def sync(
     _echo_matching_summary(components, root, by_smartapi, echo)
 
     report.finished_at = now()
-    (root / "manifest.json").write_text(
+    manifest_path(root).write_text(
         json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8"
     )
     return report
