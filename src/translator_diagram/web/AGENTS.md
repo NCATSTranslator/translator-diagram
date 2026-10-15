@@ -140,6 +140,17 @@ Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
 needs are simpler to reach over a server anyway.
 
+**A change that should not move a pixel can be proved, not judged.** The
+headless shell's screenshots are deterministic here: the same build, the same
+flags and the same `--window-size` give byte-identical PNGs run after run, so
+a refactor of the JS or CSS is checked the way `CONTRIBUTING.md` checks a
+Python one — shoot before and after from one `data/sync/` snapshot and `cmp`
+the files. Shoot every surface the change can reach: both views, both
+themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
+component with data on all of them), and an expanded row (`?expand=<id>`).
+The nine commits of #86 were each checked this way; a differing PNG means
+something moved, and `--dump-dom` on the two builds, diffed, says what.
+
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.
 
