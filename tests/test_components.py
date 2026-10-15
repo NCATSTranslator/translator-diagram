@@ -2,6 +2,7 @@
 
 import yaml
 
+from tests.dashboard_helpers import MINIMAL, _parse
 from translator_diagram.components import (
     DEFAULT_ENDPOINT_PATHS,
     Deployment,
@@ -11,13 +12,6 @@ from translator_diagram.components import (
     load_components,
     parse_component,
 )
-
-MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
-           "refactor_status": "New in Refactor"}
-
-
-def _parse(**overrides):
-    return parse_component({**MINIMAL, **overrides})
 
 
 class TestParsing:

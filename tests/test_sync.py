@@ -3,11 +3,10 @@ fetcher so nothing here reaches the network. The fetch itself is test_fetch.py."
 
 import json
 import threading
-from datetime import UTC, datetime
 
-from tests.dashboard_helpers import FakeFetcher
-from translator_diagram.components import OTEL_ENVIRONMENTS, ComponentFile, Deployment
-from translator_diagram.fetch import _headers
+from tests.dashboard_helpers import FakeFetcher, _comp, _registry
+from translator_diagram.components import OTEL_ENVIRONMENTS, Deployment
+from translator_diagram.fetch import _headers, now
 from translator_diagram.sync import (
     DEVOPS_HELM_INDEX,
     HELM_FILES,
@@ -27,24 +26,23 @@ from translator_diagram.sync import (
 )
 
 
-def _comp(cid, **kwargs):
-    kwargs.setdefault("refactor_status", "New in Refactor")
-    return ComponentFile(id=cid, name=cid, owner="None", **kwargs)
+def _repo(url, role="source"):
+    """A component recording one repository link."""
+    return _comp("svc", repositories=[{"url": url, "role": role}])
 
 
-def _now_iso():
-    return datetime.now(UTC).isoformat(timespec="seconds")
+def _openapi(infores):
+    """A served OpenAPI document reporting `infores`, as the fetcher returns it."""
+    return json.dumps({"info": {"version": "1.0", "x-translator": {
+        "infores": infores}}}).encode()
 
 
 class TestSync:
-    def _smartapi_body(self, hits):
-        return json.dumps({"hits": hits}).encode()
-
     def test_it_plans_endpoints_from_the_registry(self, tmp_path):
         hits = [{"_id": "abc", "servers": [
             {"url": "https://svc.ci/", "x-maturity": "staging"}]}]
         fetcher = FakeFetcher({
-            SMARTAPI_QUERY: (200, self._smartapi_body(hits)),
+            SMARTAPI_QUERY: (200, _registry(hits)),
             "https://svc.ci/openapi.json": (200, b'{"info":{"version":"1.0"}}'),
         })
         component = _comp("svc", identifiers={"smartapi": "abc"})
@@ -57,7 +55,7 @@ class TestSync:
         # a host that does not serve its OpenAPI.
         hits = [{"_id": "abc", "servers": [
             {"url": "https://wrong.ci/", "x-maturity": "staging"}]}]
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry(hits))})
         component = _comp(
             "svc",
             identifiers={"smartapi": "abc"},
@@ -78,7 +76,7 @@ class TestSync:
         # with one request that was never made.
         hits = [{"_id": "abc", "servers": [
             {"url": "https://svc.ci/", "x-maturity": "staging"}]}]
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry(hits))})
         component = _comp("svc", identifiers={"smartapi": "abc"},
                           endpoints={"openapi": None})
         sync([component], tmp_path, fetcher=fetcher, max_age=0)
@@ -86,7 +84,7 @@ class TestSync:
         assert fetcher.urls.count("https://svc.ci/") == 1
 
     def test_the_manifest_records_failures_too(self, tmp_path):
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body([]))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry([]))})
         report = sync([_comp("svc")], tmp_path, fetcher=fetcher, max_age=0)
         manifest = json.loads((tmp_path / "manifest.json").read_text())
         assert manifest["counts"]["attempted"] == len(report.fetches)
@@ -94,7 +92,7 @@ class TestSync:
         assert manifest["finished_at"]
 
     def test_helm_files_are_fetched_for_a_charted_component(self, tmp_path):
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body([]))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry([]))})
         sync([_comp("svc", identifiers={"helm_chart": "my-chart"})],
              tmp_path, fetcher=fetcher, max_age=0)
         assert any("helm/my-chart/Chart.yaml" in url for url in fetcher.urls)
@@ -107,7 +105,7 @@ class TestSync:
         hits = [{"_id": "abc",
                  "info": {"x-translator": {"infores": "infores:svc"}},
                  "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}]}]
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry(hits))})
         sync([_comp("svc", identifiers={"infores": "infores:svc"})],
              tmp_path, fetcher=fetcher, max_age=0)
         assert "https://svc.ci/openapi.json" in fetcher.urls
@@ -117,7 +115,7 @@ class TestSync:
         hits = [{"_id": n, "info": {"x-translator": {"infores": "infores:svc"}},
                  "servers": [{"url": f"https://{n}.ci/", "x-maturity": "staging"}]}
                 for n in ("one", "two")]
-        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, _registry(hits))})
         sync([_comp("svc", identifiers={"infores": "infores:svc"})],
              tmp_path, fetcher=fetcher, max_age=0)
         assert not [u for u in fetcher.urls if u.startswith(("https://one", "https://two"))]
@@ -128,7 +126,7 @@ class TestSync:
         hits = [{"_id": "abc", "servers": [
             {"url": "https://down.ci/", "x-maturity": "staging"}]}]
         fetcher = FakeFetcher(
-            {SMARTAPI_QUERY: (200, self._smartapi_body(hits))},
+            {SMARTAPI_QUERY: (200, _registry(hits))},
             default=ConnectionError("refused"),
         )
         report = sync([_comp("svc", identifiers={"smartapi": "abc"})],
@@ -174,7 +172,7 @@ class TestRootProbe:
         hits = [{"_id": "abc", "servers": [
             {"url": "https://svc.ci/", "x-maturity": "staging"}]}]
         fetcher = FakeFetcher({
-            SMARTAPI_QUERY: (200, self._body(hits)),
+            SMARTAPI_QUERY: (200, _registry(hits)),
             "https://svc.ci/": (200, b"<html>a whole page</html>"),
         })
         report = sync([_comp("svc", identifiers={"smartapi": "abc"})],
@@ -184,17 +182,11 @@ class TestRootProbe:
         manifest = json.loads((tmp_path / "manifest.json").read_text())
         assert any(f["path"] == "root/svc/ci.json" for f in manifest["fetches"])
 
-    def _body(self, hits):
-        return json.dumps({"hits": hits}).encode()
-
 
 class TestReleaseFetches:
-    def _repo(self, url, role="source"):
-        return _comp("svc", repositories=[{"url": url, "role": role}])
-
     def test_a_source_repository_is_fetched(self, tmp_path):
         jobs = _plan_release_fetches(
-            [self._repo("https://github.com/RTXteam/RTX")], tmp_path
+            [_repo("https://github.com/RTXteam/RTX")], tmp_path
         )
         assert jobs == [(
             "https://api.github.com/repos/RTXteam/RTX/releases?per_page=100",
@@ -213,7 +205,7 @@ class TestReleaseFetches:
         assert len(_plan_release_fetches(shepherds, tmp_path)) == 1
 
     def test_a_helm_chart_path_is_not_a_repository(self, tmp_path):
-        assert _plan_release_fetches([self._repo(
+        assert _plan_release_fetches([_repo(
             "https://github.com/helxplatform/translator-devops"
             "/tree/develop/helm/jaeger", role="helm-chart")], tmp_path) == []
 
@@ -221,13 +213,13 @@ class TestReleaseFetches:
         # jaeger links jaegertracing/jaeger as `related`: upstream's releases
         # are not this deployment's.
         assert _plan_release_fetches(
-            [self._repo("https://github.com/jaegertracing/jaeger", role="related")],
+            [_repo("https://github.com/jaegertracing/jaeger", role="related")],
             tmp_path,
         ) == []
 
     def test_sync_fetches_them(self, tmp_path):
         fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
-        sync([self._repo("https://github.com/a/b")], tmp_path,
+        sync([_repo("https://github.com/a/b")], tmp_path,
              fetcher=fetcher, max_age=0)
         assert "https://api.github.com/repos/a/b/releases?per_page=100" in fetcher.urls
 
@@ -370,12 +362,9 @@ class TestChartCommits:
 class TestRepoMeta:
     """Repository descriptions, keyed by repository like the release lists."""
 
-    def _repo(self, url, role="source"):
-        return _comp("svc", repositories=[{"url": url, "role": role}])
-
     def test_a_source_repository_is_fetched(self, tmp_path):
         assert _plan_repo_meta(
-            [self._repo("https://github.com/RTXteam/RTX")], tmp_path
+            [_repo("https://github.com/RTXteam/RTX")], tmp_path
         ) == [(
             "https://api.github.com/repos/RTXteam/RTX",
             tmp_path / "repos" / "RTXteam" / "RTX.json",
@@ -393,19 +382,19 @@ class TestRepoMeta:
     def test_a_helm_chart_path_is_not_a_repository(self, tmp_path):
         # The same `github_repo` rule the release lists use: translator-devops'
         # own description is the devops team's, not this component's.
-        assert _plan_repo_meta([self._repo(
+        assert _plan_repo_meta([_repo(
             "https://github.com/helxplatform/translator-devops"
             "/tree/develop/helm/jaeger", role="helm-chart")], tmp_path) == []
 
     def test_only_the_source_role_counts(self, tmp_path):
         assert _plan_repo_meta(
-            [self._repo("https://github.com/jaegertracing/jaeger", role="related")],
+            [_repo("https://github.com/jaegertracing/jaeger", role="related")],
             tmp_path,
         ) == []
 
     def test_sync_fetches_them(self, tmp_path):
         fetcher = FakeFetcher({SMARTAPI_QUERY: (200, json.dumps({"hits": []}).encode())})
-        sync([self._repo("https://github.com/a/b")], tmp_path,
+        sync([_repo("https://github.com/a/b")], tmp_path,
              fetcher=fetcher, max_age=0)
         assert "https://api.github.com/repos/a/b" in fetcher.urls
 
@@ -638,16 +627,12 @@ class TestChangedUrlInvalidatesCache:
 class TestConfirmDerived:
     """A derived host is believed only if it says it is the right component."""
 
-    def _openapi(self, infores):
-        return json.dumps({"info": {"version": "1.0", "x-translator": {
-            "infores": infores}}}).encode()
-
     def test_a_matching_infores_is_accepted(self, tmp_path):
         component = _comp("svc", identifiers={"infores": "infores:svc"})
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json":
-                (200, self._openapi("infores:svc"))})
+                (200, _openapi("infores:svc"))})
         result, accepted = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
         assert accepted and result is not None and result.ok
         assert (tmp_path / "openapi" / "svc" / "ci.json").exists()
@@ -659,7 +644,7 @@ class TestConfirmDerived:
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/openapi.json":
-                (200, self._openapi("infores:something-else"))})
+                (200, _openapi("infores:something-else"))})
         result, accepted = _confirm_derived(component, candidate, fetcher, tmp_path, 0)
         assert not accepted
         # The request still happened, so the manifest still has to hear about it.
@@ -674,7 +659,7 @@ class TestConfirmDerived:
         candidate = Deployment(env="ci", url="https://svc.ci.transltr.io/")
         fetcher = FakeFetcher({
             "https://svc.ci.transltr.io/": (200, b"<html>something</html>"),
-            "https://svc.ci.transltr.io/openapi.json": (200, self._openapi(None))})
+            "https://svc.ci.transltr.io/openapi.json": (200, _openapi(None))})
         result, accepted = _confirm_derived(
             component, candidate, fetcher, tmp_path, 0)
         assert not accepted
@@ -730,10 +715,6 @@ class TestConfirmDerived:
 class TestConfirmedDerivedHosts:
     """A host an earlier run confirmed, on the run after."""
 
-    def _openapi(self, infores):
-        return json.dumps({"info": {"version": "1.0", "x-translator": {
-            "infores": infores}}}).encode()
-
     def _component(self):
         return _comp(
             "svc",
@@ -750,7 +731,7 @@ class TestConfirmedDerivedHosts:
             "svc": {"prod": {"url": "https://svc.transltr.io/", "location": "ITRB"}}}}))
         fetcher = FakeFetcher({
             SMARTAPI_QUERY: (200, b'{"hits": []}'),
-            "https://svc.transltr.io/openapi.json": (200, self._openapi("infores:svc")),
+            "https://svc.transltr.io/openapi.json": (200, _openapi("infores:svc")),
             "https://svc.transltr.io/status": (200, b'{"svc_version": "2.0"}'),
         })
         sync([self._component()], tmp_path, fetcher=fetcher, max_age=0)
@@ -766,7 +747,7 @@ class TestConfirmedDerivedHosts:
         # the new hostname from it would accept a host nobody contacted.
         cached = tmp_path / "openapi" / "svc" / "prod.json"
         cached.parent.mkdir(parents=True)
-        cached.write_bytes(self._openapi("infores:svc"))
+        cached.write_bytes(_openapi("infores:svc"))
         (tmp_path / "manifest.json").write_text(json.dumps({"fetches": [{
             "path": "openapi/svc/prod.json",
             "url": "https://old-svc.transltr.io/openapi.json", "status": 200}]}))
@@ -780,9 +761,6 @@ class TestConfirmedDerivedHosts:
 
 class TestAMalformedRegistry:
     """The registry is whatever came back, and the run has to survive it."""
-
-    def _smartapi(self, hits):
-        return json.dumps({"hits": hits}).encode()
 
     def test_an_html_error_page_does_not_end_the_run(self, tmp_path):
         # Copilot: parsing this in the open ended the sync after the registries,
@@ -824,7 +802,7 @@ class TestNegativeCaching:
     """Most derived hostnames do not resolve. Do not keep asking."""
 
     def _smartapi(self, servers):
-        return json.dumps({"hits": [{"_id": "abc", "servers": servers}]}).encode()
+        return _registry([{"_id": "abc", "servers": servers}])
 
     def _component(self):
         return _comp("svc", identifiers={
@@ -835,7 +813,7 @@ class TestNegativeCaching:
             "confirmed": {},
             "rejected": {"svc": {"test": {
                 "url": "https://svc.test.transltr.io/",
-                "checked_at": _now_iso(),
+                "checked_at": now(),
             }}},
         }))
         fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi(
@@ -866,7 +844,7 @@ class TestNegativeCaching:
             "confirmed": {},
             "rejected": {"svc": {"test": {
                 "url": "https://elsewhere.test.transltr.io/",
-                "checked_at": _now_iso(),
+                "checked_at": now(),
             }}},
         }))
         fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi(
@@ -915,13 +893,13 @@ class TestNegativeCaching:
 
 class TestStillFresh:
     def test_a_recent_check_is_fresh(self):
-        assert _still_fresh({"checked_at": _now_iso()}, 3600)
+        assert _still_fresh({"checked_at": now()}, 3600)
 
     def test_an_old_check_is_not(self):
         assert not _still_fresh({"checked_at": "2020-01-01T00:00:00+00:00"}, 60)
 
     def test_max_age_zero_never_reuses(self):
-        assert not _still_fresh({"checked_at": _now_iso()}, 0)
+        assert not _still_fresh({"checked_at": now()}, 0)
 
     def test_a_malformed_timestamp_is_not_fresh(self):
         # Re-probing costs a DNS lookup; trusting a bad record costs a wrong page.
@@ -943,8 +921,7 @@ class TestCandidatesShareWaveTwo:
     """The conventional hostnames go out in wave two's pool, not after it (#47)."""
 
     def _smartapi(self, url):
-        return json.dumps({"hits": [{"_id": "abc", "servers": [
-            {"url": url, "x-maturity": "production"}]}]}).encode()
+        return _registry([{"_id": "abc", "servers": [{"url": url, "x-maturity": "production"}]}])
 
     def test_the_candidates_do_not_wait_for_the_endpoints(self, tmp_path):
         # This endpoint answers only once a candidate has been asked for, which

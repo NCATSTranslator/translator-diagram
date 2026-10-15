@@ -8,14 +8,35 @@ other, so neither builder can stand in for the other.
 
 import json
 
-from translator_diagram.components import ComponentFile, Deployment
+from translator_diagram.components import ComponentFile, Deployment, parse_component
 from translator_diagram.rows import build_rows
 from translator_diagram.synced_data import SyncedData
 
 
 def _comp(cid, **kwargs):
+    """A ComponentFile straight from its fields, defaulting what tests rarely set."""
     kwargs.setdefault("refactor_status", "New in Refactor")
     return ComponentFile(id=cid, name=kwargs.pop("name", cid), owner="DOGSLED", **kwargs)
+
+
+# The smallest mapping parse_component accepts: what a test adds to it is the
+# whole point of the test.
+MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
+           "refactor_status": "New in Refactor"}
+
+
+def _parse(**overrides):
+    """A ComponentFile through parse_component, the way a file arrives.
+
+    Unlike `_comp`, nested blocks arrive in their raw YAML shape — an
+    `environments` mapping becomes Deployment objects here, not before.
+    """
+    return parse_component({**MINIMAL, **overrides})
+
+
+def _registry(hits):
+    """A SmartAPI registry body as the fetcher hands it back: bytes of JSON."""
+    return json.dumps({"hits": hits}).encode()
 
 
 class FakeFetcher:
