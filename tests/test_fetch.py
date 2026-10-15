@@ -4,6 +4,7 @@ import json
 
 from tests.dashboard_helpers import FakeFetcher
 from translator_diagram.fetch import FetchResult, _headers, fetch_to, probe_to
+from translator_diagram.files import endpoint_key, endpoint_path
 
 
 class TestFetchTo:
@@ -46,10 +47,10 @@ class TestFetchTo:
     def test_the_recorded_path_is_relative_to_the_root(self, tmp_path):
         # The manifest is read back by the dashboard to look up HTTP statuses,
         # so an absolute path here would make every lookup miss.
-        result = fetch_to("https://x/", tmp_path / "openapi" / "a" / "ci.json",
+        result = fetch_to("https://x/", endpoint_path(tmp_path, "openapi", "a", "ci"),
                           FakeFetcher({"https://x/": (200, b"{}")}),
                           max_age=0, root=tmp_path)
-        assert result.path == "openapi/a/ci.json"
+        assert result.path == endpoint_key("openapi", "a", "ci")
 
 
 class TestProbeTo:
@@ -63,7 +64,7 @@ class TestProbeTo:
         fetcher = FakeFetcher(
             {"https://svc/": (200, b"<html><body>not a document</body></html>")}
         )
-        target = tmp_path / "root" / "svc" / "ci.json"
+        target = endpoint_path(tmp_path, "root", "svc", "ci")
         probe_to("https://svc/", target, fetcher, max_age=0, root=tmp_path)
         saved = json.loads(target.read_text())
         assert saved == {"status": 200, "content_type": None, "error": None}
@@ -73,14 +74,14 @@ class TestProbeTo:
         # The other half of the difference from `fetch_to`, which keeps the
         # previous body on a non-200. A stale *status* is the lie the whole
         # manifest gate exists to stop.
-        target = tmp_path / "root" / "svc" / "ci.json"
+        target = endpoint_path(tmp_path, "root", "svc", "ci")
         target.parent.mkdir(parents=True)
         target.write_text(json.dumps({"status": 200, "content_type": None, "error": None}))
         probe_to("https://svc/", target, FakeFetcher({}), max_age=0, root=tmp_path)
         assert json.loads(target.read_text())["status"] == 404
 
     def test_a_failure_is_recorded_with_its_error(self, tmp_path):
-        target = tmp_path / "root" / "svc" / "ci.json"
+        target = endpoint_path(tmp_path, "root", "svc", "ci")
         fetcher = FakeFetcher({"https://svc/": OSError("nodename nor servname")})
         result = probe_to("https://svc/", target, fetcher, max_age=0, root=tmp_path)
         assert result.status is None and "OSError" in result.error
@@ -91,7 +92,7 @@ class TestProbeTo:
         # `fetch_to` can report a cached hit as 200 because a body on disk got
         # there by being a 200. A probe summary is written whatever happened,
         # so reading 200 off its freshness would invent an answer.
-        target = tmp_path / "root" / "svc" / "ci.json"
+        target = endpoint_path(tmp_path, "root", "svc", "ci")
         target.parent.mkdir(parents=True)
         target.write_text(json.dumps(
             {"status": 503, "content_type": None, "error": None}
@@ -103,7 +104,7 @@ class TestProbeTo:
     def test_a_content_type_is_kept_when_the_fetcher_reports_one(self, tmp_path):
         # The real fetcher answers with three parts; every fake in this file
         # answers with two, and both have to work.
-        target = tmp_path / "root" / "svc" / "ci.json"
+        target = endpoint_path(tmp_path, "root", "svc", "ci")
         probe_to("https://svc/", target,
                  lambda url: (200, b"<html>", "text/html"),
                  max_age=0, root=tmp_path)

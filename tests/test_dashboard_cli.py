@@ -15,6 +15,7 @@ from click.testing import CliRunner
 
 from translator_diagram import dashboard_cli
 from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main, sync_main
+from translator_diagram.files import manifest_path
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def workspace(tmp_path):
         )
     sync = tmp_path / "sync"
     sync.mkdir()
-    (sync / "manifest.json").write_text(
+    manifest_path(sync).write_text(
         json.dumps({"finished_at": "2026-09-01T00:00:00+00:00", "counts": {}})
     )
     # owner-colors.csv lives only in catalog/, so a workspace without one

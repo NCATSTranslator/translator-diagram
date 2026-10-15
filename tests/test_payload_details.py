@@ -9,8 +9,15 @@ import re
 from pathlib import Path
 
 import pytest
-import yaml
 
+from translator_diagram.charts import chart_dirs
+from translator_diagram.dashboard_cli import DEFAULT_SYNC_DIR
+from translator_diagram.files import (
+    helm_file_path,
+    helm_index_path,
+    read_json,
+    read_yaml,
+)
 from translator_diagram.payload_details import (
     BODY_EXCERPT,
     RELEASES_DETAILED,
@@ -23,23 +30,23 @@ from translator_diagram.payload_details import (
     strip_html,
 )
 
-HELM_CACHE = Path(__file__).resolve().parent.parent / "data" / "sync" / "helm"
+SYNC_DIR = Path(__file__).resolve().parent.parent / DEFAULT_SYNC_DIR
 
 
-def _cached_charts() -> list[Path | None]:
-    """Every chart directory `sync-components` left behind, or `[None]`.
+def _cached_charts() -> list[str | None]:
+    """Every chart `sync-components` left a Chart.yaml and values.yaml for, or
+    `[None]`.
 
     `data/` is gitignored scratch space, so a fresh checkout has no charts to
     read and this becomes one skipped case with a reason rather than a silent
     pass on nothing.
     """
-    if not HELM_CACHE.is_dir():
-        return [None]
-    found = sorted(
-        path
-        for path in HELM_CACHE.iterdir()
-        if (path / "Chart.yaml").is_file() and (path / "values.yaml").is_file()
-    )
+    found = [
+        chart
+        for chart in chart_dirs(read_json(helm_index_path(SYNC_DIR)))
+        if helm_file_path(SYNC_DIR, chart, "Chart.yaml").is_file()
+        and helm_file_path(SYNC_DIR, chart, "values.yaml").is_file()
+    ]
     return found or [None]
 
 
@@ -172,29 +179,29 @@ class TestSmartapiDetail:
 
 class TestHelmDetail:
     @pytest.mark.parametrize(
-        "chart_dir",
+        "chart",
         _cached_charts(),
-        ids=lambda path: path.name if path is not None else "no-charts-cached",
+        ids=lambda chart: chart or "no-charts-cached",
     )
-    def test_the_helm_block_carries_no_image(self, chart_dir):
+    def test_the_helm_block_carries_no_image(self, chart):
         # The rule the module exists to hold, checked against the real charts
         # rather than against fixtures written to pass it. Image repositories
         # and tags belong to `helm_images`, which config/privacy.yaml withholds
         # from the published page: beside the version grid they are a CVE
         # inventory.
-        if chart_dir is None:
+        if chart is None:
             pytest.skip(
                 "data/sync/helm/ holds no charts; run `uv run sync-components`"
             )
         detail = helm_detail(
-            chart_dir.name,
-            yaml.safe_load((chart_dir / "Chart.yaml").read_text(encoding="utf-8")),
-            yaml.safe_load((chart_dir / "values.yaml").read_text(encoding="utf-8")),
-            f"https://example.test/helm/{chart_dir.name}",
+            chart,
+            read_yaml(helm_file_path(SYNC_DIR, chart, "Chart.yaml")),
+            read_yaml(helm_file_path(SYNC_DIR, chart, "values.yaml")),
+            f"https://example.test/helm/{chart}",
         )
         leaks = _image_leaks(detail)
         assert not leaks, (
-            f"{chart_dir.name}: the Helm block must never carry a container "
+            f"{chart}: the Helm block must never carry a container "
             f"image, and this one does: " + "; ".join(leaks)
         )
 
