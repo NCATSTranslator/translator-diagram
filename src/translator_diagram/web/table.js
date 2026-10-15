@@ -539,9 +539,14 @@
       const m = TD.cell(row, env);
       if (!m.deployed) return "";
       const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
-      const note = m.flags.unregistered
-        ? "Deployed, but absent from this component's SmartAPI record, which lists other environments."
-        : "";
+      const notes = [
+        m.flags.inferred
+          ? "This environment was not declared in the registry; it was inferred from a server's description there, which is the weaker claim."
+          : "",
+        m.flags.unregistered
+          ? "Deployed, but absent from this component's SmartAPI record, which lists other environments."
+          : "",
+      ].filter(Boolean);
       return `<div class="title">${esc(row.id)} · ${esc(env)}</div><dl>${
         pair("version", m.version)}${
         pair("read from", m.version ? m.sourceWord : "")}${
@@ -549,7 +554,7 @@
         m.facts.map((f) => pair(f.label, f.note ? `${f.value} (${f.note})` : f.value)).join("")}</dl>${
         m.drift.length
           ? `<div class="note">Disagrees with the rest of this row on ${esc(m.drift.join(", "))}.</div>` : ""}${
-        note ? `<div class="note">${esc(note)}</div>` : ""}`;
+        notes.map((note) => `<div class="note">${esc(note)}</div>`).join("")}`;
     }
     return "";
   }
