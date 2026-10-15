@@ -66,7 +66,8 @@
   /* A value as text, or nothing: what most rows of a definition list are. */
   const val = (value) => (filled(value) ? esc(value) : "");
 
-  /* The parts that are there, escaped, with a middle dot between them. */
+  /* The parts that are there, escaped, with a middle dot between them. The
+     result is HTML: never pass it to note() or esc(), which escape again. */
   const dotJoin = (parts) => parts.filter(filled).map(esc).join(" · ");
 
   /* A list of small-caps tags, or nothing. */
@@ -308,7 +309,9 @@
     const updated = row.last_updated;
     if (!updated) return "";
     const label = TD.row.updatedLabel(updated);
-    const bits = dotJoin([label, updated.tag]);
+    // Joined raw, because note() escapes: dotJoin's output is already HTML,
+    // and escaping it again shows an `&` in a tag as `&amp;` (#87).
+    const bits = [label, updated.tag].filter(filled).join(" · ");
     return `${esc(TD.fmt.relativeAge(updated.at) || updated.date || "")} ${
       bits ? note(bits) : ""}`;
   }
@@ -1174,4 +1177,5 @@
   drawer.deployedIn = deployedIn;
   drawer.docLabel = docLabel;
   drawer.probeEvidence = probeEvidence;
+  drawer.updatedHtml = updatedHtml;
 })();

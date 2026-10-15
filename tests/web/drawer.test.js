@@ -60,7 +60,7 @@ test("our own code has no third-party text", () => {
 // The TD drawer.js captured, taken at load (see index.js): deployedIn reads
 // its ENVS, and a test body runs after a later suite has replaced the global.
 const DRAWER_TD = globalThis.TD;
-const { catalogNeighbours, deployedIn, docLabel, probeEvidence } = DRAWER_TD.drawer;
+const { catalogNeighbours, deployedIn, docLabel, probeEvidence, updatedHtml } = DRAWER_TD.drawer;
 
 test("catalog edges run with the data: into a consumer, out of what it consumes", () => {
   // Backwards once, and each list showed the other's components.
@@ -96,4 +96,12 @@ test("the dot sits on the row that is the actual evidence", () => {
   assert.deepEqual(probeEvidence({ root_status: 200, reachable: true }), { row: "root", status: 200 });
   assert.deepEqual(probeEvidence({ reachable: false }), { row: "reachable", status: null });
   assert.deepEqual(probeEvidence({}), { row: null, status: null });
+});
+
+test("the last-updated note escapes its label and tag once", () => {
+  // Escaped twice, an `&` showed as `&amp;` on the page (#87).
+  DRAWER_TD.DATA = { updated_labels: { release: "Release & tag" } };
+  const html = updatedHtml({ last_updated: { source: "release", tag: "v1<2", date: "2026-01-02" } });
+  assert.match(html, /<span class="dw-note">Release &amp; tag · v1&lt;2<\/span>/);
+  assert.doesNotMatch(html, /&amp;(amp|lt);/);
 });
