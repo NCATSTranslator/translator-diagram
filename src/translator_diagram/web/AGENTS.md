@@ -148,8 +148,9 @@ Python one — shoot before and after from one `data/sync/` snapshot and `cmp`
 the files. Shoot every surface the change can reach: both views, both
 themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
 component with data on all of them), and an expanded row (`?expand=<id>`).
-The nine commits of #86 were each checked this way; a differing PNG means
-something moved, and `--dump-dom` on the two builds, diffed, says what.
+The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
+checked this way; a differing PNG means something moved, and `--dump-dom` on
+the two builds, diffed, says what.
 
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.
