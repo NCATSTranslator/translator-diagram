@@ -97,7 +97,7 @@ DEFAULT_STATUSES = ["Continues into Refactor", "New in Refactor"]
     "--owner-colors", "owner_colors_path",
     default=None,
     type=click.Path(dir_okay=False, exists=True, path_type=Path),
-    help="Owner-colour CSV to use, instead of config/owner-colors.csv in the "
+    help="Owner-colour CSV to use, instead of catalog/owner-colors.csv in the "
          "current directory or the copy shipped with the package.",
 )
 @click.option(

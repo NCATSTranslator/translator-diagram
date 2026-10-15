@@ -7,18 +7,22 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+import os
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from translator_diagram.dashboard_cli import build_main
+from translator_diagram import dashboard_cli
+from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main, sync_main
 
 
 @pytest.fixture
 def workspace(tmp_path):
-    """A components directory, a sync cache, a policy and colours, under tmp."""
-    components = tmp_path / "components"
-    components.mkdir()
+    """A catalog, a sync cache and a policy, under tmp."""
+    catalog = tmp_path / "catalog"
+    components = catalog / "components"
+    components.mkdir(parents=True)
     for cid in ("keeper", "secret"):
         (components / f"{cid}.yaml").write_text(
             f"id: {cid}\n"
@@ -34,14 +38,12 @@ def workspace(tmp_path):
     (sync / "manifest.json").write_text(
         json.dumps({"finished_at": "2026-09-01T00:00:00+00:00", "counts": {}})
     )
-    config = tmp_path / "config"
-    config.mkdir()
-    # owner-colors.csv lives only in config/ now, so a workspace without one
+    # owner-colors.csv lives only in catalog/, so a workspace without one
     # has no colours to find -- the same as any other checkout.
-    (config / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
+    (catalog / "owner-colors.csv").write_text("owner,color\nDOGSLED,#42A5F5\n")
     # A checkout has one of these too, and build-dashboard now refuses to
     # guess at the row order without it.
-    (config / "flow-steps.yaml").write_text(
+    (catalog / "flow-steps.yaml").write_text(
         "stages:\n"
         "  - title: Serving\n"
         "    description: Answers questions.\n"
@@ -50,6 +52,8 @@ def workspace(tmp_path):
         "  description: Nothing is unplaced.\n"
         "  components: []\n"
     )
+    config = tmp_path / "config"
+    config.mkdir()
     (config / "privacy.yaml").write_text(
         "components:\n"
         "  - id: secret\n"
@@ -71,7 +75,7 @@ def _run(workspace, *args):
         result = runner.invoke(
             build_main,
             [
-                "--components", str(workspace / "components"),
+                "--components", str(workspace / "catalog" / "components"),
                 "--sync-dir", str(workspace / "sync"),
                 "--output-dir", str(workspace / "out"),
                 *args,
@@ -126,7 +130,66 @@ class TestAMissingStageFileStopsTheBuild:
     def test_no_stages_and_no_walk_is_an_error(self, workspace):
         """The row order is a decision, not something to be derived. Without
         the file the page would silently show data-flow order instead."""
-        (workspace / "config" / "flow-steps.yaml").unlink()
+        (workspace / "catalog" / "flow-steps.yaml").unlink()
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestSyncReadsTheTokenFromDotEnv:
+    """sync-components takes GITHUB_TOKEN from a .env, as generate-diagram
+    takes GOOGLE_SHEET_ID. Without this, the GITHUB_TOKEN= line env.default
+    offers would do nothing for the one command that sends it."""
+
+    @pytest.fixture
+    def token_seen(self, monkeypatch, workspace):
+        # A copy of the environment, so whatever load_dotenv writes is gone
+        # after the test rather than leaking a token into the next one.
+        monkeypatch.setattr(os, "environ", dict(os.environ))
+        os.environ.pop("GITHUB_TOKEN", None)
+        seen = {}
+
+        class Report:
+            def to_dict(self):
+                return {"counts": {"succeeded": 1, "attempted": 1, "cached": 0, "failed": 0}}
+
+        def fake_sync(*args, **kwargs):
+            seen["token"] = os.environ.get("GITHUB_TOKEN")
+            return Report()
+
+        monkeypatch.setattr(dashboard_cli, "sync", fake_sync)
+
+        def run(dotenv):
+            (workspace / ".env").write_text(dotenv)
+            runner = CliRunner()
+            with runner.isolated_filesystem(temp_dir=workspace):
+                result = runner.invoke(sync_main, [
+                    "--components", str(workspace / "catalog" / "components"),
+                    "--output-dir", str(workspace / "sync"),
+                ])
+            assert result.exit_code == 0, result.output
+            return seen["token"]
+
+        return run
+
+    def test_a_token_in_dotenv_reaches_the_fetches(self, token_seen):
+        assert token_seen("GITHUB_TOKEN=from-the-file\n") == "from-the-file"
+
+    def test_the_environment_wins_over_the_file(self, token_seen):
+        # What keeps a CI runner's token in charge of a checkout that has a
+        # .env lying about.
+        os.environ["GITHUB_TOKEN"] = "from-the-environment"
+        assert token_seen("GITHUB_TOKEN=from-the-file\n") == "from-the-environment"
+
+    def test_the_empty_template_line_sends_no_token(self, token_seen):
+        # env.default's `GITHUB_TOKEN=` copied as it is: an empty value, which
+        # _headers treats as no token at all.
+        assert not token_seen("GITHUB_TOKEN=\n")
+
+
+def test_the_default_components_directory_is_the_catalogs():
+    # Every other test here passes --components, so a default left pointing
+    # at a directory that has moved would only surface when someone runs
+    # sync-components or build-dashboard with no flags.
+    root = Path(__file__).resolve().parent.parent
+    assert list((root / DEFAULT_COMPONENTS).glob("*.yaml"))

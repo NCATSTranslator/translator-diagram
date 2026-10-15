@@ -1,0 +1,101 @@
+# Document Metadata API (docmetadata-api)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: docmetadata-api
+name: Document Metadata API
+summary: >-
+  Looks up PubMed metadata (title, journal, publication date and abstract) by
+  PMID or PMC id, for the Translator UI.
+description: |-
+  Returns PubMed metadata (journal name and abbreviation, article title,
+  volume, issue, publication year, month and day, and abstract) for up to 100
+  publication ids per request: `GET /publications?pubids=...&request_id=...`.
+  The response echoes `request_id` in a `_meta` block, with a timestamp, the
+  result count and the processing time, and lists the ids it could not find
+  under `not_found`; the target is p90 under 150 ms. The Translator UI calls it
+  to show the publications behind a result. The specification is the
+  [README](https://github.com/ncats/DocumentMetadataAPI#readme).
+
+  Not maintained, and the script that builds the TSV its MongoDB database is
+  loaded from is missing.
+  [Core-Components-Working-Group#15](https://github.com/NCATSTranslator/Core-Components-Working-Group/issues/15)
+  plans to replace it by loading
+  [pubmed2db](https://github.com/TranslatorSRI/pubmed2db)'s export of PubMed
+  into Node Annotator; pubmed2db is a data source, to be recorded as one under
+  [translator-diagram#56](https://github.com/NCATSTranslator/translator-diagram/issues/56).
+
+  The live service differs from the specification in its README, and a
+  replacement has to match what the UI actually receives:
+
+  - `not_found` is inside `results` rather than beside it;
+  - the `_meta` timestamp has no colon between minutes and seconds
+    (`18:0321Z`);
+  - PMC ids take no prefix (`PMC6365303`).
+owner: CoCoWG
+refactor_status: Removed after Refactor
+hosted_at: ITRB
+
+itrb:
+  app: docmetadata-api
+  group: TMKP
+
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+repositories:
+  - url: https://github.com/ncats/DocumentMetadataAPI
+    role: source
+    visibility: public
+  - url: https://github.com/NCATSTranslator/DocumentMetadataAPI
+    role: related
+    visibility: public
+    note: >-
+      Fork that Translator members can edit; identical to the ncats repository
+      on main as of 2026-10-07.
+  - url: https://github.com/TranslatorSRI/pubmed2db
+    role: related
+    visibility: public
+    note: >-
+      Builds the PubMed export meant to replace this service, once loaded into
+      Node Annotator (Core-Components-Working-Group#15).
+
+endpoints:
+  # Checked on 2026-10-07. The API is `publications`, exercised by `examples`
+  # below: prod answers it with or without `request_id`, ci answers 400 HTML
+  # unless `request_id` is given, and test no longer resolves. `/` is HTML,
+  # and `docs`, `openapi.json` and everything else 404, so there is no OpenAPI
+  # document to fetch and no status endpoint either.
+  openapi: null
+
+examples:
+  - description: >-
+      Two PMIDs, both found: each key under `results` is a requested id.
+    path: publications?pubids=PMID:30690000,PMID:82374&request_id=example
+  - description: >-
+      A PMC id, which is given bare; `PMC:` and `PMCID:` prefixes are not
+      found.
+    path: publications?pubids=PMC6365303&request_id=example
+  - description: >-
+      One id it has and one it does not; the missing one is listed under
+      `results.not_found`.
+    path: publications?pubids=PMID:30690000,PMID:99999999999&request_id=example
+
+environments:
+  ci:
+    url: https://docmetadata.ci.transltr.io/
+    location: ITRB
+  test:
+    url: https://docmetadata.test.transltr.io/
+    location: ITRB
+  prod:
+    url: https://docmetadata.transltr.io/
+    location: ITRB

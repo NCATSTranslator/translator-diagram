@@ -10,15 +10,17 @@ Nothing imports this module, in either direction — same rule as cli.py.
 from pathlib import Path
 
 import click
+from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
-from .dashboard import SyncedData, build_payload, write_dashboard
+from .dashboard import build_payload, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
+from .synced_data import SyncedData
 
-DEFAULT_COMPONENTS = Path("components")
+DEFAULT_COMPONENTS = Path("catalog/components")
 DEFAULT_SYNC_DIR = Path("data/sync")
 DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 
@@ -56,6 +58,13 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
     of every fetch, and the dashboard shows it. The command fails only if it
     could not fetch anything at all, so a non-zero exit stays meaningful.
     """
+    # For GITHUB_TOKEN, which `fetch._headers` reads from the environment. The
+    # same lookup `download_sheet_csv` makes for GOOGLE_SHEET_ID, and
+    # usecwd=True for the reason given there. load_dotenv never overrides a
+    # variable already set, so the token a CI runner exports wins over any
+    # file.
+    if env_file := find_dotenv(usecwd=True):
+        load_dotenv(env_file)
     components = _load(components_dir)
     click.echo(f"Following the pointers in {len(components)} component files ...")
     report = sync(

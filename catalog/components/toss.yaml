@@ -1,0 +1,65 @@
+# TOSS (toss)
+#
+# One Translator component. Fields hold *pointers* to the places that already
+# know about this component; see ../README.md for how to fill them in and
+# ../../docs/metadata-sources.md for what each of those places offers.
+#
+# A field that is absent has not been recorded yet. A field that is explicitly
+# `null` has been checked and does not exist.
+# yaml-language-server: $schema=../schema/component.schema.json
+
+id: toss
+name: TOSS
+summary: >-
+  Generates the terms-of-service page that Translator OpenAPI documents link to
+  for a given service and provider.
+description: |
+  Renders a terms-of-service page for the service and provider named in its
+  query string (`service_long`, `provider_long`). Its pages are the
+  `termsOfService` link in the OpenAPI documents of Node Normalization, Name
+  Resolver and Answer Coalesce, and nodenorm-es and nameres-es carry the same
+  links in the documents they copied.
+
+  It runs on RENCI's dev cluster only. It was probably never deployed to
+  Translator itself, and may be retired.
+# No sheet row, so the owner is a guess: the team that owns the services
+# linking to it. Checking it is part of #69.
+owner: DOGSLED
+# None of the enum's values fits a service that was never deployed to
+# Translator; this is the nearest, pending #69.
+refactor_status: Continues into Refactor
+hosted_at: RENCI
+
+identifiers:
+  helm_chart: toss
+
+# Services link to its pages from their OpenAPI documents rather than calling
+# it, so there are no edges.
+connections:
+  gets_results_from: []
+  calls: []
+  externals: []
+
+repositories:
+  # The chart deploys containers.renci.org/translator/toss; no public source
+  # repository for that image has been found.
+  - url: https://github.com/helxplatform/translator-devops/tree/develop/helm/toss
+    role: helm-chart
+    visibility: public
+
+examples:
+  - description: The terms of service Node Normalization links to.
+    path: tos?service_long=Node+Normalization&provider_long=the+Translator+Consortium
+
+environments:
+  dev:
+    url: https://toss.apps.renci.org/
+    location: RENCI
+
+# Nothing calls it, so it has no place on the Map; it stays in the Overview.
+diagram:
+  hide: true
+
+notes: >-
+  Only a RENCI dev deployment is known. Whether it was ever part of Translator,
+  and whether it stays, is tracked in #69.

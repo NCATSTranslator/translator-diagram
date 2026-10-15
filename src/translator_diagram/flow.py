@@ -1,7 +1,7 @@
 """Ordering components the way data moves through them.
 
 Not the dashboard's row order any more. That is written by hand in
-`config/flow-steps.yaml`, because twenty recorded edges cannot order
+`catalog/flow-steps.yaml`, because twenty recorded edges cannot order
 twenty-six components: nothing records the UI calling Name Lookup, so Name
 Lookup sorted up beside the data sources. Change the row order there, not here.
 
