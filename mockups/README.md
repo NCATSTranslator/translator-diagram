@@ -7,9 +7,14 @@ exist to be compared and then deleted: the chosen one is ported into
 
 ```bash
 uv run build-dashboard                      # writes data/dashboard/overview.json
-python3 -m http.server 8765                 # from the repo root
-open http://localhost:8765/mockups/ledger.html
+( printf 'window.PAYLOAD='; cat data/dashboard/overview.json; echo ';' ) > mockups/payload.js
+open mockups/ledger.html                    # or matrix.html, github.html
 ```
+
+`payload.js` is gitignored: it is the build's `overview.json` as a script, so
+the pages open straight from the file system (a browser will not `fetch` one
+local file from another). Served over HTTP from the repo root they fetch the
+JSON themselves and the file is not needed.
 
 `?theme=dark` forces the dark theme, `?expand=<id>` opens a different row
 (default `arax`). The controls are drawn, not wired.

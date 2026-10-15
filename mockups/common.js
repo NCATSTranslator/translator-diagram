@@ -180,9 +180,20 @@ window.MOCK = (() => {
     return out;
   }
 
+  /* payload.js (gitignored; the README says how to write it) inlines the
+     build's overview.json so the pages open from file://, where a browser
+     refuses to fetch one local file from another. Served over HTTP, the fetch
+     works without it. */
   async function load() {
-    const res = await fetch("../data/dashboard/overview.json");
-    if (!res.ok) throw new Error(`overview.json: HTTP ${res.status} — serve the repo root and run build-dashboard first`);
+    if (window.PAYLOAD) return window.PAYLOAD;
+    let res;
+    try { res = await fetch("../data/dashboard/overview.json"); } catch (e) { res = null; }
+    if (!res || !res.ok) {
+      document.body.insertAdjacentHTML("afterbegin",
+        "<p style='margin:16px;padding:12px;border:1px solid #c00;font:14px system-ui'>No payload. " +
+        "Run <code>uv run build-dashboard</code>, then write <code>mockups/payload.js</code> as mockups/README.md says.</p>");
+      throw new Error("no payload");
+    }
     return res.json();
   }
 
