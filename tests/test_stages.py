@@ -100,6 +100,13 @@ stages:
         ordered = in_stage_order(self._components("a", "b"), [])
         assert len(ordered) == 2
 
+    def test_a_file_that_does_not_parse_is_refused_too(self, tmp_path):
+        # The same quiet fallback by another route: a curator's syntax error.
+        for text in ("stages: [unclosed\n", "- just\n- a list\n"):
+            with pytest.raises(click.ClickException):
+                self._stages(tmp_path, text)
+        assert self._stages(tmp_path, "") == []
+
     def test_the_file_is_found_from_a_subdirectory(self, tmp_path, monkeypatch):
         # The same upward walk load_owner_colors and load_policy do: running
         # build-dashboard from anywhere inside a checkout finds the checkout's

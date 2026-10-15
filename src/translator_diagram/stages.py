@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
 from .components import ComponentFile, index_by_id
-from .files import find_upward, read_yaml
+from .files import find_upward
 from .flow import in_flow_order
 
 STAGES_PATH = Path("catalog/flow-steps.yaml")
@@ -60,7 +61,8 @@ def load_stages(path: Path | None = None) -> list[Stage]:
     A missing file is an error rather than an empty list: `in_stage_order`
     falls back to data-flow order, which is the ordering this file exists to
     replace, so degrading quietly would publish the wrong page and say
-    nothing. An empty file is still allowed — that one is somebody's decision.
+    nothing. A file that does not parse is refused for the same reason. An
+    empty file is still allowed — that one is somebody's decision.
     """
     found = path if path is not None else find_upward(STAGES_PATH)
     if found is None:
@@ -71,9 +73,20 @@ def load_stages(path: Path | None = None) -> list[Stage]:
         )
     if not found.exists():
         raise click.ClickException(f"Stage file not found: {found}")
-    loaded = read_yaml(found)
+    # Not `read_yaml`, which answers None for a file it cannot parse: that is
+    # the quiet fall back to data-flow order the missing file is refused for.
+    try:
+        loaded = yaml.safe_load(found.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise click.ClickException(
+            f"Stage file {found} is not valid YAML: {error}"
+        ) from error
     if not loaded:
         return []
+    if not isinstance(loaded, dict):
+        raise click.ClickException(
+            f"Stage file {found} must be a mapping with `stages` and `unplaced`."
+        )
     stages = [
         Stage(
             title=stage.get("title") or "",
