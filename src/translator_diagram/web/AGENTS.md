@@ -121,17 +121,16 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
-between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
-1480 and 1540 — where a column returns before there is room for it. The page
-root never overflows at any width, and the wrap scrolls, so nothing is
-unreachable; issue #31 describes the wider 1100–1500px version of this, most
-of which is now gone. At 760px the PROD column is likewise clipped but
-reachable, and the Map's EDGES legend sits over the Translator UI / Node
-Annotator row; neither has been fixed, and neither hides anything that cannot
-be scrolled or panned to. The overflow is not visible in a screenshot: measure
-`scrollWidth` against `clientWidth` at several widths instead of judging by
-eye.
+breakpoints. Measured at fourteen widths from 760 to 1700px on the redrawn
+table, `div.tablewrap` never overflows from 1000px up (`scrollWidth` equals
+`clientWidth` at every step); at 900px and below the environment columns
+run past the window and the wrap scrolls, so nothing is unreachable. The
+earlier table overflowed between about 1490 and 1535px (issue #31) because a
+wide-window rule widened the environment columns and the names and
+repository slugs could not wrap; both are gone. The overflow is not visible
+in a screenshot: measure `scrollWidth` against `clientWidth` at several
+widths instead of judging by eye. At 760px the Map's EDGES legend still sits
+over the Translator UI / Node Annotator row.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub

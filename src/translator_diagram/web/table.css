@@ -223,7 +223,6 @@ tbody tr.band:first-child td { padding-top: var(--sp-2); }
   padding: 0;
   cursor: pointer;
   text-align: left;
-  white-space: nowrap;
 }
 .cname:hover { color: var(--accent); text-decoration: underline; }
 .chip { margin-left: 4px; white-space: nowrap; }
@@ -254,8 +253,11 @@ tbody tr.row.open .csub { white-space: normal; }
 /* --- Repository and SmartAPI cells ---------------------------------------- */
 
 td.repo a, td.sapi a { text-decoration: underline; text-underline-offset: 2px; }
+/* A repository slug has no spaces; let it break rather than widen the table
+   past the window (issue #31). */
+td.repo { overflow-wrap: anywhere; }
 td.sapi .dot { margin-right: 6px; }
-td.sapi, td.sapi .l2 { white-space: nowrap; }
+td.sapi .l2 { white-space: nowrap; }
 /* A second line under a value: the release and when under the repository,
    when the registration changed under "registered", the source and data
    release under a version. */
@@ -429,12 +431,6 @@ td.rels .rel { margin: 1px 4px 1px 0; font-variant-numeric: tabular-nums; white-
    column and the four to its right, and the only release worth the ink. */
 .rel.deployed { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .rel.pre { border-style: dashed; }
-
-/* Room the wide windows already have: at 1500 and up the four environment
-   columns stop crowding their own detail lines. */
-@media (min-width: 1500px) {
-  td.env { min-width: 150px; }
-}
 
 @media (max-width: 800px) {
   .coin.narrow { display: inline-block; }
