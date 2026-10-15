@@ -449,7 +449,7 @@
 
   const VIEWS = ["overview", "map"];
   const VERSIONS = ["all", "differ", "known", "none"];
-  const BASE_SORTS = ["name", "owner", "repo", "updated"];
+  const BASE_SORTS = ["name", "owner", "repo", "smartapi"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
 
   const DEFAULTS = {

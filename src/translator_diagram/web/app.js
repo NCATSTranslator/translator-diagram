@@ -107,7 +107,8 @@
       ? `synced ${esc(TD.fmt.since(DATA.synced_at))}` : "never synced";
     document.getElementById("app").innerHTML = `
       <div class="topbar">
-        <div class="brandmark">${BRAND_MARK}<span class="name">Translator components</span></div>
+        <div class="brandmark">${BRAND_MARK}<span class="name">Translator Components</span><span
+          class="tagline">what is running where, in which version, on which data</span></div>
         <div id="viewswitch"></div>
         <div class="topright"><span class="synced" title="${esc(DATA.synced_at || "")}"
           >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>

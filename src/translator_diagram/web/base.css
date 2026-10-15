@@ -92,6 +92,13 @@ code {
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+/* The one line that explains the page: "component" is Translator's own word,
+   and this is what the table of them answers. */
+.brandmark .tagline {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -194,16 +201,17 @@ code {
 
 /* --- Shared pieces --------------------------------------------------------- */
 
-/* The hairline chip: text on a hairline, never a fill. An external beside a
+/* The chip: text on a hairline, rounded, never a fill. An external beside a
    component name, a release tag, a repository topic. Each adds its own
    spacing where it is used. */
 .chip, .rel, .dw-tag {
   display: inline-block;
-  padding: 0 5px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-control);
+  padding: 0 7px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
   color: var(--muted);
   font-size: var(--fs-micro);
+  line-height: 16px;
 }
 
 /* A version, wherever one is printed: mono, bold, tabular. */
@@ -232,6 +240,7 @@ code {
 @media (max-width: 1150px) { .drop-sm { display: none; } }
 @media (max-width: 800px) {
   .drop-xs { display: none; }
+  .brandmark .tagline { display: none; }
   .topbar { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .page { padding: var(--sp-4) var(--sp-3) 0; }
 }

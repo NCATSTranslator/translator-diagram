@@ -24,13 +24,6 @@
   --raised: #f2f4f7;               /* $lightGray */
   --raised-2: rgba(220, 220, 230, 0.4);  /* $palePurple at 40% */
 
-  /* A third, quieter surface: the one a comfortable-density table row sits
-     on. It has to be lighter than --raised, because --raised is what the row
-     lifts *to* on hover, and a list item whose resting and hover states are
-     the same colour is not a list item. */
-  --row: #f7f8fa;
-  --row-hover: #eceff4;
-
   --text: #202124;                 /* $black */
   --muted: #606368;                /* $darkGray */
   --hairline: rgba(206, 208, 208, 0.6);  /* $midGray at 60% */
@@ -52,6 +45,19 @@
   --ok: #669f38;
   --bad: #cc2e46;
 
+  /* The board: what an environment cell's tint says. Same as the rest of
+     the row, differs from it, up without a version, down, and the page's
+     own gap (no address on file). A cell the page is sure is empty — no
+     such host, no server listed, not a hosted service — has no tint. */
+  --same: rgba(102, 159, 56, 0.10);
+  --same-ink: #3d6b1c;
+  --diff: rgba(201, 138, 0, 0.16);
+  --diff-ink: #7a5300;
+  --down: rgba(204, 46, 70, 0.10);
+  --down-ink: #a0202f;
+  --nov: rgba(102, 159, 56, 0.05);
+  --off: rgba(128, 128, 128, 0.07);
+
   /* The tooltip and the drawer edge are the only shadows on the page.
      --edge-shadow is the colour of the drawer's, cast sideways or upwards
      depending on which edge it enters from. */
@@ -70,7 +76,8 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --fs-body: 14px;
-  --fs-table: 13px;
+  --fs-table: 14px;
+  --fs-name: 15px;     /* a component's name in its row */
   --fs-meta: 12px;
   --fs-label: 11px;    /* uppercase, tracked */
   --fs-micro: 10px;    /* source labels, release chips */
@@ -89,6 +96,7 @@
   --r-region: 0;
   --r-control: 4px;
   --r-node: 6px;
+  --r-pill: 2em;       /* a version, a release tag, a chip */
   --r-coin: 999px;
 
   --topbar-h: 64px;
@@ -97,22 +105,15 @@
      itself by it and is not inside the drawer. */
   --drawer-w: 440px;
 
-  /* One row style, not two. The dense metrics won — 32px rows, the id beside
-     the name, the source word beside the version, no second line per cell —
-     and they are drawn on the list-item surface: each row its own --row
-     ground, six pixels of gutter, four-pixel outer corners, no hairline
-     between rows. The density control is gone; `density=` and `details=` in
-     an old link are read and thrown away by core.js. */
-  --row-h: 32px;
-  --row-gap: 6px;                  /* the gutter between two rows */
-  --row-bg: var(--row);
-  --row-bg-hover: var(--row-hover);
-  --row-radius: var(--r-control);
-  --cell-pad-y: 2px;
+  /* One row style: a ruled table. Two lines per cell — the name over its
+     summary, the version over where it was read from and the data release
+     — on a hairline, with no gutter and no radius. The pill rows and the
+     density control they replaced are gone; `density=` and `details=` in an
+     old link are read and thrown away by core.js. */
+  --cell-pad-y: 6px;
   --cell-pad-x: 10px;
-  --cell-pad-left: 14px;
-  --exp-bg: var(--row-bg);         /* an open row and its detail are one item */
-  --detail-h: 22px;                /* one field of an open row */
+  --cell-pad-left: 20px;
+  --detail-h: 22px;                /* one fact of an open row */
 
   /* Motion. State 120–180ms, layout 240–320ms, camera 360ms, one easing. */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -138,13 +139,6 @@
   --raised: #1f1f22;
   --raised-2: #2c2c2e;             /* Apple grey 5 */
 
-  /* In light the row sits *above* --raised, because --raised is where it
-     hovers to. In dark there is room the other way: the elevated surface is
-     the row, and hover goes up to the second raise. Anything closer to the
-     page than this and the six-pixel gutters stopped reading at all. */
-  --row: #1f1f22;
-  --row-hover: #2c2c2e;
-
   --text: #f2f2f7;
   --muted: #a1a1a6;
   --hairline: #3a3a3c;
@@ -160,6 +154,15 @@
 
   --drift: rgba(151, 149, 179, 0.22);
   --drift-ink: #9795b3;
+
+  --same: rgba(102, 159, 56, 0.16);
+  --same-ink: #a8d58a;
+  --diff: rgba(234, 179, 8, 0.18);
+  --diff-ink: #f0c75e;
+  --down: rgba(204, 46, 70, 0.2);
+  --down-ink: #ff8c9c;
+  --nov: rgba(102, 159, 56, 0.07);
+  --off: rgba(255, 255, 255, 0.03);
 
   --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --edge-shadow: rgba(0, 0, 0, 0.2);

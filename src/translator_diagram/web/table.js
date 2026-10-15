@@ -6,14 +6,15 @@
   at narrow widths, and how it sorts — and three of them used to be written
   out twice, which is how a header ends up hidden without its column.
 
-  Two ideas are inherited from the page this replaces because they are what
-  make a table like this usable rather than merely correct: every filter
-  round-trips through the URL, so a view can be pasted into Slack and arrive
-  as the sender saw it; and a value in the minority across environments is
-  marked, so drift is visible without reading every cell. The mark is the
-  tint; issue #28's point — that colour alone excludes readers who cannot see
-  it — is answered by a visually-hidden sentence in the cell and by the
-  tooltip, not by a glyph printed over the version.
+  Every fact about an environment cell comes from TD.cell (core.js): the cell,
+  its tooltip and the expanded row read one model, so they cannot disagree
+  about a version or a reason. What this file decides is presentation — which
+  state a cell is in, and so which tint it gets — and the two ideas inherited
+  from the page this replaces: every filter round-trips through the URL, so a
+  view can be pasted into Slack and arrive as the sender saw it; and a value
+  in the minority across environments is marked, with a ≠ and an aria-label
+  as well as a tint, so drift is visible to a reader who cannot see colour
+  (issue #28).
 */
 
 (() => {
@@ -72,10 +73,11 @@
     let text = haystacks.get(row);
     if (text === undefined) {
       text = [
-        row.id, row.name, row.owner, row.infores,
+        row.id, row.name, row.owner, row.infores, row.summary,
         row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
         ...(row.releases || []).map((release) => release.tag),
         ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
+        ...TD.ENVS.map((env) => (cells(row)[env] || {}).data_release),
       ].map((value) => String(value ?? "").toLowerCase()).join("\n");
       haystacks.set(row, text);
     }
@@ -94,59 +96,78 @@
 
   /* --- Cells --------------------------------------------------------------- */
 
-  const sourceLabel = TD.fmt.sourceLabel;
+  const link = (url, html, cls) => {
+    const safe = TD.fmt.href(url);
+    return safe
+      ? `<a${cls ? ` class="${cls}"` : ""} href="${esc(safe)}" target="_blank" rel="noopener">${html}</a>`
+      : cls ? `<span class="${cls}">${html}</span>` : html;
+  };
 
   /* The dot, with its word for a reader who is not looking at it. */
-  function reachDot(cell) {
-    const state = TD.row.reach(cell);
-    if (!state) return "";
-    return `<span class="dot ${state}" aria-label="${
-      state === "up" ? "reachable" : "not reachable"}"></span>`;
+  function reachDot(reach) {
+    if (!reach) return "";
+    return `<span class="dot ${reach}" aria-label="${
+      reach === "up" ? "reachable" : "not reachable"}"></span>`;
+  }
+
+  /* Which of the board's states a cell is in. The tint carries this on
+     screen; the words in the cell carry it everywhere else.
+
+     "same" needs company: a component deployed in one environment agrees
+     with nobody, and tinting it green read as a claim the row never made.
+     "off" is the page's own gap (no address on file); an absence the page is
+     sure of — no such host, no server listed, not a hosted service — is
+     left white, because there is nothing to look at there. */
+  function cellState(m, peers) {
+    if (!m.deployed) return m.knownAbsent ? "none" : "off";
+    if (m.reach === "down") return "down";
+    if (!m.version) return "nov";
+    if (m.drift.length) return "diff";
+    return peers > 1 ? "same" : "one";
   }
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload
-     now says *why* we have nothing — no address on file, no such host, no
-     version endpoint to read, no server listed for this environment. The
-     reason goes where the version would have been, in the payload's own
-     words, and the green dot stays in front of it when the host itself
-     answered: "no version endpoint to read" is a claim about a host that is
-     up. */
+     says *why* we have nothing — no address on file, no such host, no version
+     endpoint to read, no server listed for this environment. The reason goes
+     where the version would have been, in the payload's own words, and the
+     green dot stays in front of it when the host itself answered. */
   function envCell(row, env) {
-    const cell = cells(row)[env];
-    if (!cell) return `<td class="env absent">${DASH()}</td>`;
-
-    const drift = (cell.drift || []).length ? " drift" : "";
-    const unregistered = cell.unregistered ? " unregistered" : "";
+    if (!cells(row)[env]) return `<td class="env absent">${DASH()}</td>`;
+    const m = TD.cell(row, env);
+    const peers = TD.ENVS.filter((e) => TD.cell(row, e).version).length;
+    const drift = m.drift.length ? " drift" : "";
+    const classes = `env${drift} ${cellState(m, peers)}${m.flags.unregistered ? " unregistered" : ""}`;
     // The tint carries the signal on screen; aria-label carries it to a reader
     // who is not looking at one. A child span would extend the document: abs
     // positioning inside a table cell does not stay inside the scrollport.
     const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
-    const dot = reachDot(cell);
-    // Weaker than the rest of the row and it says so: this environment was
-    // read off a server description in the registry, not recorded anywhere.
-    const inferred = cell.inferred
-      ? '<span class="inf" data-tip="inferred">inferred</span>'
-      : "";
     const tip = `data-tip="env" data-id="${esc(row.id)}" data-env="${esc(env)}"`;
+    const dot = reachDot(m.reach);
 
-    if (!cell.version) {
-      const why = cell.reason
-        ? `<span class="why clamp-2">${esc(cell.reason)}</span>`
-        : `<span class="version dash">—</span>`;
-      const up = cell.reachable === true ? reachDot(cell) : "";
-      return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
-        up}${why}</span>${inferred}</td>`;
+    if (!m.version) {
+      const why = m.reason ? `<span class="why">${esc(m.reason)}</span>` : DASH();
+      return `<td class="${classes}"${driftLabel} ${tip}>${dot}${why}</td>`;
     }
 
-    const version = `<span class="version">${esc(cell.version)}</span>`;
-    const source = cell.version_source
-      ? `<span class="src" data-src="${esc(cell.version_source)}" data-tip="src"
-           >${esc(sourceLabel(cell.version_source))}</span>`
+    // The version links to the document it was read from, so a reader who
+    // doubts it can open that document in a new tab. A copied value — from
+    // the registry or the chart, not the running service — is drawn as a
+    // dashed pill, so four identical registry values no longer read as four
+    // services agreeing (issue #30).
+    const pill = link(m.href, esc(m.version), `v${m.live ? "" : " copied"}`);
+    const neq = drift
+      ? `<span class="neq" aria-hidden="true" title="differs from the rest of this row on ${
+          esc(m.drift.join(", "))}">≠</span>`
       : "";
-
-    return `<td class="env${drift}${unregistered}"${driftLabel} ${tip}><span class="envline">${
-      version}${dot}</span>${source}${inferred}</td>`;
+    const second = [
+      `<span class="src" data-src="${esc(m.source)}" data-tip="src">${esc(m.sourceShort)}</span>`,
+      m.dataRelease ? `<span class="data">${esc(m.dataRelease)}</span>` : "",
+      m.flags.inferred ? '<span class="inf">inferred</span>' : "",
+      m.flags.unregistered ? '<span class="inf">not in SmartAPI</span>' : "",
+    ].filter(Boolean).join('<span class="sep"> · </span>');
+    return `<td class="${classes}"${driftLabel} ${tip}><span class="envline">${
+      dot}${pill}${neq}</span><span class="l2">${second}</span></td>`;
   }
 
   /* A release as a chip, for the expanded row's strip and the tooltips. A
@@ -154,47 +175,72 @@
      is the link between the strip and the four environment columns. */
   function releaseChip(row, release) {
     return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-      href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-      data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
+      href="${esc(TD.fmt.href(release.url) || "#")}" target="_blank" rel="noopener"
+      data-tip="rel" data-id="${esc(row.id)}" data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
   }
 
+  /* The repository, and under it the newest release and when: that date used
+     to be a column of its own, and it belongs beside the thing it dates. */
   function repoCell(row) {
-    if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
-    const label = TD.row.repoLabel(row.repository);
-    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${
-      esc(label)}</a></td>`;
-  }
-
-  function updatedCell(row) {
+    if (!row.repository) return `<td class="repo drop-md">${DASH()}</td>`;
     const updated = row.last_updated;
-    // Null for half the components — no releases, and in no registry. A dash
-    // is the honest reading, not a failure.
-    if (!updated) return `<td class="updated meta drop-sm">${DASH()}</td>`;
-    const label = TD.row.updatedLabel(updated);
-    return `<td class="updated meta drop-sm" data-tip="upd" data-id="${esc(row.id)}"
-      ><span class="age">${esc(TD.fmt.relativeAge(updated.at))}</span>
-      <span class="src" data-src="${esc(updated.source)}">${esc(label)}</span></td>`;
+    const released = updated && updated.source === "release"
+      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}"><span class="age">${
+          esc(TD.fmt.relativeAge(updated.at))}</span> · ${esc(updated.tag || "release")}</span>`
+      : "";
+    return `<td class="repo drop-md">${link(row.repository, esc(TD.row.repoLabel(row.repository)))}${
+      released}</td>`;
   }
 
+  /* One registration usually covers every environment, so it is a column of
+     its own rather than four facts: whether the component is registered at
+     all, how the registry's own probe finds it, and when the record last
+     changed. */
+  function smartapiCell(row) {
+    const record = row.smartapi_record;
+    if (!record) {
+      const candidates = (row.smartapi_candidates || []).length;
+      return `<td class="sapi drop-sm"><span class="why">${
+        candidates ? `${candidates} possible records` : "not registered"}</span></td>`;
+    }
+    const uptime = record.status && record.status.uptime_status;
+    const dot = uptime
+      ? `<span class="dot ${uptime === "pass" ? "up" : "down"}" aria-label="registry probe: ${esc(uptime)}"></span>`
+      : "";
+    const changed = row.last_updated && row.last_updated.source === "registry"
+      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}">changed <span class="age">${
+          esc(TD.fmt.relativeAge(row.last_updated.at))}</span></span>`
+      : "";
+    return `<td class="sapi drop-sm">${dot}${link(record.registry_url, "registered")}${changed}</td>`;
+  }
+
+  /* The name on the first line and, under it, the summary; the id joins the
+     second line only when the row is open, because it is the key a link or a
+     search uses rather than a thing to read down a column. */
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
         `<span class="chip">${TD.row.arrow(external.direction)} ${esc(external.name)}</span>`)
       .join("");
     const open = (state().expand || []).indexOf(row.id) >= 0;
+    const summary = row.summary ? `<span class="csum">${esc(row.summary)}</span>` : "";
     return `<td><span class="cnamewrap"><button type="button" class="chev"
         aria-expanded="${open}" data-expand="${esc(row.id)}"
         aria-label="Environment detail for ${esc(row.name)}">${TD.ui.CHEVRON}</button>${
       TD.owner.coin(row.owner, "narrow")}<button type="button" class="cname"
         data-open="${esc(row.id)}">${esc(row.name)}</button>${externals}</span>
-      <span class="cid">${esc(row.id)}</span></td>`;
+      <span class="csub"><span class="cid">${esc(row.id)}</span>${summary}</span></td>`;
   }
 
   function ownerCell(row) {
-    return `<td class="drop-xs">${TD.row.ownerLabel(row.owner)}</td>`;
+    return `<td class="drop-xs quiet">${TD.row.ownerLabel(row.owner)}</td>`;
   }
 
   /* --- Columns -------------------------------------------------------------- */
+
+  const registryDate = (row) =>
+    (row.last_updated && row.last_updated.source === "registry" ? row.last_updated.date : "")
+    || ((row.smartapi_record || {}).meta || {}).last_updated || "";
 
   const COLUMNS = [
     { key: "name", label: "Component", cell: componentCell, value: (row) => row.name },
@@ -207,10 +253,10 @@
       value: (row) => TD.row.repoLabel(row.repository),
     },
     {
-      key: "updated", label: "Last updated", drop: "drop-sm", cell: updatedCell,
-      value: (row) => (row.last_updated || {}).date || "",
+      key: "smartapi", label: "SmartAPI", drop: "drop-sm", cell: smartapiCell,
+      value: registryDate,
       compare: TD.sort.byDate, prefer: "asc", words: ["oldest first", "newest first"],
-      hint: "Sort by when this component last changed",
+      hint: "Sort by when the SmartAPI registration last changed",
     },
   ];
 
@@ -257,11 +303,9 @@
      The number alone was true and useless: "Step 6" tells a reader where the
      rows sit, not what they do. Both come from catalog/flow-steps.yaml.
 
-     It is a header, not a row, and everything in it is on the left: a count
-     pushed to the right edge landed under the `prod` column and read as a
-     value in it. The whole header is pinned to the left of the scrollport, so
-     a table scrolled sideways keeps it. The group's rows carry the same
-     `data-step`, which is what the spine in table.css is hung on. */
+     It is a section row, not a data row, and everything in it is on the
+     left: a count pushed to the right edge landed under the `prod` column and
+     read as a value in it. The group's rows carry the same `data-step`. */
   function bandHtml(group) {
     const first = group.rows[0];
     const flow = !sortColumn();
@@ -282,90 +326,39 @@
   /* --- Row expansion --------------------------------------------------------- */
 
   /* The expansion is not a panel under the row: it is more rows of the same
-     table, one per field, and every value sits in the column of the
+     table, one per fact, and every value sits in the column of the
      environment it belongs to. That column alignment is the whole point — a
      free-standing grid made a reader match "ci" to "ci" by eye, four times,
      for every field.
 
-     Version is deliberately absent: it is the row directly above. So is the
-     operations list, which belongs in the drawer; the count is enough here. */
-  const DETAIL_FIELDS = [
-    { label: "TRAPI", read: (cell) => esc(cell.trapi || "") },
-    { label: "Biolink", read: (cell) => esc(cell.biolink || "") },
-    { label: "Data release", read: (cell) => esc(cell.data_release || "") },
-    { label: "Released", read: (cell) => esc(cell.released || ""), num: true },
-    {
-      // A hostname has no spaces, so a narrow column either clips it or
-      // breaks it mid-label as "…transltr.i / o". A <wbr> after each dot
-      // gives the browser the only break points a reader would accept.
-      label: "Host",
-      mono: true,
-      read: (cell) => {
-        const href = TD.fmt.href(cell.openapi_url || cell.url);
-        const name = esc(TD.fmt.host(cell.url)).replace(/\./g, ".<wbr>");
-        return href ? `<a href="${esc(href)}">${name}</a>` : name;
-      },
-    },
-    {
-      // The document's status when there is one, the root's when there is
-      // not: a component with no OpenAPI document still answered something,
-      // and "no status at all" and "404 on the document" are different facts.
-      label: "HTTP", num: true,
-      read: (cell) => {
-        const status = cell.http_status == null ? cell.root_status : cell.http_status;
-        return status == null ? "" : esc(status);
-      },
-    },
-    {
-      label: "Reachable",
-      read: (cell) => (typeof cell.reachable === "boolean" ? (cell.reachable ? "yes" : "no") : ""),
-    },
-    {
-      label: "Paths", num: true,
-      read: (cell) => (cell.paths_count == null ? "" : esc(cell.paths_count)),
-    },
-    {
-      label: "Operations", num: true,
-      read: (cell) => {
-        const count = (cell.trapi_operations || []).length;
-        return count ? String(count) : "";
-      },
-    },
-  ];
+     The label sits in the first column, which is sticky, and the other
+     non-environment columns are empty cells carrying that column's drop
+     class, so they leave the table with their column. A colspan cannot do
+     this: a hidden cell generates no box, so a colspan row keeps claiming the
+     columns that have gone and shifts every value one column right.
 
-  /* The label sits immediately left of the first environment column, so the
-     word and the numbers it names touch. Which cell that is depends on the
-     width — Repository, Last updated and Owner drop out in that order — so
-     the label is written into every non-environment cell and CSS shows the
-     rightmost one still on screen. A colspan cannot do this: it is a fixed
-     number, the columns it covers come and go, and the first mismatch shifts
-     every value one column left. */
-  function detailLabelCells(label) {
-    return COLUMNS
-      .filter((column) => !column.env)
-      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${esc(label)}</span></td>`)
-      .join("");
-  }
+     Version is deliberately absent: it is the row directly above. */
+  const fillers = () => COLUMNS
+    .filter((column) => !column.env && column.key !== "name")
+    .map((column) => `<td class="${column.drop || ""}"></td>`)
+    .join("");
 
   function detailAttrs(row, group, flags) {
     const classes = ["detail"].concat(
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
+      flags.cls ? [flags.cls] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
   }
 
-  /* An environment with nothing to say gets an empty cell, not a dash: the
-     version row directly above has already said "not deployed" once, and
-     saying it nine more times underneath is what made the expansion read as a
-     field of blanks. */
-  function detailFieldRow(row, field, values, group, flags) {
-    const kind = `dv${field.mono ? " mono" : ""}`;
-    const cells_ = values.map((value) => `<td class="${kind}">${value}</td>`).join("");
-    return `<tr ${detailAttrs(row, group, flags)}>${
-      detailLabelCells(field.label)}${cells_}</tr>`;
+  function factCell(fact) {
+    if (!fact) return `<td class="dv"></td>`;
+    const text = fact.mono ? esc(fact.value).replace(/\./g, ".<wbr>") : esc(fact.value);
+    const note = fact.note ? `<span class="n">${esc(fact.note)}</span>` : "";
+    return `<td class="dv${fact.mono ? " mono" : ""}">${link(fact.href, text)}${note}</td>`;
   }
 
   /* `releases` is a slice of `releases_detail` (see `_release_chips`), so the
@@ -374,30 +367,27 @@
     return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
-  function detailReleasesRow(row, chips, group, flags) {
-    return `<tr ${detailAttrs(row, group, flags)}>${detailLabelCells("Releases")}<td
-      class="dv rels" colspan="${TD.ENVS.length}">${chips}</td></tr>`;
-  }
-
-  /* Only the fields somebody answered. Nine rows of which six were empty is
-     the shape the owner sent back; this builds the rows first and drops the
-     ones no environment filled in. */
+  /* Only the facts some environment answered, each in its environment's
+     column. The releases go under Repository, where the repository is, so
+     that row leaves the table with the column. */
   function detailRowsHtml(row, group) {
-    const deployed = TD.ENVS.map((env) => {
-      const cell = cells(row)[env];
-      return cell && cell.deployed ? cell : null;
-    });
-    const make = [];
-    for (const field of DETAIL_FIELDS) {
-      const values = deployed.map((cell) => (cell ? field.read(cell) : ""));
-      if (!values.some(Boolean)) continue;
-      make.push((flags) => detailFieldRow(row, field, values, group, flags));
-    }
+    const models = Object.fromEntries(TD.ENVS.map((env) => [env, TD.cell(row, env)]));
+    const labels = [...new Set(TD.ENVS.flatMap((env) => models[env].facts.map((f) => f.label)))];
+    const make = labels.map((label) => (flags) =>
+      `<tr ${detailAttrs(row, group, flags)}><td class="dk">${esc(label)}</td>${fillers()}${
+        TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === label))).join("")
+      }</tr>`);
     const chips = releaseChipsAll(row);
-    if (chips) make.push((flags) => detailReleasesRow(row, chips, group, flags));
+    if (chips) {
+      make.push((flags) => `<tr ${detailAttrs(row, group, { ...flags, cls: "drop-md" })}><td class="dk">Releases</td>${
+        COLUMNS.filter((column) => !column.env && column.key !== "name")
+          .map((column) => `<td class="${column.drop || ""}${column.key === "repo" ? " rels" : ""}">${
+            column.key === "repo" ? chips : ""}</td>`).join("")
+      }${TD.ENVS.map(() => `<td class="dv"></td>`).join("")}</tr>`);
+    }
     if (!make.length) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${
-        detailLabelCells("")}<td class="dv rels" colspan="${TD.ENVS.length}"><span class="dash">Nothing else is recorded for this component.</span></td></tr>`);
+      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}><td class="dk"></td>${fillers()}<td
+        class="dv note" colspan="${TD.ENVS.length}">Nothing else is recorded for this component.</td></tr>`);
     }
     return make
       .map((build, index) => build({ first: index === 0, last: index === make.length - 1 }))
@@ -420,8 +410,7 @@
   /* --- Table body ------------------------------------------------------------ */
 
   /* `group` is the band this row sits under, or null in an order that has no
-     bands (by date, by environment). It is what puts the spine on the row and
-     the indent under it, so "no bands, no spine" needs no second rule. */
+     bands (by date, by environment). */
   function rowHtml(row, group) {
     const open = (state().expand || []).indexOf(row.id) >= 0;
     const classes = ["row"];
@@ -500,7 +489,7 @@
     const kind = target.dataset.tip;
     if (kind === "src") {
       const key = target.dataset.src;
-      return `<div><b>${esc(sourceLabel(key))}</b></div><div class="note">${
+      return `<div><b>${esc(TD.fmt.sourceLabel(key))}</b></div><div class="note">${
         esc(SOURCE_NOTES[key] || "Where this value was read from.")}</div>`;
     }
     if (kind === "rel") {
@@ -532,25 +521,20 @@
     if (kind === "env") {
       const row = rowById(target.dataset.id);
       const env = target.dataset.env;
-      const cell = row && cells(row)[env];
-      if (!cell || !cell.deployed) return "";
+      if (!row) return "";
+      const m = TD.cell(row, env);
+      if (!m.deployed) return "";
       const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
-      const note = cell.unregistered
+      const note = m.flags.unregistered
         ? "Deployed, but absent from this component's SmartAPI record, which lists other environments."
         : "";
       return `<div class="title">${esc(row.id)} · ${esc(env)}</div><dl>${
-        pair("version", cell.version)}${
-        pair("source", cell.version_source ? sourceLabel(cell.version_source) : "")}${
-        pair("trapi", cell.trapi)}${
-        pair("biolink", cell.biolink)}${
-        pair("data release", cell.data_release)}${
-        pair("released", cell.released)}${
-        pair("http", cell.http_status)}${
-        pair("location", cell.location)}${
-        pair("url", cell.url)}</dl>${
-        (cell.drift || []).length
-          ? `<div class="note">Disagrees with the rest of this row on ${
-              esc((cell.drift || []).join(", "))}.</div>` : ""}${
+        pair("version", m.version)}${
+        pair("read from", m.version ? m.sourceWord : "")}${
+        pair("status", m.reason)}${
+        m.facts.map((f) => pair(f.label, f.note ? `${f.value} (${f.note})` : f.value)).join("")}</dl>${
+        m.drift.length
+          ? `<div class="note">Disagrees with the rest of this row on ${esc(m.drift.join(", "))}.</div>` : ""}${
         note ? `<div class="note">${esc(note)}</div>` : ""}`;
     }
     return "";
@@ -641,6 +625,7 @@
   table.hasDrift = hasDrift;
   // Pure given TD.state and TD.DATA, for tests/web/table.test.js.
   table.nextSort = nextSort;
+  table.cellState = cellState;
   table.envCell = envCell;
   table.bodyHtml = bodyHtml;
   table.detailRowsHtml = detailRowsHtml;

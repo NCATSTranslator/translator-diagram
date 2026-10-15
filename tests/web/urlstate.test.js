@@ -125,7 +125,7 @@ test("dir is written only beside a column, and never survives alone", () => {
   assert.equal(TD.url.parse("dir=desc").dir, "asc");
   // Both, always, when there is a column: the first click's direction differs
   // per column, so "asc" is not a default a reader of the URL could infer.
-  assert.equal(TD.url.serialize({ ...defaults(), sort: "updated" }), "sort=updated&dir=asc");
+  assert.equal(TD.url.serialize({ ...defaults(), sort: "smartapi" }), "sort=smartapi&dir=asc");
 });
 
 test("a query with everything default but whitespace stays empty", () => {

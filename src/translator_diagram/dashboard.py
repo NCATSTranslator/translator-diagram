@@ -423,7 +423,7 @@ def render_html(payload: dict[str, Any]) -> str:
      worth keeping separate: this line is one edit to undo when the public
      /private split in issue #7 is settled. -->
 <meta name="robots" content="noindex, nofollow">
-<title>Translator components overview</title>
+<title>Translator Components</title>
 <link rel="icon" type="image/x-icon" href="{_favicon_data_uri()}">
 <style>
 {_assets(CSS_FILES)}

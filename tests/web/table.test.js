@@ -86,7 +86,7 @@ test("stage order draws a band per step present, and never an empty one", () => 
 });
 
 test("a sort by date draws no bands, and no rows draws the empty message", () => {
-  reset({ sort: "updated", dir: "asc" });
+  reset({ sort: "smartapi", dir: "asc" });
   assert.doesNotMatch(table.bodyHtml(table.visibleRows()), /class="band"/);
   assert.match(table.bodyHtml([]), /No components match these filters/);
 });
@@ -105,8 +105,12 @@ test("an environment cell says why it has no version, and marks drift", () => {
   assert.match(table.envCell(ROWS[2], "prod"), /no version endpoint to read/);
   assert.match(table.envCell(ROWS[2], "prod"), /dot up/);
   assert.match(table.envCell(ROWS[2], "ci"), /class="env absent"/);
+  // A lone deployment agrees with nobody, so it is not tinted "same".
+  assert.match(table.envCell(ROWS[2], "prod"), /class="env nov"/);
+  assert.match(table.envCell(ROWS[0], "ci"), /class="env same"/);
   const drifting = table.envCell(ROWS[1], "ci");
-  assert.match(drifting, /class="env drift"/);
+  assert.match(drifting, /class="env drift diff"/);
+  assert.match(drifting, /≠/);
   assert.match(drifting, /aria-label="disagrees with the row"/);
   assert.doesNotMatch(table.envCell(ROWS[1], "prod"), /drift/);
 });
