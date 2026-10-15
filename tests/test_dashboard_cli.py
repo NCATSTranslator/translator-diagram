@@ -157,6 +157,14 @@ class TestAFullBuildHasItsOwnDirectory:
             "data/dashboard-private/overview.json"
         ]
 
+    def test_an_explicit_directory_wins_over_either_default(self, workspace):
+        """The private default is a default: someone who names a directory
+        gets that directory, with or without the flag."""
+        for args in ([], ["--include-private"]):
+            assert self._outputs(workspace, "--output-dir", "chosen", *args) == [
+                "chosen/overview.json"
+            ], args
+
 
 class TestAMissingPolicyStopsTheBuild:
     def test_no_policy_and_no_flag_is_an_error(self, workspace):
