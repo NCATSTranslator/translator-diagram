@@ -438,7 +438,7 @@
   function probeEvidence(cell) {
     if (filled(cell.http_status)) return { row: "http", status: cell.http_status };
     if (filled(cell.root_status)) return { row: "root", status: cell.root_status };
-    if (typeof cell.reachable === "boolean") return { row: "reachable", status: null };
+    if (TD.row.reach(cell)) return { row: "reachable", status: null };
     return { row: null, status: null };
   }
 
@@ -475,9 +475,9 @@
       ? `${ext(href, TD.fmt.host(cell.url || href))}<span class="dw-sub">${esc(cell.url || href)}</span>`
       : "";
 
-    const dotHtml = typeof cell.reachable === "boolean" ? dot(cell.reachable) : "";
-    const reach = typeof cell.reachable === "boolean"
-      ? note(cell.reachable ? "reachable" : "not reachable") : "";
+    const state = TD.row.reach(cell);
+    const dotHtml = state ? dot(state === "up") : "";
+    const reach = state ? note(state === "up" ? "reachable" : "not reachable") : "";
     // The dot travels to whichever row is the actual evidence, so a service
     // whose document never answered still says whether anything answered.
     const evidence = probeEvidence(cell);

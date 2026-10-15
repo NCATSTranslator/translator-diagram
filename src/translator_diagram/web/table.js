@@ -96,13 +96,6 @@
 
   const sourceLabel = TD.fmt.sourceLabel;
 
-  /* A cell with no version used to print a dash, which is the one thing this
-     page exists not to do: a dash says "we have nothing" where the payload
-     now says *why* we have nothing — no host recorded, no such host, up but
-     no version endpoint, not in the registry for this environment. The reason
-     goes where the version would have been, in the payload's own words, and
-     the green dot stays in front of it when the host itself answered, because
-     "up · no version endpoint" is a claim about a host that is up. */
   /* The dot, with its word for a reader who is not looking at it. */
   function reachDot(cell) {
     const state = TD.row.reach(cell);
@@ -111,6 +104,13 @@
       state === "up" ? "reachable" : "not reachable"}"></span>`;
   }
 
+  /* A cell with no version used to print a dash, which is the one thing this
+     page exists not to do: a dash says "we have nothing" where the payload
+     now says *why* we have nothing — no host recorded, no such host, up but
+     no version endpoint, not in the registry for this environment. The reason
+     goes where the version would have been, in the payload's own words, and
+     the green dot stays in front of it when the host itself answered, because
+     "up · no version endpoint" is a claim about a host that is up. */
   function envCell(row, env) {
     const cell = cells(row)[env];
     if (!cell) return `<td class="env absent">${DASH()}</td>`;

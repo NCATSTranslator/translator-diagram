@@ -93,8 +93,9 @@
     } catch { return ""; }
   }
 
-  /* The payload's name for a version source, or the key itself. */
-  const sourceLabel = (key) => ((TD.DATA || {}).source_labels || {})[key] || key;
+  /* The payload's name for a version source, or the key itself. `data` is
+     for the finding sentence, which is handed its payload so a test can. */
+  const sourceLabel = (key, data = TD.DATA || {}) => (data.source_labels || {})[key] || key;
 
   /* A component's `description`: the small Markdown subset the schema allows.
      Blank lines separate blocks; a block whose first line starts with "- " is
@@ -257,11 +258,10 @@
      source each version was read. */
   function findingSentence(data) {
     const tally = data.source_tally || {};
-    const labels = data.source_labels || {};
     const total = Object.values(tally).reduce((a, b) => a + b, 0);
     const named = ["openapi", "status", "smartapi", "helm"]
       .filter((key) => tally[key])
-      .map((key) => `<strong>${tally[key]}</strong> from ${esc(labels[key] || key)}`);
+      .map((key) => `<strong>${tally[key]}</strong> from ${esc(sourceLabel(key, data))}`);
     const none = tally.none
       ? `, and <strong>${tally.none}</strong> from nothing at all`
       : "";
