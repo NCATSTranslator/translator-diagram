@@ -245,7 +245,11 @@ repository topics belong to other teams. Treat every field as hostile markup.
   only the theme choice.
 - **Actions are pinned to commit SHAs**, with the version in a comment, so a
   moved tag cannot run new code with Pages deploy permission.
-  `.github/dependabot.yml` proposes updated pins weekly.
+  `.github/dependabot.yml` proposes updated pins weekly. A pin covers only the
+  action it names: a composite action that runs another by tag is still
+  exposed through it. `upload-pages-artifact` is the one composite here, and is
+  at v4.0.0 or later because v3 ran `actions/upload-artifact@v4` by tag; the
+  others are plain Node actions that run nothing else.
 - **Deploys are narrow.** The Pages workflow runs with `contents: read`. Only
   the deploy job gets `pages: write`, and it runs only on `main`, which the
   `github-pages` environment enforces from its side too: it accepts
@@ -297,7 +301,9 @@ rendering path:
 - [ ] **A new rendering path.** Is every value escaped and every link checked?
   Does it load nothing external?
 - [ ] **A workflow change.** A new action is pinned to a commit SHA with its
-  version in a comment, and the deploy job still deploys from `main` alone.
+  version in a comment, and, if it is a composite (`using: composite` in its
+  `action.yml`), the actions it runs are pinned too. The deploy job still
+  deploys from `main` alone.
 - [ ] **A new internal tool or host.** Add it to `config/privacy.yaml` in the
   same pull request.
 - [ ] **This document.** Move anything you addressed out of *Open*, and add
