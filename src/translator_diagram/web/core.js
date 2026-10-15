@@ -28,6 +28,7 @@
      cache — where half the keys below are simply absent — still boots. */
   TD.boot = function boot(payload) {
     TD.DATA = payload || {};
+    rowIndex = null;
     TD.ENVS = Array.isArray(TD.DATA.environments) && TD.DATA.environments.length
       ? TD.DATA.environments
       : DEFAULT_ENVS;
@@ -49,8 +50,8 @@
     return ageFormat;
   };
 
-  function relativeAge(iso) {
-    const ms = Date.now() - Date.parse(iso);
+  function relativeAge(iso, now = Date.now()) {
+    const ms = now - Date.parse(iso);
     if (!Number.isFinite(ms)) return "";
     const days = ms / 86400000;
     // Clamped, so a clock slightly ahead of GitHub's says "today" rather than
@@ -66,14 +67,14 @@
      a finer bottom end than a release date does. Kept separate rather than
      given to relativeAge: "the release running in prod is 3 hours old" is a
      claim this page cannot make, and blurring the two would let it. */
-  function since(iso) {
-    const ms = Date.now() - Date.parse(iso);
+  function since(iso, now = Date.now()) {
+    const ms = now - Date.parse(iso);
     if (!Number.isFinite(ms)) return "";
     const minutes = ms / 60000;
     if (minutes < 2) return "just now";
     if (minutes < 90) return relative().format(-Math.round(minutes), "minute");
     if (minutes < 1440) return relative().format(-Math.round(minutes / 60), "hour");
-    return relativeAge(iso);
+    return relativeAge(iso, now);
   }
 
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many ?? `${one}s`}`;
@@ -92,8 +93,9 @@
     } catch { return ""; }
   }
 
-  /* The payload's name for a version source, or the key itself. */
-  const sourceLabel = (key) => ((TD.DATA || {}).source_labels || {})[key] || key;
+  /* The payload's name for a version source, or the key itself. `data` is
+     for the finding sentence, which is handed its payload so a test can. */
+  const sourceLabel = (key, data = TD.DATA || {}) => (data.source_labels || {})[key] || key;
 
   /* A component's `description`: the small Markdown subset the schema allows.
      Blank lines separate blocks; a block whose first line starts with "- " is
@@ -185,6 +187,96 @@
   }
 
   TD.owner = { style: ownerStyle, metal: ownerMetal, coin: ownerCoin };
+
+  /* --- Rows --------------------------------------------------------------- */
+
+  /* What every view says about a row the same way. The table, the drawer and
+     the map each used to carry their own copy of these, and a label that
+     drifts between two views reads as two different facts. */
+
+  let rowIndex = null;
+
+  /* The row with this id, or null. Indexed once per payload rather than
+     searched: the tooltips, the drawer and the map all look rows up by id,
+     some of them on every hover. */
+  function rowById(id) {
+    if (!rowIndex) {
+      rowIndex = new Map();
+      for (const row of (TD.DATA || {}).rows || []) rowIndex.set(row.id, row);
+    }
+    return rowIndex.get(id) || null;
+  }
+
+  /* The owner's coin and name, as a chip. */
+  const ownerLabel = (name) =>
+    `<span class="ownercell">${ownerCoin(name)}<span>${esc(name)}</span></span>`;
+
+  /* `owner/name` for a GitHub repository URL; anything else as it is. */
+  const repoLabel = (url) => String(url ?? "").replace("https://github.com/", "");
+
+  /* The payload's word for where a `last_updated` date came from. */
+  const updatedLabel = (updated) =>
+    ((TD.DATA || {}).updated_labels || {})[updated.source] || updated.source;
+
+  /* An external's direction as the glyph every view draws it with. */
+  const arrow = (direction) => (direction === "in" ? "◀" : "▶");
+
+  /* "up", "down", or "" for a cell nothing probed: three states, because a
+     host that was never contacted is not a host that failed. */
+  const reach = (cell) =>
+    (typeof (cell || {}).reachable === "boolean" ? (cell.reachable ? "up" : "down") : "");
+
+  TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach };
+
+  /* --- Theme ------------------------------------------------------------- */
+
+  /* The cycle starts by moving *away* from what the system says, because the
+     page opens following the system: ordering it auto → light → dark would
+     spend the first click repainting a light machine light, which reads as a
+     broken button rather than as a default worth keeping. */
+  function nextTheme(choice, systemDark) {
+    const differs = systemDark ? "light" : "dark";
+    if (choice === "auto") return differs;
+    return choice === differs ? (systemDark ? "dark" : "light") : "auto";
+  }
+
+  TD.theme = { next: nextTheme };
+
+  /* --- The page's own summary of the payload ------------------------------ */
+
+  /* Deployed cells, across every row and environment. The second stat tile;
+     a count that once said 74 where there were 41, which is why it is here
+     where a test can reach it rather than inline in the shell. */
+  function deploymentCount(rows, envs) {
+    return (rows || []).reduce(
+      (n, row) => n + (envs || []).filter((env) => ((row.environments || {})[env] || {}).deployed).length,
+      0,
+    );
+  }
+
+  /* The first sentence on the page: how many deployments, and from which
+     source each version was read. */
+  function findingSentence(data) {
+    const tally = data.source_tally || {};
+    const total = Object.values(tally).reduce((a, b) => a + b, 0);
+    const named = ["openapi", "status", "smartapi", "helm"]
+      .filter((key) => tally[key])
+      .map((key) => `<strong>${tally[key]}</strong> from ${esc(sourceLabel(key, data))}`);
+    const none = tally.none
+      ? `, and <strong>${tally.none}</strong> from nothing at all`
+      : "";
+    if (!total) return "No deployments were found — has <code>sync-components</code> run?";
+    // The count is computed from the registry rather than from how the URL was
+    // found, so it covers deployments recorded by hand and deployments
+    // registered without an x-maturity as well as the ones a probe discovered.
+    const gaps = data.unregistered_count
+      ? ` <strong>${data.unregistered_count}</strong> of them are absent from their
+         component's SmartAPI record, which does list other environments.`
+      : "";
+    return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
+  }
+
+  TD.summary = { deployments: deploymentCount, finding: findingSentence };
 
   /* --- Sorting ----------------------------------------------------------- */
 

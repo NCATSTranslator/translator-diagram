@@ -57,6 +57,31 @@
   };
   const DEFAULT_VIEW = "all";
 
+  /* Everything the search box can match on a row, lowercased and joined once.
+     Keyed by the row object, so a keystroke does not rebuild twenty-seven
+     arrays, and dropped whenever TD.ENVS changes: the versions in it are read
+     per environment, and a payload can reuse its rows with a different list. */
+  let haystacks = new WeakMap();
+  let haystackEnvs = null;
+
+  function haystack(row) {
+    if (haystackEnvs !== TD.ENVS) {
+      haystacks = new WeakMap();
+      haystackEnvs = TD.ENVS;
+    }
+    let text = haystacks.get(row);
+    if (text === undefined) {
+      text = [
+        row.id, row.name, row.owner, row.infores,
+        row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
+        ...(row.releases || []).map((release) => release.tag),
+        ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
+      ].map((value) => String(value ?? "").toLowerCase()).join("\n");
+      haystacks.set(row, text);
+    }
+    return text;
+  }
+
   function visibleRows() {
     const s = state();
     const needle = (s.q || "").trim().toLowerCase();
@@ -64,21 +89,20 @@
     return (TD.DATA.rows || [])
       .filter((row) => !owners.length || owners.indexOf(row.owner) >= 0)
       .filter((VERSION_VIEWS[s.versions] || VERSION_VIEWS[DEFAULT_VIEW]).test)
-      .filter((row) => {
-        if (!needle) return true;
-        const haystack = [
-          row.id, row.name, row.owner, row.infores,
-          row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
-          ...(row.releases || []).map((release) => release.tag),
-          ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
-        ];
-        return haystack.some((value) => String(value ?? "").toLowerCase().includes(needle));
-      });
+      .filter((row) => !needle || haystack(row).includes(needle));
   }
 
   /* --- Cells --------------------------------------------------------------- */
 
   const sourceLabel = TD.fmt.sourceLabel;
+
+  /* The dot, with its word for a reader who is not looking at it. */
+  function reachDot(cell) {
+    const state = TD.row.reach(cell);
+    if (!state) return "";
+    return `<span class="dot ${state}" aria-label="${
+      state === "up" ? "reachable" : "not reachable"}"></span>`;
+  }
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload
@@ -97,10 +121,7 @@
     // who is not looking at one. A child span would extend the document: abs
     // positioning inside a table cell does not stay inside the scrollport.
     const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
-    const dot = typeof cell.reachable === "boolean"
-      ? `<span class="dot ${cell.reachable ? "up" : "down"}" aria-label="${
-          cell.reachable ? "reachable" : "not reachable"}"></span>`
-      : "";
+    const dot = reachDot(cell);
     // Weaker than the rest of the row and it says so: this environment was
     // read off a server description in the registry, not recorded anywhere.
     const inferred = cell.inferred
@@ -110,11 +131,9 @@
 
     if (!cell.version) {
       const why = cell.reason
-        ? `<span class="why">${esc(cell.reason)}</span>`
+        ? `<span class="why clamp-2">${esc(cell.reason)}</span>`
         : `<span class="version dash">—</span>`;
-      const up = cell.reachable === true
-        ? '<span class="dot up" aria-label="reachable"></span>'
-        : "";
+      const up = cell.reachable === true ? reachDot(cell) : "";
       return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
         up}${why}</span>${inferred}</td>`;
     }
@@ -129,30 +148,20 @@
       version}${dot}</span>${source}${inferred}</td>`;
   }
 
-  /* The repository, then its latest releases — plus any older release an
-     environment on this row is running, so the version in the table always has
-     its notes one click away. A release running somewhere is marked rather
-     than merely listed; that mark is the link between this column and the four
-     to its right. */
+  /* A release as a chip, for the expanded row's strip and the tooltips. A
+     release running somewhere is marked rather than merely listed; that mark
+     is the link between the strip and the four environment columns. */
   function releaseChip(row, release) {
     return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
       href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
       data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
   }
 
-  function releaseChips(row) {
-    return (row.releases || [])
-      .filter((release) => release.url)
-      .map((release) => releaseChip(row, release))
-      .join("");
-  }
-
   function repoCell(row) {
     if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
-    const label = row.repository.replace("https://github.com/", "");
-    const chips = releaseChips(row);
-    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${esc(label)}</a>${
-      chips ? `<span class="releases">${chips}</span>` : ""}</td>`;
+    const label = TD.row.repoLabel(row.repository);
+    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${
+      esc(label)}</a></td>`;
   }
 
   function updatedCell(row) {
@@ -160,7 +169,7 @@
     // Null for half the components — no releases, and in no registry. A dash
     // is the honest reading, not a failure.
     if (!updated) return `<td class="updated meta drop-sm">${DASH()}</td>`;
-    const label = (TD.DATA.updated_labels || {})[updated.source] || updated.source;
+    const label = TD.row.updatedLabel(updated);
     return `<td class="updated meta drop-sm" data-tip="upd" data-id="${esc(row.id)}"
       ><span class="age">${esc(TD.fmt.relativeAge(updated.at))}</span>
       <span class="src" data-src="${esc(updated.source)}">${esc(label)}</span></td>`;
@@ -169,7 +178,7 @@
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
-        `<span class="chip">${external.direction === "in" ? "◀" : "▶"} ${esc(external.name)}</span>`)
+        `<span class="chip">${TD.row.arrow(external.direction)} ${esc(external.name)}</span>`)
       .join("");
     const open = (state().expand || []).indexOf(row.id) >= 0;
     return `<td><span class="cnamewrap"><button type="button" class="chev"
@@ -181,8 +190,7 @@
   }
 
   function ownerCell(row) {
-    return `<td class="drop-xs"><span class="ownercell">${TD.owner.coin(row.owner)}<span>${
-      esc(row.owner)}</span></span></td>`;
+    return `<td class="drop-xs">${TD.row.ownerLabel(row.owner)}</td>`;
   }
 
   /* --- Columns -------------------------------------------------------------- */
@@ -195,7 +203,7 @@
     },
     {
       key: "repo", label: "Repository", drop: "drop-md", cell: repoCell,
-      value: (row) => (row.repository || "").replace("https://github.com/", ""),
+      value: (row) => TD.row.repoLabel(row.repository),
     },
     {
       key: "updated", label: "Last updated", drop: "drop-sm", cell: updatedCell,
@@ -220,6 +228,17 @@
   }
 
   const sortColumn = () => COLUMNS.find((column) => column.key === state().sort);
+
+  /* What a click on a column header does to the sort: the column's preferred
+     direction first, then the other, then home. The third click goes home
+     because without it stage order — the order the page is built to argue
+     for — would be unreachable once you left it. */
+  function nextSort(s, column) {
+    const preferred = column.prefer || "asc";
+    if (s.sort !== column.key) return { sort: column.key, dir: preferred };
+    if (s.dir === preferred) return { dir: preferred === "asc" ? "desc" : "asc" };
+    return { sort: "", dir: "asc" };
+  }
 
   /* --- Bands ---------------------------------------------------------------- */
 
@@ -480,7 +499,7 @@
 
   /* --- Tooltips -------------------------------------------------------------- */
 
-  const rowById = (id) => (TD.DATA.rows || []).find((row) => row.id === id);
+  const rowById = (id) => TD.row.byId(id);
 
   const SOURCE_NOTES = {
     openapi: "Read live from the deployment's own OpenAPI document.",
@@ -607,9 +626,13 @@
   /* The gutter between rows, in pixels: the open item's measured height has to
      stop at the last detail row's surface rather than at the six transparent
      pixels under it, or the shadow sits six pixels low. */
+  let gap = null;
   function rowGap() {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
-    return parseFloat(raw) || 0;
+    if (gap === null) {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
+      gap = parseFloat(raw) || 0;
+    }
+    return gap;
   }
 
   /* The item's outer box, for the one shadow drawn round it. Width comes from
@@ -720,17 +743,7 @@
     head.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-col]");
       if (!button) return;
-      const column = COLUMNS.find((entry) => entry.key === button.dataset.col);
-      const preferred = column.prefer || "asc";
-      const s = state();
-      if (s.sort !== column.key) TD.commit({ sort: column.key, dir: preferred });
-      else if (s.dir === preferred) {
-        TD.commit({ dir: preferred === "asc" ? "desc" : "asc" });
-      } else {
-        // Third click goes home. Without it, stage order — the order the page
-        // is built to argue for — would be unreachable once you left it.
-        TD.commit({ sort: "", dir: "asc" });
-      }
+      TD.commit(nextSort(state(), COLUMNS.find((entry) => entry.key === button.dataset.col)));
     });
 
     body.addEventListener("click", (event) => {
@@ -746,16 +759,7 @@
         return;
       }
       const name = event.target.closest("button[data-open]");
-      if (name) {
-        const id = name.dataset.open;
-        TD.commit({ sel: id }, { silent: true });
-        for (const row of body.querySelectorAll("tr.row")) {
-          row.classList.toggle("sel", row.dataset.id === id);
-        }
-        // The drawer lands in a later step; until it does, selecting a
-        // component records itself in the URL and does nothing else.
-        if (TD.drawer && TD.drawer.open) TD.drawer.open(id);
-      }
+      if (name) TD.drawer.open(name.dataset.open);
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
@@ -798,9 +802,38 @@
   table.orderHtml = orderHtml;
   table.visibleRows = visibleRows;
   table.hasDrift = hasDrift;
+  // Pure given TD.state and TD.DATA, for tests/web/table.test.js.
+  table.nextSort = nextSort;
+  table.envCell = envCell;
+  table.bodyHtml = bodyHtml;
+  table.detailRowsHtml = detailRowsHtml;
   table.scrollTo = function scrollTo(id) {
     if (!body) return;
     const tr = findRow(body, id);
     if (tr) tr.scrollIntoView({ block: "center", behavior: TD.motion.enabled ? "smooth" : "auto" });
+  };
+
+  /* The selected row's highlight, moved by hand: the drawer's commits are
+     silent (a full re-render for a tab change is a lot of work for nothing),
+     and the table paints `.sel` from TD.state only at render time. */
+  table.markSelected = function markSelected(id) {
+    if (!body) return;
+    for (const row of body.querySelectorAll("tr.row")) {
+      row.classList.toggle("sel", row.dataset.id === id);
+    }
+  };
+
+  /* Scroll the table's own scrollport so the row sits just under the sticky
+     header. Not scrollTo: scrollIntoView scrolls *every* ancestor scroller,
+     the document included, and with the drawer open as a sheet that slid the
+     whole page down and put the table behind the sheet. */
+  table.revealRow = function revealRow(id) {
+    if (!body || !wrap) return;
+    const tr = findRow(body, id);
+    if (!tr) return;
+    const thead = wrap.querySelector("thead");
+    const cover = thead ? thead.getBoundingClientRect().height : 0;
+    const delta = tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
+    wrap.scrollTop += delta - cover - 8;
   };
 })();

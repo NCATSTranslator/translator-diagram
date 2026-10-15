@@ -56,3 +56,44 @@ test("our own code has no third-party text", () => {
   assert.equal(thirdPartyText({ third_party: { software: "" } }), "");
   assert.equal(thirdPartyText(undefined), "");
 });
+
+// The TD drawer.js captured, taken at load (see index.js): deployedIn reads
+// its ENVS, and a test body runs after a later suite has replaced the global.
+const DRAWER_TD = globalThis.TD;
+const { catalogNeighbours, deployedIn, docLabel, probeEvidence } = DRAWER_TD.drawer;
+
+test("catalog edges run with the data: into a consumer, out of what it consumes", () => {
+  // Backwards once, and each list showed the other's components.
+  const edges = [
+    { from: "kp", to: "ars" }, { from: "ars", to: "ui" }, null, { from: "x", to: "y" },
+  ];
+  assert.deepEqual(catalogNeighbours(edges, "ars"), { consumes: ["kp"], consumedBy: ["ui"] });
+  assert.deepEqual(catalogNeighbours(edges, "nobody"), { consumes: [], consumedBy: [] });
+});
+
+test("deployedIn names the environments running a release, from the cells", () => {
+  DRAWER_TD.ENVS = ["ci", "test", "prod"];
+  const row = { environments: {
+    ci: { deployed: true, release_tag: "v2" },
+    test: { deployed: true, release_tag: "v1" },
+    prod: { deployed: false, release_tag: "v2" },
+  } };
+  assert.deepEqual(deployedIn(row, { tag: "v2" }), ["ci"]);
+  // The Python side's flag with no cell naming the tag: deployed, but where
+  // is unknown. Neither flag nor cell: not deployed.
+  assert.deepEqual(deployedIn(row, { tag: "v3", deployed: true }), []);
+  assert.equal(deployedIn(row, { tag: "v3" }), null);
+});
+
+test("a documentation label is the host and the page, not just github.com", () => {
+  assert.equal(docLabel("https://github.com/NCATSTranslator/ARS/wiki/Home"), "github.com / Home");
+  assert.equal(docLabel("https://example.org/docs/a%20b"), "example.org / a b");
+  assert.equal(docLabel("https://example.org/"), "example.org");
+});
+
+test("the dot sits on the row that is the actual evidence", () => {
+  assert.deepEqual(probeEvidence({ http_status: 404, root_status: 200, reachable: true }), { row: "http", status: 404 });
+  assert.deepEqual(probeEvidence({ root_status: 200, reachable: true }), { row: "root", status: 200 });
+  assert.deepEqual(probeEvidence({ reachable: false }), { row: "reachable", status: null });
+  assert.deepEqual(probeEvidence({}), { row: null, status: null });
+});

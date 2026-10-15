@@ -35,7 +35,7 @@
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
     writeUrl();
-    if (!(options && options.silent)) refresh();
+    if (!(options && options.silent)) renderView();
   };
 
   /* --- Theme ----------------------------------------------------------------- */
@@ -67,15 +67,7 @@
     return choice in THEME_NAMES ? choice : "auto";
   }
 
-  /* The cycle starts by moving *away* from what the system says, because the
-     page opens following the system: ordering it auto → light → dark would
-     spend the first click repainting a light machine light, which reads as a
-     broken button rather than as a default worth keeping. */
-  function nextTheme(choice) {
-    const differs = systemPrefersDark() ? "light" : "dark";
-    if (choice === "auto") return differs;
-    return choice === differs ? (systemPrefersDark() ? "dark" : "light") : "auto";
-  }
+  const nextTheme = (choice) => TD.theme.next(choice, systemPrefersDark());
 
   function applyTheme(choice) {
     const root = document.documentElement;
@@ -112,27 +104,6 @@
 
   /* --- Prose ----------------------------------------------------------------- */
 
-  function findingSentence() {
-    const tally = DATA.source_tally || {};
-    const total = Object.values(tally).reduce((a, b) => a + b, 0);
-    const named = ["openapi", "status", "smartapi", "helm"]
-      .filter((key) => tally[key])
-      .map((key) => `<strong>${tally[key]}</strong> from ${
-        esc(TD.fmt.sourceLabel(key))}`);
-    const none = tally.none
-      ? `, and <strong>${tally.none}</strong> from nothing at all`
-      : "";
-    if (!total) return "No deployments were found — has <code>sync-components</code> run?";
-    // The count is computed from the registry rather than from how the URL was
-    // found, so it covers deployments recorded by hand and deployments
-    // registered without an x-maturity as well as the ones a probe discovered.
-    const gaps = DATA.unregistered_count
-      ? ` <strong>${DATA.unregistered_count}</strong> of them are absent from their
-         component's SmartAPI record, which does list other environments.`
-      : "";
-    return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
-  }
-
   function driftSentence() {
     const drifting = (DATA.rows || []).filter(TD.table.hasDrift);
     if (!drifting.length) return "Every component reports the same version in every environment.";
@@ -142,8 +113,7 @@
 
   function statsHtml() {
     const counts = DATA.sync_counts || {};
-    const deployments = (DATA.rows || []).reduce(
-      (n, row) => n + ENVS.filter((env) => (row.environments || {})[env]?.deployed).length, 0);
+    const deployments = TD.summary.deployments(DATA.rows, ENVS);
     const perEnv = Object.entries(DATA.otel_service_counts || {})
       .map(([env, n]) => `${esc(env)} ${n}`).join(", ");
     const stat = (n, key) =>
@@ -172,7 +142,7 @@
       </div>
       <main class="page">
         <div class="finding">
-          <p>${findingSentence()}</p>
+          <p>${TD.summary.finding(DATA)}</p>
           <p>${driftSentence()}</p>
         </div>
         <div class="stats">${statsHtml()}</div>
@@ -198,6 +168,7 @@
   let viewSwitch = null;
   let ownerBox = null;
   let versionBox = null;
+  let search = null;
 
   function uniqueOwners() {
     return [...new Set((DATA.rows || []).map((row) => row.owner).filter(Boolean))]
@@ -219,8 +190,7 @@
       options: [{ value: "", label: "All owners" }, { separator: true }].concat(
         uniqueOwners().map((owner) => ({
           value: owner, label: owner,
-          render: () => `<span class="ownercell">${TD.owner.coin(owner)}<span>${
-            esc(owner)}</span></span>`,
+          render: () => TD.row.ownerLabel(owner),
         }))),
       onChange: (value) => TD.commit({ owner: value }),
     });
@@ -235,7 +205,7 @@
     });
     document.getElementById("f-view").append(versionBox.el);
 
-    const search = document.getElementById("q");
+    search = document.getElementById("q");
     search.value = TD.state.q;
     search.addEventListener("input", () => TD.commit({ q: search.value }));
 
@@ -322,15 +292,7 @@
 
   function renderView() {
     if (TD.state.view === "map") {
-      const container = document.getElementById("view-map");
-      // The map lands in a later step. Until then the switch is honest about
-      // it rather than showing an empty frame that looks like a failure.
-      if (TD.map && TD.map.render) TD.map.render(container);
-      else if (!container.querySelector(".empty-view")) {
-        container.innerHTML =
-          '<p class="empty-view">Map view is not built into this page yet.</p>';
-      }
-      const shown = TD.table.visibleRows().length;
+      const shown = TD.map.render(document.getElementById("view-map"));
       setStatus(shown, (DATA.rows || []).length);
       return;
     }
@@ -343,10 +305,6 @@
     document.getElementById("order").innerHTML = TD.table.orderHtml();
     document.getElementById("count").textContent =
       `${shown} of ${total} component${total === 1 ? "" : "s"}`;
-  }
-
-  function refresh() {
-    renderView();
   }
 
   /* --- Stat count-up ------------------------------------------------------------ */
@@ -394,6 +352,27 @@
   countUp();
 
   addEventListener("resize", measure);
+
+  /* Something other than the window changed how much room the views have —
+     the drawer opening or closing. The same two measurements a window resize
+     triggers, without dispatching a fake event to get them. */
+  TD.layoutChanged = function layoutChanged() {
+    measure();
+    TD.map.resized();
+  };
+
+  // Back and forward: the URL is the state, so re-read it, set the controls
+  // and the shown view from it, and let the drawer open or close to match.
+  // renderView alone drew into whichever view was already showing.
+  addEventListener("popstate", () => {
+    Object.assign(TD.state, TD.url.parse(location.search));
+    viewSwitch.set(TD.state.view);
+    ownerBox.set(TD.state.owner);
+    versionBox.set(TD.state.versions);
+    search.value = TD.state.q;
+    showView(false);
+    TD.drawer.sync();
+  });
 
   // A deep link arrives before the table exists, so the browser's own fragment
   // scroll finds nothing; this is the second attempt, once there are rows.

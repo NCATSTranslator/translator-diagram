@@ -17,6 +17,12 @@
   const ui = (TD.ui = TD.ui || {});
   const esc = (value) => TD.fmt.esc(value);
 
+  // The most room a listbox popover takes, for deciding which way it opens.
+  // Generous rather than measured: the popover is not in the layout until it
+  // opens, and flipping early costs nothing where flipping late clips.
+  const POP_MAX_HEIGHT = 330;
+  const POP_MAX_WIDTH = 260;
+
   let uid = 0;
   const nextId = (prefix) => `${prefix}-${++uid}`;
 
@@ -126,8 +132,8 @@
       // than let it open off the bottom of the screen.
       pop.classList.remove("up", "right");
       const rect = button.getBoundingClientRect();
-      if (rect.bottom + 330 > innerHeight && rect.top > 330) pop.classList.add("up");
-      if (rect.left + 260 > innerWidth) pop.classList.add("right");
+      if (rect.bottom + POP_MAX_HEIGHT > innerHeight && rect.top > POP_MAX_HEIGHT) pop.classList.add("up");
+      if (rect.left + POP_MAX_WIDTH > innerWidth) pop.classList.add("right");
     }
 
     function setOpen(next, focusWhich) {
@@ -256,6 +262,63 @@
     };
   };
 
+  /* --- Roving radio -------------------------------------------------------- */
+
+  /* What a segmented control and a tab list share: one button is current, it
+     alone is in the tab order, the arrow keys move between them, and a click
+     picks. The two differ only in the attribute that names a button, the ARIA
+     state that marks the current one, and whether Home and End work. */
+  function roving(root, buttons, config) {
+    const { attr, aria, ends, onChange, onPaint } = config;
+    let value = config.value;
+    const of = (button) => button.dataset[attr];
+    const at = () => buttons.findIndex((button) => of(button) === value);
+
+    function paint() {
+      for (const button of buttons) {
+        const on = of(button) === value;
+        button.setAttribute(aria, on ? "true" : "false");
+        button.tabIndex = on ? 0 : -1;
+      }
+      if (onPaint) onPaint(value);
+    }
+
+    function pick(next, focus) {
+      if (next === value) return;
+      value = next;
+      paint();
+      if (focus) {
+        const button = buttons.find((b) => of(b) === value);
+        if (button) button.focus({ preventScroll: true });
+      }
+      if (onChange) onChange(value);
+    }
+
+    root.addEventListener("click", (event) => {
+      const button = event.target.closest(`button[data-${attr}]`);
+      if (button) pick(of(button), false);
+    });
+    root.addEventListener("keydown", (event) => {
+      const index = at();
+      const step = (by) => pick(of(buttons[(index + by + buttons.length) % buttons.length]), true);
+      if (event.key === "ArrowRight" || (!ends && event.key === "ArrowDown")) {
+        event.preventDefault(); step(1);
+      } else if (event.key === "ArrowLeft" || (!ends && event.key === "ArrowUp")) {
+        event.preventDefault(); step(-1);
+      } else if (ends && event.key === "Home") {
+        event.preventDefault(); pick(of(buttons[0]), true);
+      } else if (ends && event.key === "End") {
+        event.preventDefault(); pick(of(buttons[buttons.length - 1]), true);
+      }
+    });
+
+    paint();
+    return {
+      get value() { return value; },
+      set(next) { value = next; paint(); },
+    };
+  }
+
   /* --- Segmented control -------------------------------------------------- */
 
   ui.segmented = function segmented(config) {
@@ -264,8 +327,6 @@
     if (config.label) root.setAttribute("aria-label", config.label);
     const indicator = el("span", "ind");
     root.append(indicator);
-
-    let value = config.value ?? (config.items[0] && config.items[0].value);
 
     const buttons = config.items.map((item) => {
       const button = el("button", null, esc(item.label));
@@ -276,54 +337,27 @@
       return button;
     });
 
-    function measure() {
-      const active = buttons.find((button) => button.dataset.value === value) || buttons[0];
+    // Given `current` by the paint, the first of which runs before `radio`
+    // exists; the public measure() below passes it, so a caller handing this
+    // to a listener cannot have an Event read as the value.
+    function measure(current) {
+      const active = buttons.find((button) => button.dataset.value === current) || buttons[0];
       if (!active || !active.offsetWidth) return;
       indicator.style.width = `${active.offsetWidth}px`;
       indicator.style.transform = `translateX(${active.offsetLeft - 2}px)`;
     }
 
-    function paint() {
-      for (const button of buttons) {
-        const on = button.dataset.value === value;
-        button.setAttribute("aria-checked", on ? "true" : "false");
-        button.tabIndex = on ? 0 : -1;
-      }
-      measure();
-    }
-
-    function pick(next, focus) {
-      if (next === value) return;
-      value = next;
-      paint();
-      if (focus) {
-        const button = buttons.find((b) => b.dataset.value === value);
-        if (button) button.focus({ preventScroll: true });
-      }
-      if (config.onChange) config.onChange(value);
-    }
-
-    root.addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-value]");
-      if (button) pick(button.dataset.value, false);
-    });
-    root.addEventListener("keydown", (event) => {
-      const at = buttons.findIndex((button) => button.dataset.value === value);
-      if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-        event.preventDefault();
-        pick(buttons[(at + 1) % buttons.length].dataset.value, true);
-      } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-        event.preventDefault();
-        pick(buttons[(at - 1 + buttons.length) % buttons.length].dataset.value, true);
-      }
+    const radio = roving(root, buttons, {
+      attr: "value", aria: "aria-checked", ends: false,
+      value: config.value ?? (config.items[0] && config.items[0].value),
+      onChange: config.onChange, onPaint: measure,
     });
 
-    paint();
     return {
       el: root,
-      measure,
-      get value() { return value; },
-      set(next) { value = next; paint(); },
+      measure: () => measure(radio.value),
+      get value() { return radio.value; },
+      set(next) { radio.set(next); },
     };
   };
 
@@ -427,54 +461,30 @@
 
   /* --- Tabs --------------------------------------------------------------- */
 
+  /* Each button gets `id` = `<prefix>-<tab id>` when `config.idPrefix` is
+     given, so a tabpanel can name the tab that labels it. */
   ui.tabs = function tabs(config) {
     const root = el("div", "tabs");
     root.setAttribute("role", "tablist");
     if (config.label) root.setAttribute("aria-label", config.label);
-    let value = config.value ?? (config.tabs[0] && config.tabs[0].id);
 
     const buttons = config.tabs.map((tab) => {
       const button = el("button", null, esc(tab.label));
       button.type = "button";
       button.setAttribute("role", "tab");
       button.dataset.id = tab.id;
+      if (config.idPrefix) button.id = `${config.idPrefix}-${tab.id}`;
       if (tab.panel) button.setAttribute("aria-controls", tab.panel);
       root.append(button);
       return button;
     });
 
-    function paint() {
-      for (const button of buttons) {
-        const on = button.dataset.id === value;
-        button.setAttribute("aria-selected", on ? "true" : "false");
-        button.tabIndex = on ? 0 : -1;
-      }
-    }
-
-    function pick(next, focus) {
-      if (next === value) return;
-      value = next;
-      paint();
-      if (focus) {
-        const button = buttons.find((b) => b.dataset.id === value);
-        if (button) button.focus({ preventScroll: true });
-      }
-      if (config.onChange) config.onChange(value);
-    }
-
-    root.addEventListener("click", (event) => {
-      const button = event.target.closest("button[data-id]");
-      if (button) pick(button.dataset.id, false);
-    });
-    root.addEventListener("keydown", (event) => {
-      const at = buttons.findIndex((button) => button.dataset.id === value);
-      if (event.key === "ArrowRight") { event.preventDefault(); pick(buttons[(at + 1) % buttons.length].dataset.id, true); }
-      else if (event.key === "ArrowLeft") { event.preventDefault(); pick(buttons[(at - 1 + buttons.length) % buttons.length].dataset.id, true); }
-      else if (event.key === "Home") { event.preventDefault(); pick(buttons[0].dataset.id, true); }
-      else if (event.key === "End") { event.preventDefault(); pick(buttons[buttons.length - 1].dataset.id, true); }
+    const radio = roving(root, buttons, {
+      attr: "id", aria: "aria-selected", ends: true,
+      value: config.value ?? (config.tabs[0] && config.tabs[0].id),
+      onChange: config.onChange,
     });
 
-    paint();
-    return { el: root, get value() { return value; }, set(next) { value = next; paint(); } };
+    return { el: root, get value() { return radio.value; }, set(next) { radio.set(next); } };
   };
 })();

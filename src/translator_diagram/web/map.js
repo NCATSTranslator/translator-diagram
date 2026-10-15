@@ -48,13 +48,6 @@
     return node;
   }
 
-  function html(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const esc = (value) => TD.fmt.esc(value);
 
@@ -106,7 +99,6 @@
   const nodeEls = new Map();
   const extEls = new Map();
   const edgeEls = [];
-  const rowById = new Map();
   const nodeById = new Map();
   const neighbours = new Map();
   const edgesOf = new Map();
@@ -121,6 +113,9 @@
   // Whether the camera has been moved on purpose — by a wheel, a drag, or a
   // selection flying to a node. A resize re-fits only while it has not.
   let touched = false;
+  // The box size the camera was last placed against, so a resize knows how
+  // far the middle moved.
+  const seen = { w: 0, h: 0 };
   const MAX_K = 3;
 
   /* --- Data --------------------------------------------------------------- */
@@ -189,7 +184,7 @@
     return bad ? "bad" : ok ? "ok" : "";
   }
 
-  const displayName = (id) => ((rowById.get(id) || {}).name || id);
+  const displayName = (id) => ((TD.row.byId(id) || {}).name || id);
 
   /* --- Defs ----------------------------------------------------------------- */
 
@@ -235,7 +230,7 @@
   /* --- Node ----------------------------------------------------------------- */
 
   function buildNode(node, gradientId) {
-    const row = rowById.get(node.id) || { id: node.id, name: node.id };
+    const row = TD.row.byId(node.id) || { id: node.id, name: node.id };
     const group = svg("g", {
       class: node.kind === "rail" ? "mp-node mp-rail-node" : "mp-node",
       transform: `translate(${node.x} ${node.y})`,
@@ -343,13 +338,11 @@
     nodeEls.clear();
     extEls.clear();
     edgeEls.length = 0;
-    rowById.clear();
     nodeById.clear();
     neighbours.clear();
     edgesOf.clear();
 
     const data = TD.DATA || {};
-    (data.rows || []).forEach((row) => rowById.set(row.id, row));
 
     scene = TD.layout.compute({
       stages: data.stages || [],
@@ -368,16 +361,16 @@
       console.warn(`TD.map: ${scene.violations.length} edge(s) cross a node: ${names}`);
     }
 
-    const pills = html("div", "mp-pills");
+    const pills = TD.ui.el("div", "mp-pills");
     scene.lanes.forEach((lane) => {
       if (!lane.count) return;
-      const pill = html("span", "mp-pill");
+      const pill = TD.ui.el("span", "mp-pill");
       pill.innerHTML = `<b>${esc(lane.step)}</b> ${esc(lane.title)}`;
       pills.append(pill);
     });
     container.append(pills);
 
-    box = html("div", "mp");
+    box = TD.ui.el("div", "mp");
     container.append(box);
 
     root = svg("svg", {
@@ -494,7 +487,7 @@
     box.append(buildLegend());
     box.append(buildToolbar());
     box.append(buildMinimap());
-    toast = html("div", "mp-toast");
+    toast = TD.ui.el("div", "mp-toast");
     toast.hidden = true;
     box.append(toast);
 
@@ -512,15 +505,15 @@
     root.querySelectorAll(".mp-lane-title").forEach((text) => truncate(text, 148));
 
     wire();
-    size();
     fit(false);
-    paint();
+    const shown = paint();
 
     if (firstPaint && TD.motion.enabled) {
       box.classList.add("mp-first");
       drawOn();
     }
     firstPaint = false;
+    return shown;
   }
 
   /* The edges arrive by drawing themselves, once. Their dash pattern is the
@@ -564,9 +557,9 @@
   };
 
   function buildToolbar() {
-    const bar = html("div", "mp-toolbar");
+    const bar = TD.ui.el("div", "mp-toolbar");
     const button = (label, title, action, wide) => {
-      const el = html("button", `mp-tool${wide ? " wide" : ""}`);
+      const el = TD.ui.el("button", `mp-tool${wide ? " wide" : ""}`);
       el.type = "button";
       el.title = title;
       el.setAttribute("aria-label", title);
@@ -578,21 +571,21 @@
     button("−", "Zoom out (−)", () => zoomBy(1 / 1.3));
     button("+", "Zoom in (+)", () => zoomBy(1.3));
     button(ICON.fit, "Fit to view (f)", () => fit(true));
-    bar.append(html("span", "mp-toolsep"));
+    bar.append(TD.ui.el("span", "mp-toolsep"));
     const toggle = button(ICON.legend, "Legend", () => {
       legend.hidden = !legend.hidden;
       toggle.classList.toggle("on", !legend.hidden);
     });
     toggle.classList.add("on");
-    bar.append(html("span", "mp-toolsep"));
+    bar.append(TD.ui.el("span", "mp-toolsep"));
     button("SVG", "Download the map as SVG", exportSvg, true);
     button("PNG", "Download the map as PNG at 2×", exportPng, true);
     return bar;
   }
 
   function buildLegend() {
-    legend = html("div", "mp-legend");
-    legend.append(html("h3", null, "Edges"));
+    legend = TD.ui.el("div", "mp-legend");
+    legend.append(TD.ui.el("h3", null, "Edges"));
     const active = activeKinds();
     KINDS.forEach((kind) => {
       if (!available(kind.key)) return;
@@ -608,7 +601,7 @@
       g.append(svg("path", { class: "mp-line", d: "M1 4 H 21" }));
       swatch.append(g);
       label.append(swatch);
-      label.append(html("span", null, kind.label));
+      label.append(TD.ui.el("span", null, esc(kind.label)));
       legend.append(label);
     });
     return legend;
@@ -736,6 +729,8 @@
     // An explicit fit is the reader saying "start again from the whole
     // picture", so the next resize is free to keep fitting it.
     touched = false;
+    seen.w = box.clientWidth;
+    seen.h = box.clientHeight;
     const height = scene.bounds.h * k;
     goal.k = k;
     goal.x = (box.clientWidth - scene.bounds.w * k) / 2;
@@ -783,10 +778,6 @@
     goal.y = box.clientHeight / 2 - (node.y + node.h / 2) * goal.k;
     coasting = false;
     nudge();
-  }
-
-  function size() {
-    /* Height comes from the flex column; nothing to measure here. */
   }
 
   /* --- Interaction ---------------------------------------------------------- */
@@ -902,8 +893,8 @@
     document.addEventListener("keydown", onKey);
     addEventListener("resize", onResize);
     if (typeof ResizeObserver === "function") {
-      // Width only: `size()` sets the height, so watching the height would
-      // have the observer answer its own notification for ever.
+      // Width only: the height comes from the flex column, so watching it
+      // would have the observer answer its own notification for ever.
       let lastWidth = host.clientWidth;
       new ResizeObserver(() => {
         if (host.clientWidth === lastWidth) return;
@@ -935,18 +926,24 @@
      and the drawer opening is a resize, so following a `?sel=` link zoomed to
      the component and then immediately zoomed back out. It re-fits only while
      nobody has moved the camera; after that it keeps the scale and holds
-     whatever was in the middle of the view in the middle of it. */
+     whatever was in the middle of the view in the middle of it.
+
+     It moves the camera and its goal by the same half of the size change, so
+     a flight in progress still lands centred. It once snapped the goal to the
+     camera instead, which stopped the flight a selection starts: the drawer
+     sends its second reflow 340ms after opening, mid-flight. That version
+     also measured the middle against the new size, so it never held it. */
   function onResize() {
     if (!box || !host || !host.classList.contains("on")) return;
-    const midX = (box.clientWidth / 2 - cam.x) / cam.k;
-    const midY = (box.clientHeight / 2 - cam.y) / cam.k;
-    size();
     if (!touched) { fit(false); return; }
-    goal.k = cam.k;
-    goal.x = box.clientWidth / 2 - midX * goal.k;
-    goal.y = box.clientHeight / 2 - midY * goal.k;
-    cam.x = goal.x;
-    cam.y = goal.y;
+    const dx = (box.clientWidth - seen.w) / 2;
+    const dy = (box.clientHeight - seen.h) / 2;
+    seen.w = box.clientWidth;
+    seen.h = box.clientHeight;
+    cam.x += dx;
+    cam.y += dy;
+    goal.x += dx;
+    goal.y += dy;
     applyCamera();
   }
 
@@ -1006,7 +1003,7 @@
   }
 
   function paint() {
-    if (!scene) return;
+    if (!scene) return 0;
     const kinds = activeKinds();
     const visible = new Set(TD.table.visibleRows().map((row) => row.id));
 
@@ -1014,13 +1011,12 @@
     edgeEls.forEach(({ el, edge, kind }) => {
       const on = kinds.has(kind);
       el.style.display = on ? "" : "none";
-      const dim = (rowById.has(edge.from) && !visible.has(edge.from))
-        || (rowById.has(edge.to) && !visible.has(edge.to));
+      const dim = (TD.row.byId(edge.from) && !visible.has(edge.from))
+        || (TD.row.byId(edge.to) && !visible.has(edge.to));
       el.classList.toggle("out", dim);
     });
     extEls.forEach((el, name) => {
-      const anchored = edgeEls.some(({ edge, kind }) =>
-        kinds.has(kind) && (edge.from === name || edge.to === name));
+      const anchored = (edgesOf.get(name) || []).some(({ kind }) => kinds.has(kind));
       el.style.display = anchored ? "" : "none";
     });
 
@@ -1036,6 +1032,7 @@
       const node = nodeById.get(wanted);
       if (node) flyTo(node, Math.max(1.25, cam.k));
     }
+    return visible.size;
   }
 
   function ring(id) {
@@ -1043,11 +1040,13 @@
     nodeEls.forEach((el, key) => el.classList.toggle("sel", key === id));
   }
 
+  /* The drawer records the selection (one silent commit, and it marks the
+     table and rings the node); the map then flies to it, which is what a
+     full refresh used to do by way of paint(). */
   function select(id) {
     if (!id || !nodeById.has(id)) return;
-    const el = nodeEls.get(id);
-    TD.commit({ sel: id });
-    if (TD.drawer && TD.drawer.open) TD.drawer.open(id, undefined, { opener: el });
+    TD.drawer.open(id, undefined, { opener: nodeEls.get(id) });
+    map.focus(id);
   }
 
   /* --- Tooltips ------------------------------------------------------------- */
@@ -1067,41 +1066,48 @@
     return shown.join(", ") + (more > 0 ? `, +${more} more` : "");
   }
 
-  function connectionLines(id) {
-    const buckets = {
+  /* One component's edges sorted into the four recorded directions plus the
+     externals, each entry `{name, planned}` and each bucket in name order.
+     `nameOf` turns an id into the name shown. */
+  function buckets(id, edges, nameOf) {
+    const found = {
       from: [], to: [], calls: [], calledBy: [], extIn: [], extOut: [],
     };
-    (edgesOf.get(id) || []).forEach(({ edge }) => {
+    edges.forEach((edge) => {
       const planned = !!edge.planned;
       if (edge.kind === "results") {
-        if (edge.to === id) buckets.from.push({ name: displayName(edge.from), planned });
-        else buckets.to.push({ name: displayName(edge.to), planned });
+        if (edge.to === id) found.from.push({ name: nameOf(edge.from), planned });
+        else found.to.push({ name: nameOf(edge.to), planned });
       } else if (edge.kind === "calls") {
-        if (edge.from === id) buckets.calls.push({ name: displayName(edge.to), planned });
-        else buckets.calledBy.push({ name: displayName(edge.from), planned });
+        if (edge.from === id) found.calls.push({ name: nameOf(edge.to), planned });
+        else found.calledBy.push({ name: nameOf(edge.from), planned });
       } else if (edge.kind === "external_in" && edge.to === id) {
-        buckets.extIn.push({ name: edge.from, planned });
+        found.extIn.push({ name: edge.from, planned });
       } else if (edge.kind === "external_out" && edge.from === id) {
-        buckets.extOut.push({ name: edge.to, planned });
+        found.extOut.push({ name: edge.to, planned });
       }
     });
     const byName = (a, b) => a.name.localeCompare(b.name);
-    Object.keys(buckets).forEach((key) => buckets[key].sort(byName));
+    Object.keys(found).forEach((key) => found[key].sort(byName));
+    return found;
+  }
 
+  function connectionLines(id) {
+    const found = buckets(id, (edgesOf.get(id) || []).map((record) => record.edge), displayName);
     const lines = [];
     const line = (label, entries) => {
       if (!entries.length) return;
       lines.push(`<div class="mp-tip-line"><span class="k">${label}</span> ${
         nameList(entries)}</div>`);
     };
-    line("Gets results from", buckets.from);
-    line("Provides results to", buckets.to);
-    line("Calls", buckets.calls);
-    line("Called by", buckets.calledBy);
-    if (buckets.extIn.length || buckets.extOut.length) {
+    line("Gets results from", found.from);
+    line("Provides results to", found.to);
+    line("Calls", found.calls);
+    line("Called by", found.calledBy);
+    if (found.extIn.length || found.extOut.length) {
       const parts = [];
-      if (buckets.extIn.length) parts.push(`◀ ${nameList(buckets.extIn)}`);
-      if (buckets.extOut.length) parts.push(`▶ ${nameList(buckets.extOut)}`);
+      if (found.extIn.length) parts.push(`${TD.row.arrow("in")} ${nameList(found.extIn)}`);
+      if (found.extOut.length) parts.push(`${TD.row.arrow("out")} ${nameList(found.extOut)}`);
       lines.push(`<div class="mp-tip-line"><span class="k">Externals</span> ${
         parts.join(" · ")}</div>`);
     }
@@ -1112,16 +1118,16 @@
   }
 
   function nodeTip(id) {
-    const row = rowById.get(id);
+    const row = TD.row.byId(id);
     if (!row) return "";
     const version = versionOf(row);
     const head = [
       `<span class="title">${esc(row.name || id)}</span>`,
       "<dl>",
-      `<dt>Owner</dt><dd>${esc(row.owner || "—")}</dd>`,
+      `<dt>Owner</dt><dd>${row.owner ? esc(row.owner) : TD.fmt.DASH}</dd>`,
     ];
     if (row.type) head.push(`<dt>Type</dt><dd>${esc(row.type)}</dd>`);
-    head.push(`<dt>Version</dt><dd>${version ? esc(version) : "—"}${
+    head.push(`<dt>Version</dt><dd>${version ? esc(version) : TD.fmt.DASH}${
       TD.table.hasDrift(row) ? ' <span class="mp-neq-tip">≠</span>' : ""}</dd>`);
     head.push("</dl>");
     return head.join("") + connectionLines(id);
@@ -1301,13 +1307,18 @@
 
   /* --- Public ------------------------------------------------------------- */
 
+  /* Returns how many rows the filters left on the map, so app.js's status
+     line does not run the filters a second time to find out. */
   map.render = function render(container) {
-    if (!container) return;
-    if (host !== container || !scene) build(container);
-    else { size(); paint(); }
+    if (!container) return 0;
+    if (host !== container || !scene) return build(container);
+    return paint();
   };
 
   map.ring = ring;
+  // The drawer taking or giving back its 440px is a resize the window never
+  // reports; app.js's TD.layoutChanged calls this.
+  map.resized = onResize;
 
   map.focus = function focus(id) {
     if (!nodeById.has(id)) return;
@@ -1316,4 +1327,9 @@
   };
 
   map.nodeNameLimit = nodeNameLimit;
+  // Pure, for tests/web/map.test.js.
+  map.kindOf = kindOf;
+  map.versionOf = versionOf;
+  map.reachability = reachability;
+  map.buckets = buckets;
 })();

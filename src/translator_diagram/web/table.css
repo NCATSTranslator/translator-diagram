@@ -50,7 +50,10 @@ table.grid {
 
 /* --- Header --------------------------------------------------------------- */
 
-thead th {
+/* The bare `thead th` and `tbody td` rules are scoped to this table with
+   :where(), which adds no specificity: without the scope they reached every
+   table on the page, and the drawer's had to opt out of each one by name. */
+:where(table.grid) thead th {
   position: sticky;
   top: 0;
   z-index: 3;
@@ -61,7 +64,7 @@ thead th {
   border-bottom: 1px solid var(--hairline-strong);
   white-space: nowrap;
 }
-thead th:first-child { left: 0; z-index: 4; }
+:where(table.grid) thead th:first-child { left: 0; z-index: 4; }
 thead th.env .sortcol { justify-content: center; }
 
 .sortcol {
@@ -99,7 +102,7 @@ thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
    written as two radii — 4px across, 4px+gutter down — because the padding
    edge's curve is the border-box curve minus the border it sits inside, and
    an un-corrected 4px there paints an ellipse. */
-tbody td {
+:where(table.grid) tbody td {
   height: var(--row-h);
   padding: var(--cell-pad-y) var(--cell-pad-x);
   border-bottom: var(--row-gap) solid transparent;
@@ -108,7 +111,7 @@ tbody td {
   background-clip: padding-box;
   transition: background-color var(--dur-fast) var(--ease);
 }
-tbody td:first-child {
+:where(table.grid) tbody td:first-child {
   position: sticky;
   left: 0;
   z-index: 2;
@@ -118,7 +121,7 @@ tbody td:first-child {
 }
 /* The environment columns never drop, so the last cell in the markup is
    always the last cell on screen and the right pair of corners is safe. */
-tbody td:last-child {
+:where(table.grid) tbody td:last-child {
   border-top-right-radius: var(--row-radius);
   border-bottom-right-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
 }
@@ -276,13 +279,7 @@ tbody tr.band:first-child td { padding-top: var(--sp-1); }
   font-size: var(--fs-label);
 }
 .chip {
-  display: inline-block;
   margin-left: 4px;
-  padding: 0 5px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-control);
-  color: var(--muted);
-  font-size: var(--fs-micro);
   white-space: nowrap;
 }
 
@@ -291,15 +288,8 @@ tbody tr.band:first-child td { padding-top: var(--sp-1); }
 td.repo { font-size: var(--fs-meta); }
 /* The chips live in the open row's Releases line now. Twenty-six rows each
    carrying five of them was the widest thing on the page and the least read. */
-.releases { display: none; }
 .rel {
-  display: inline-block;
   margin: 1px 4px 0 0;
-  padding: 0 5px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-control);
-  color: var(--muted);
-  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -330,15 +320,12 @@ tbody tr.row.sel td {
   background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
 }
 
-.version {
-  font-family: var(--mono);
-  font-size: var(--fs-table);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
 /* Deployed, but absent from a SmartAPI record that lists other environments.
    Marked, not coloured: the deployment was confirmed live. */
-.unregistered .version { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+.unregistered .version {
+  text-decoration: var(--planned-underline);
+  text-underline-offset: var(--planned-underline-offset);
+}
 /* One line: version, reachability, source. Inline-flex so the source word
    sits beside it rather than under it. */
 .envline {
@@ -375,10 +362,6 @@ td.env .src { margin-left: 5px; }
    uses. Two lines at most — past that it is a sentence, and a sentence
    belongs in the tooltip. */
 .why {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
   max-width: 140px;
   color: var(--muted);
   font-size: var(--fs-label);

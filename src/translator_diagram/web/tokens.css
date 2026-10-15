@@ -54,9 +54,17 @@
 
   /* The tooltip, the drawer edge, and an open row are the only shadows on the
      page. --lift is the third: it is not decoration, it is the one signal
-     that says an item is open and that the panel under it belongs to it. */
+     that says an item is open and that the panel under it belongs to it.
+     --edge-shadow is the colour of the drawer's, cast sideways or upwards
+     depending on which edge it enters from. */
   --shadow-pop: 0 6px 24px rgba(32, 33, 36, 0.14), 0 1px 2px rgba(32, 33, 36, 0.1);
   --lift: 0 4px 16px rgb(0 0 0 / 6%);
+  --edge-shadow: rgba(0, 0, 0, 0.06);
+
+  /* A plan rather than a fact: the planned edge on the map, the environment
+     a registration does not list, the service nothing reports. */
+  --planned-underline: underline dashed 1px;
+  --planned-underline-offset: 3px;
 
   /* Type. Open Sans is the brand face, but a self-contained page cannot fetch
      a web font, so it is asked for by name and used only if it is installed. */
@@ -89,6 +97,9 @@
 
   --topbar-h: 64px;
   --coin: 10px;
+  /* The drawer's column. Declared here, not on .drawer, because <main> pads
+     itself by it and is not inside the drawer. */
+  --drawer-w: 440px;
 
   /* One row style, not two. The dense metrics won — 32px rows, the id beside
      the name, the source word beside the version, no second line per cell —
@@ -155,12 +166,25 @@
   --drift: rgba(151, 149, 179, 0.22);
   --drift-ink: #9795b3;
 
-  --ok: #669f38;
-  --bad: #cc2e46;
-
   --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --lift: 0 4px 20px rgb(0 0 0 / 40%);
+  --edge-shadow: rgba(0, 0, 0, 0.2);
 }
+
+/*
+  The breakpoints. Not tokens — @media cannot read a custom property — so
+  they are written where they apply and listed here, once, so the ladder can
+  be read as one thing:
+
+  - 1400 / 1150 / 800px: the columns leave, Repository, then Last updated,
+    then Owner (base.css, the .drop-* rules); the expanded rows' label ladder
+    in table.css follows the same 1150 and 800.
+  - 1840 / 1590 / 1240px: the same three with the drawer open — each is the
+    window width plus --drawer-w (drawer.css).
+  - 900px: the drawer becomes a sheet over the bottom of the page (drawer.css,
+    map.css, and SHEET_MAX_WIDTH in drawer.js).
+  - 1500px and up: the environment columns get room (table.css).
+*/
 
 /*
   The height of an open row plus its detail rows, in pixels, measured by
