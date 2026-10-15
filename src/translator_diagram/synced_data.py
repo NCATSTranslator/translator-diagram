@@ -30,6 +30,7 @@ from .files import (
     confirmed_hosts,
     derived_path,
     endpoint_key,
+    endpoint_path,
     helm_file_path,
     helm_index_path,
     infores_catalog_path,
@@ -133,10 +134,9 @@ class SyncedData:
         Not named `root`: this class already has one, the sync directory
         itself, and a method shadowing it would be a bug that reads as a name.
         """
-        relative = endpoint_key("root", component_id, env)
-        if relative not in self.statuses:
+        if endpoint_key("root", component_id, env) not in self.statuses:
             return None
-        probe = read_json(self.root / relative)
+        probe = read_json(endpoint_path(self.root, "root", component_id, env))
         return probe if isinstance(probe, dict) else None
 
     def openapi_outcome(self, component_id: str, env: str) -> str | None:
@@ -154,14 +154,12 @@ class SyncedData:
         where a 200 was not a document, `"no-version"` where it was a document
         with no `info.version`, and `"version"` where there is one to show.
         """
-        relative = endpoint_key("openapi", component_id, env)
-        fetch = self.statuses.get(relative)
+        fetch = self.statuses.get(endpoint_key("openapi", component_id, env))
         if not fetch or fetch.get("status") != 200 or fetch.get("error"):
             return None
-        path = self.root / relative
-        if not path.exists():
+        if not endpoint_path(self.root, "openapi", component_id, env).exists():
             return None
-        document = self._body(relative)
+        document = self._body("openapi", component_id, env)
         if not isinstance(document, dict):
             return "not-json"
         info = document.get("info")
@@ -190,13 +188,12 @@ class SyncedData:
         one when GitHub rate-limits a run would lose real information and say
         nothing new in its place.
         """
-        relative = endpoint_key(kind, component_id, env)
-        fetch = self.statuses.get(relative)
+        fetch = self.statuses.get(endpoint_key(kind, component_id, env))
         if fetch and not (fetch.get("status") == 200 and not fetch.get("error")):
             return None
         # A 200 can carry any JSON at all — an array, a bare string — and every
         # reader of these bodies indexes them as objects.
-        body = self._body(relative)
+        body = self._body(kind, component_id, env)
         return body if isinstance(body, dict) else None
 
     def _once(self, key: tuple[str, ...], load: Callable[[], Any]) -> Any:
@@ -205,10 +202,13 @@ class SyncedData:
             self._memo[key] = load()
         return self._memo[key]
 
-    def _body(self, relative: str) -> Any:
+    def _body(self, kind: str, component_id: str, env: str) -> Any:
         """A cached JSON body, parsed once per build: the version chain and
         `openapi_outcome` both read every OpenAPI document."""
-        return self._once(("body", relative), lambda: read_json(self.root / relative))
+        return self._once(
+            ("body", kind, component_id, env),
+            lambda: read_json(endpoint_path(self.root, kind, component_id, env)),
+        )
 
     def releases(self, repo: str | None) -> list[dict[str, Any]]:
         """One repository's releases, newest first, as GitHub returned them."""
