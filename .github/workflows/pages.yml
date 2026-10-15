@@ -1,18 +1,25 @@
 # Build the dashboard, and publish it from main.
 #
-# Two jobs, because a repository has exactly one GitHub Pages deployment. A
-# pull request builds the page and uploads it as an artifact you can download
-# and open; main, the schedule and an explicit manual run deploy. Deploying
-# from a PR would overwrite the live site with that branch's build, would fail
-# outright for a fork (no Pages permission on a `pull_request` run), and would
-# leave the published site reporting whichever PR happened to build last —
-# this page reads live versions, so its content depends on when it ran as much
-# as on what it was built from.
+# Deploys from main only: a push, the daily schedule, or a manual run on main,
+# and each of those deploys. A manual run on any other branch builds the page
+# and uploads it as an artifact to download and open, and deploys nothing. That
+# is the way to review a branch's page as GitHub builds it before merging; the
+# commands are in README.md, "The components dashboard".
 #
-# A manual run *can* deploy a branch, deliberately: that is how a page gets
-# reviewed at its real URL before its PR merges. It overwrites the live site
-# until the next deploy from main, so it is a thing to do on purpose and say
-# out loud, not a thing to reach for absent-mindedly.
+# Pull requests do not trigger it. A PR is pushed to dozens of times before it
+# merges, and each build is a full sync -- about 240 requests to live
+# Translator services and 46 GitHub API calls -- of a commit that is usually
+# superseded within minutes; a local build answers the same question. What a
+# PR build caught that ci.yml's tests do not, a failure against live data, is
+# caught as safely on main: deploy needs a successful build, so a failed one
+# leaves the published page as it was.
+#
+# A branch cannot deploy, by design and by configuration: the github-pages
+# environment allows deployments from main only, so a deploy job on another
+# branch would be refused even if this file asked for one. Deploying a branch
+# for review would also overwrite the live site with it, and this page reads
+# live versions, so what it shows depends on when it ran as much as on what it
+# was built from.
 #
 # Neither job passes --include-private, so both apply config/privacy.yaml. That
 # is the point of redacting by default: this file cannot be edited into
@@ -22,7 +29,6 @@ name: Dashboard
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     # Daily. The data changes when someone deploys, not when we push.
     - cron: "0 7 * * *"
@@ -32,14 +38,13 @@ permissions:
   contents: read
 
 # Deploys serialise and are never cancelled half-way: the artifact a cancelled
-# run leaves behind is the one the next deploy would publish. Pull requests are
-# the opposite case — they only produce an artifact to download, and a build of
-# a commit you have already pushed past is worth nothing — so they get a group
-# per branch and cancel freely. One shared group would have made every PR build
-# queue behind every other, on a workflow that runs on every push.
+# run leaves behind is the one the next deploy would publish. A manual build of
+# another branch is the opposite case -- it only produces an artifact to
+# download, and a build of a commit already pushed past is worth nothing -- so
+# it gets a group per branch and cancels freely, without queueing behind main.
 concurrency:
-  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: pages-${{ github.ref == 'refs/heads/main' && 'deploy' || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -56,9 +61,9 @@ jobs:
 
       - name: Fetch what the component files point at
         env:
-          # Sent to api.github.com only, by _headers in sync.py. Raises the
-          # release-list budget from 60 calls an hour to 5000; one sync spends
-          # about 20.
+          # Sent to api.github.com only, by _headers in fetch.py. Raises the
+          # API budget from 60 calls an hour to 5000; one sync spends about 46
+          # (the breakdown is above _source_repos in sync.py).
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # A service being down is data, not an error — sync exits non-zero only
         # if it could not fetch anything at all. Read the step's output rather
@@ -71,26 +76,26 @@ jobs:
         # verifies its own output before writing.
         run: uv run build-dashboard
 
+      # The downloadable copy is for reviewing a branch. main publishes the
+      # same directory through upload-pages-artifact below, and the live site
+      # is its copy, so a second upload there would only be stored twice.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: github.ref != 'refs/heads/main'
         with:
           name: dashboard
           path: data/dashboard/
           if-no-files-found: error
 
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
         with:
           path: data/dashboard/
 
   deploy:
     needs: build
-    # Two ways in, and no third. A push to main or the schedule (which also
-    # runs on main) publishes what main says. A manual run publishes whatever
-    # ref it was dispatched with, which is the point of it -- reviewing a
-    # branch's page at a URL before merging it. `event_name != pull_request`
-    # was the old spelling and let any future trigger deploy by default; this
-    # one has to be edited to add a third way.
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    # main and nothing else, whichever of the three events started the run.
+    # The github-pages environment enforces the same rule from its side.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write

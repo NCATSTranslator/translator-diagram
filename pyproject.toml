@@ -7,7 +7,7 @@ dependencies = [
     "click>=8.0",
     "graphviz>=0.20",
     "python-dotenv>=1.0",
-    # The dashboard reads components/*.yaml at runtime. jsonschema stays in the
+    # The dashboard reads catalog/components/*.yaml at runtime. jsonschema stays in the
     # dev group: nothing but the tests validates those files.
     "pyyaml>=6.0",
 ]
@@ -35,13 +35,13 @@ build-backend = "hatchling.build"
 # code; owner-colors.csv does not, because it is a thing people edit.
 packages = ["src/translator_diagram"]
 
-# owner-colors.csv exists once, at config/owner-colors.csv, beside the other
+# owner-colors.csv exists once, at catalog/owner-colors.csv, beside the other
 # files people edit without opening a module. The wheel still needs it -- an
 # installed generate-diagram with no checkout to read falls back to the
 # packaged copy -- so the build maps the one file into the package rather than
 # the repository carrying a second copy that has to be kept in step by hand.
 [tool.hatch.build.targets.wheel.force-include]
-"config/owner-colors.csv" = "translator_diagram/owner-colors.csv"
+"catalog/owner-colors.csv" = "translator_diagram/owner-colors.csv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

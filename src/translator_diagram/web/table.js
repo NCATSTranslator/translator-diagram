@@ -78,9 +78,7 @@
 
   /* --- Cells --------------------------------------------------------------- */
 
-  function sourceLabel(key) {
-    return (TD.DATA.source_labels || {})[key] || key;
-  }
+  const sourceLabel = TD.fmt.sourceLabel;
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload
@@ -136,13 +134,16 @@
      its notes one click away. A release running somewhere is marked rather
      than merely listed; that mark is the link between this column and the four
      to its right. */
+  function releaseChip(row, release) {
+    return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
+      href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
+      data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
+  }
+
   function releaseChips(row) {
     return (row.releases || [])
       .filter((release) => release.url)
-      .map((release) =>
-        `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-          data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
+      .map((release) => releaseChip(row, release))
       .join("");
   }
 
@@ -234,7 +235,7 @@
 
   /* A band names its group and, in stage order, says what the group is for.
      The number alone was true and useless: "Step 6" tells a reader where the
-     rows sit, not what they do. Both come from config/flow-steps.yaml.
+     rows sit, not what they do. Both come from catalog/flow-steps.yaml.
 
      It is a header, not a row, and everything in it is on the left: a count
      pushed to the right edge landed under the `prod` column and read as a
@@ -357,15 +358,10 @@
       detailLabelCells(field.label)}${cells_}</tr>`;
   }
 
+  /* `releases` is a slice of `releases_detail` (see `_release_chips`), so the
+     expanded strip and the tooltips read the full list and nothing else. */
   function releaseChipsAll(row) {
-    const detail = (row.releases_detail || []).length ? row.releases_detail : (row.releases || []);
-    return detail
-      .filter((release) => release.tag)
-      .map((release) =>
-        `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-          href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-          data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`)
-      .join("");
+    return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
   function detailReleasesRow(row, chips, group, flags) {
@@ -505,8 +501,7 @@
     if (kind === "rel") {
       const row = rowById(target.dataset.id);
       if (!row) return "";
-      const all = (row.releases_detail || []).concat(row.releases || []);
-      const release = all.find((entry) => entry.tag === target.dataset.tag);
+      const release = (row.releases_detail || []).find((entry) => entry.tag === target.dataset.tag);
       if (!release) return "";
       const where = release.deployed ? "Running in an environment on this row" : "";
       return `<div class="title">${esc(release.tag)}</div><dl>${

@@ -1,30 +1,27 @@
-"""The fetchers, driven by an injected fetcher so nothing here reaches the network."""
+"""What sync plans, in which wave, and what it records — driven by an injected
+fetcher so nothing here reaches the network. The fetch itself is test_fetch.py."""
 
 import json
+import threading
 from datetime import UTC, datetime
 
+from tests.dashboard_helpers import FakeFetcher
 from translator_diagram.components import ComponentFile, Deployment
+from translator_diagram.fetch import _headers
 from translator_diagram.sync import (
     DEVOPS_HELM_INDEX,
     HELM_FILES,
     INFORES_CATALOG,
     SMARTAPI_QUERY,
-    FetchResult,
     _chart_totals,
     _confirm_derived,
-    _headers,
-    _plan_catalog,
     _plan_chart_commits,
     _plan_chart_fetches,
-    _plan_chart_index,
     _plan_index_chart_fetches,
     _plan_release_fetches,
     _plan_repo_meta,
     _plan_root_probes,
     _still_fresh,
-    deployments_from_smartapi,
-    fetch_to,
-    probe_to,
     sync,
 )
 
@@ -36,167 +33,6 @@ def _comp(cid, **kwargs):
 
 def _now_iso():
     return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-class FakeFetcher:
-    """Answers from a dict, and records what it was asked for."""
-
-    def __init__(self, responses, default=(404, b"")):
-        self.responses = responses
-        self.default = default
-        self.urls = []
-
-    def __call__(self, url):
-        self.urls.append(url)
-        value = self.responses.get(url, self.default)
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-
-class TestDeploymentsFromSmartapi:
-    def test_maturities_map_to_our_ladder(self):
-        record = {"servers": [
-            {"url": "https://x.dev/", "x-maturity": "development"},
-            {"url": "https://x.ci/", "x-maturity": "staging"},
-            {"url": "https://x.test/", "x-maturity": "testing"},
-            {"url": "https://x/", "x-maturity": "production"},
-        ]}
-        assert set(deployments_from_smartapi(record)) == {"dev", "ci", "test", "prod"}
-
-    def test_ci_is_staging_not_development(self):
-        # The mapping everyone gets wrong, and the reason it is a constant.
-        record = {"servers": [{"url": "https://x.ci/", "x-maturity": "staging"}]}
-        assert deployments_from_smartapi(record)["ci"].url == "https://x.ci/"
-
-    def test_a_server_without_maturity_is_dropped(self):
-        # Real: node-annotator's ci and test entries carry none. An environment
-        # we cannot name is not one we can put in a column.
-        record = {"servers": [{"url": "https://x/"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_the_first_of_a_duplicated_server_wins(self):
-        # name-lookup and sri-node-normalizer each list every server twice.
-        record = {"servers": [
-            {"url": "https://first/", "x-maturity": "production"},
-            {"url": "https://second/", "x-maturity": "production"},
-        ]}
-        assert deployments_from_smartapi(record)["prod"].url == "https://first/"
-
-    def test_no_servers_at_all(self):
-        assert deployments_from_smartapi({}) == {}
-
-
-class TestInferredMaturity:
-    """A registry record that describes its servers instead of declaring them."""
-
-    def _smartapi_shaped(self):
-        # The smartapi component's own registration, as the registry serves it
-        # today: two servers, prose descriptions, no x-maturity anywhere. It
-        # used to yield no environments at all, so the one component that is
-        # the registry had an empty row on a page about deployments.
-        return {"servers": [
-            {"description": "Production server", "url": "https://smart-api.info/api"},
-            {"description": "Development server",
-             "url": "https://dev.smart-api.info/api"},
-        ]}
-
-    def test_a_described_server_is_placed_and_marked(self):
-        found = deployments_from_smartapi(self._smartapi_shaped())
-        assert set(found) == {"prod", "dev"}
-        assert found["prod"].url == "https://smart-api.info/api"
-        assert all(d.inferred for d in found.values())
-
-    def test_a_declared_maturity_is_not_marked_inferred(self):
-        record = {"servers": [
-            {"url": "https://x.ci/", "x-maturity": "staging",
-             "description": "Production server"},
-        ]}
-        # Declared staging, described production. The field wins, and the cell
-        # must not be labelled as a guess when nothing was guessed.
-        found = deployments_from_smartapi(record)
-        assert set(found) == {"ci"}
-        assert found["ci"].inferred is False
-
-    def test_a_declaration_is_never_overwritten_by_a_description(self):
-        # Declaration first, description second, whatever order the servers are
-        # listed in -- an ordering by position would let the later entry win.
-        record = {"servers": [
-            {"url": "https://described/", "description": "Production server"},
-            {"url": "https://declared/", "x-maturity": "production"},
-        ]}
-        found = deployments_from_smartapi(record)
-        assert found["prod"].url == "https://declared/"
-        assert found["prod"].inferred is False
-
-    def test_the_url_is_never_read_as_a_maturity(self):
-        # `dev.smart-api.info` and `foo.ci.transltr.io` look like they name an
-        # environment. Reading one would file a production host as dev on the
-        # strength of a substring, which is the guess these files exist to
-        # avoid: only prose somebody wrote counts.
-        record = {"servers": [{"url": "https://dev.smart-api.info/api"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_a_description_naming_nothing_is_dropped(self):
-        record = {"servers": [{"url": "https://x/", "description": "Main server"}]}
-        assert deployments_from_smartapi(record) == {}
-
-    def test_testing_is_not_read_as_test(self):
-        # The alternation is ordered longest first, so "testing" cannot be
-        # matched as "test" plus a suffix -- both map to the same environment
-        # here, and would not if the vocabulary ever grew.
-        record = {"servers": [{"url": "https://x/", "description": "Testing server"}]}
-        assert set(deployments_from_smartapi(record)) == {"test"}
-
-    def test_staging_is_ci_the_way_x_maturity_is(self):
-        record = {"servers": [{"url": "https://x/", "description": "Staging server"}]}
-        assert set(deployments_from_smartapi(record)) == {"ci"}
-
-
-class TestFetchTo:
-    def test_a_200_is_written(self, tmp_path):
-        target = tmp_path / "out" / "body.json"
-        result = fetch_to("https://x/", target, FakeFetcher({"https://x/": (200, b"{}")}),
-                          max_age=0, root=tmp_path)
-        assert result.ok and target.read_bytes() == b"{}"
-
-    def test_a_404_is_recorded_and_writes_nothing(self, tmp_path):
-        # ars and ploverdb 404 at every environment. That is a finding worth
-        # keeping, not a crash, and it must not leave a bogus cached body.
-        target = tmp_path / "body.json"
-        result = fetch_to("https://x/", target, FakeFetcher({}), max_age=0, root=tmp_path)
-        assert result.status == 404
-        assert not result.ok
-        assert not target.exists()
-
-    def test_an_exception_is_recorded_rather_than_raised(self, tmp_path):
-        fetcher = FakeFetcher({"https://x/": TimeoutError("timed out")})
-        result = fetch_to("https://x/", tmp_path / "b.json", fetcher, max_age=0, root=tmp_path)
-        assert result.status is None
-        assert "TimeoutError" in result.error
-
-    def test_a_fresh_file_is_not_refetched(self, tmp_path):
-        target = tmp_path / "body.json"
-        target.write_bytes(b"cached")
-        fetcher = FakeFetcher({})
-        result = fetch_to("https://x/", target, fetcher, max_age=9999, root=tmp_path)
-        assert result.cached and fetcher.urls == []
-        assert target.read_bytes() == b"cached"
-
-    def test_max_age_zero_always_refetches(self, tmp_path):
-        target = tmp_path / "body.json"
-        target.write_bytes(b"stale")
-        fetcher = FakeFetcher({"https://x/": (200, b"fresh")})
-        fetch_to("https://x/", target, fetcher, max_age=0, root=tmp_path)
-        assert target.read_bytes() == b"fresh"
-
-    def test_the_recorded_path_is_relative_to_the_root(self, tmp_path):
-        # The manifest is read back by the dashboard to look up HTTP statuses,
-        # so an absolute path here would make every lookup miss.
-        result = fetch_to("https://x/", tmp_path / "openapi" / "a" / "ci.json",
-                          FakeFetcher({"https://x/": (200, b"{}")}),
-                          max_age=0, root=tmp_path)
-        assert result.path == "openapi/a/ci.json"
 
 
 class TestSync:
@@ -262,6 +98,29 @@ class TestSync:
              tmp_path, fetcher=fetcher, max_age=0)
         assert any("helm/my-chart/Chart.yaml" in url for url in fetcher.urls)
 
+    def test_a_record_found_by_infores_is_fetched_too(self, tmp_path):
+        # The page attaches a record by infores when exactly one claims it,
+        # so sync has to fetch what that record points at. It used to look
+        # records up by recorded id only, and dogpark-tier-0's registered
+        # deployments were shown without ever being asked for anything.
+        hits = [{"_id": "abc",
+                 "info": {"x-translator": {"infores": "infores:svc"}},
+                 "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}]}]
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        sync([_comp("svc", identifiers={"infores": "infores:svc"})],
+             tmp_path, fetcher=fetcher, max_age=0)
+        assert "https://svc.ci/openapi.json" in fetcher.urls
+        assert "https://svc.ci/" in fetcher.urls
+
+    def test_records_sharing_an_infores_attach_nothing_here_either(self, tmp_path):
+        hits = [{"_id": n, "info": {"x-translator": {"infores": "infores:svc"}},
+                 "servers": [{"url": f"https://{n}.ci/", "x-maturity": "staging"}]}
+                for n in ("one", "two")]
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        sync([_comp("svc", identifiers={"infores": "infores:svc"})],
+             tmp_path, fetcher=fetcher, max_age=0)
+        assert not [u for u in fetcher.urls if u.startswith(("https://one", "https://two"))]
+
     def test_a_component_being_down_does_not_fail_the_run(self, tmp_path):
         # The whole point: "was this endpoint reachable" is the question, so an
         # unreachable one is an answer.
@@ -323,60 +182,6 @@ class TestRootProbe:
         assert any(f.path == "root/svc/ci.json" for f in report.fetches)
         manifest = json.loads((tmp_path / "manifest.json").read_text())
         assert any(f["path"] == "root/svc/ci.json" for f in manifest["fetches"])
-
-    def test_the_saved_probe_is_a_summary_not_the_page(self, tmp_path):
-        # The reason `probe_to` exists at all. A root probe answers with a
-        # file browser, a login page or a single-page app's shell, and none of
-        # those belongs under data/sync/, where every other reader expects a
-        # document it can parse.
-        fetcher = FakeFetcher(
-            {"https://svc/": (200, b"<html><body>not a document</body></html>")}
-        )
-        target = tmp_path / "root" / "svc" / "ci.json"
-        probe_to("https://svc/", target, fetcher, max_age=0, root=tmp_path)
-        saved = json.loads(target.read_text())
-        assert saved == {"status": 200, "content_type": None, "error": None}
-        assert "html" not in target.read_text()
-
-    def test_a_404_is_saved_rather_than_leaving_the_last_answer(self, tmp_path):
-        # The other half of the difference from `fetch_to`, which keeps the
-        # previous body on a non-200. A stale *status* is the lie the whole
-        # manifest gate exists to stop.
-        target = tmp_path / "root" / "svc" / "ci.json"
-        target.parent.mkdir(parents=True)
-        target.write_text(json.dumps({"status": 200, "content_type": None, "error": None}))
-        probe_to("https://svc/", target, FakeFetcher({}), max_age=0, root=tmp_path)
-        assert json.loads(target.read_text())["status"] == 404
-
-    def test_a_failure_is_recorded_with_its_error(self, tmp_path):
-        target = tmp_path / "root" / "svc" / "ci.json"
-        fetcher = FakeFetcher({"https://svc/": OSError("nodename nor servname")})
-        result = probe_to("https://svc/", target, fetcher, max_age=0, root=tmp_path)
-        assert result.status is None and "OSError" in result.error
-        saved = json.loads(target.read_text())
-        assert saved["status"] is None and "OSError" in saved["error"]
-
-    def test_a_cached_probe_reports_the_status_it_recorded(self, tmp_path):
-        # `fetch_to` can report a cached hit as 200 because a body on disk got
-        # there by being a 200. A probe summary is written whatever happened,
-        # so reading 200 off its freshness would invent an answer.
-        target = tmp_path / "root" / "svc" / "ci.json"
-        target.parent.mkdir(parents=True)
-        target.write_text(json.dumps(
-            {"status": 503, "content_type": None, "error": None}
-        ))
-        fetcher = FakeFetcher({})
-        result = probe_to("https://svc/", target, fetcher, max_age=9999, root=tmp_path)
-        assert result.cached and result.status == 503 and fetcher.urls == []
-
-    def test_a_content_type_is_kept_when_the_fetcher_reports_one(self, tmp_path):
-        # The real fetcher answers with three parts; every fake in this file
-        # answers with two, and both have to work.
-        target = tmp_path / "root" / "svc" / "ci.json"
-        probe_to("https://svc/", target,
-                 lambda url: (200, b"<html>", "text/html"),
-                 max_age=0, root=tmp_path)
-        assert json.loads(target.read_text())["content_type"] == "text/html"
 
     def _body(self, hits):
         return json.dumps({"hits": hits}).encode()
@@ -447,7 +252,7 @@ class TestChartFetches:
         assert {destination.name for _, destination in jobs} == set(HELM_FILES)
 
     def test_a_component_deployed_by_two_charts_gets_both(self, tmp_path):
-        # nodenorm-es is a web server chart and a loader chart. Planning only
+        # nodenorm-redis is a web server chart, a loader chart and more. Planning only
         # the first would cache half the component and look complete doing it.
         jobs = _plan_chart_fetches(
             [_comp("svc", identifiers={"helm_chart": ["web-server", "loader"]})],
@@ -462,13 +267,6 @@ class TestChartIndex:
     def _index(self, root, entries):
         (root / "helm").mkdir(parents=True, exist_ok=True)
         (root / "helm" / "index.json").write_text(json.dumps(entries))
-
-    def test_it_is_planned_once_at_a_stable_path(self, tmp_path):
-        # Stable, because the previous manifest's path-to-URL map is what
-        # re-fetches a body whose URL moved. A path that varied would defeat it.
-        assert _plan_chart_index(tmp_path) == [
-            (DEVOPS_HELM_INDEX, tmp_path / "helm" / "index.json")
-        ]
 
     def test_it_asks_for_the_branch_the_raw_fetches_use(self):
         assert "ref=develop" in DEVOPS_HELM_INDEX
@@ -612,11 +410,6 @@ class TestRepoMeta:
 
 
 class TestCatalog:
-    def test_one_plan_at_a_stable_destination(self, tmp_path):
-        assert _plan_catalog(tmp_path) == [
-            (INFORES_CATALOG, tmp_path / "infores_catalog.yaml")
-        ]
-
     def test_it_spends_nothing_from_the_github_api_budget(self):
         # raw.githubusercontent.com, so no Accept header, no token, no ceiling.
         assert INFORES_CATALOG.startswith("https://raw.githubusercontent.com/")
@@ -841,18 +634,6 @@ class TestChangedUrlInvalidatesCache:
         assert any(f.cached for f in report.fetches)
 
 
-class TestHeaders:
-    def test_a_token_reaches_github_and_nowhere_else(self, monkeypatch):
-        monkeypatch.setenv("GITHUB_TOKEN", "s3cret")
-        assert _headers("https://api.github.com/repos/a/b/releases")[
-            "Authorization"] == "Bearer s3cret"
-        assert "Authorization" not in _headers("https://smart-api.info/api/query")
-
-    def test_no_token_is_no_header(self, monkeypatch):
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        assert "Authorization" not in _headers("https://api.github.com/repos/a/b")
-
-
 class TestConfirmDerived:
     """A derived host is believed only if it says it is the right component."""
 
@@ -943,6 +724,57 @@ class TestConfirmDerived:
                 "https://svc.ci.transltr.io/openapi.json": (200, body)})
             assert _confirm_derived(
                 component, candidate, fetcher, tmp_path, 0)[1] is False
+
+
+class TestConfirmedDerivedHosts:
+    """A host an earlier run confirmed, on the run after."""
+
+    def _openapi(self, infores):
+        return json.dumps({"info": {"version": "1.0", "x-translator": {
+            "infores": infores}}}).encode()
+
+    def _component(self):
+        return _comp(
+            "svc",
+            identifiers={"infores": "infores:svc"},
+            endpoints={"status": "status"},
+            environments={
+                "ci": Deployment(env="ci", url="https://svc.ci.transltr.io/")},
+        )
+
+    def test_its_status_is_fetched_and_its_openapi_only_once(self, tmp_path):
+        # The confirmation re-fetches the OpenAPI document; nothing fetched
+        # /status, so a confirmed host never showed a status-sourced version.
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
+            "svc": {"prod": {"url": "https://svc.transltr.io/", "location": "ITRB"}}}}))
+        fetcher = FakeFetcher({
+            SMARTAPI_QUERY: (200, b'{"hits": []}'),
+            "https://svc.transltr.io/openapi.json": (200, self._openapi("infores:svc")),
+            "https://svc.transltr.io/status": (200, b'{"svc_version": "2.0"}'),
+        })
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=0)
+        assert fetcher.urls.count("https://svc.transltr.io/status") == 1
+        assert fetcher.urls.count("https://svc.transltr.io/openapi.json") == 1
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert any(f["path"] == "status/svc/prod.json" and f["status"] == 200
+                   for f in manifest["fetches"])
+
+    def test_a_cached_document_from_another_url_is_not_evidence(self, tmp_path):
+        # The previous run fetched this file from an older candidate URL. Fresh
+        # by its mtime, it still answers a different question, and confirming
+        # the new hostname from it would accept a host nobody contacted.
+        cached = tmp_path / "openapi" / "svc" / "prod.json"
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(self._openapi("infores:svc"))
+        (tmp_path / "manifest.json").write_text(json.dumps({"fetches": [{
+            "path": "openapi/svc/prod.json",
+            "url": "https://old-svc.transltr.io/openapi.json", "status": 200}]}))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, b'{"hits": []}')})
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=9999)
+        assert "https://svc.transltr.io/openapi.json" in fetcher.urls
+        derived = json.loads((tmp_path / "derived.json").read_text())
+        assert "prod" not in derived["confirmed"].get("svc", {})
+        assert derived["rejected"]["svc"]["prod"]["url"] == "https://svc.transltr.io/"
 
 
 class TestAMalformedRegistry:
@@ -1106,7 +938,44 @@ def test_sync_writes_derived_json_even_when_nothing_is_found(tmp_path):
         "confirmed": {}, "rejected": {}}
 
 
-def test_fetch_result_ok_requires_both_a_200_and_no_error():
-    assert FetchResult(url="u", path="p", status=200).ok
-    assert not FetchResult(url="u", path="p", status=200, error="boom").ok
-    assert not FetchResult(url="u", path="p", status=500).ok
+class TestCandidatesShareWaveTwo:
+    """The conventional hostnames go out in wave two's pool, not after it (#47)."""
+
+    def _smartapi(self, url):
+        return json.dumps({"hits": [{"_id": "abc", "servers": [
+            {"url": url, "x-maturity": "production"}]}]}).encode()
+
+    def test_the_candidates_do_not_wait_for_the_endpoints(self, tmp_path):
+        # This endpoint answers only once a candidate has been asked for, which
+        # a pool started after wave two could never do in time.
+        component = _comp("svc", identifiers={
+            "smartapi": "abc", "infores": "infores:svc"})
+        smartapi = self._smartapi("https://svc.transltr.io/")
+        candidate_asked = threading.Event()
+        waited = []
+
+        def fetcher(url):
+            if url == SMARTAPI_QUERY:
+                return 200, smartapi
+            if url.startswith("https://svc.test.transltr.io/"):
+                candidate_asked.set()
+            if url == "https://svc.transltr.io/openapi.json":
+                waited.append(candidate_asked.wait(timeout=5))
+            return 404, b""
+
+        sync([component], tmp_path, fetcher=fetcher, max_age=0, workers=4)
+        assert waited == [True]
+
+    def test_a_confirmed_host_that_can_only_be_probed_is_asked_once(self, tmp_path):
+        # Confirmed last run, and its component has since lost the infores
+        # that confirmed it, so it is both a known deployment to root-probe
+        # and a candidate to root-probe — at the same path. In one pool, two
+        # requests would race to write that file.
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {"svc": {
+            "ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}}))
+        fetcher = FakeFetcher({
+            SMARTAPI_QUERY: (200, self._smartapi("https://svc.transltr.io/"))})
+        report = sync([_comp("svc", identifiers={"smartapi": "abc"})], tmp_path,
+                      fetcher=fetcher, max_age=0)
+        assert fetcher.urls.count("https://svc.ci.transltr.io/") == 1
+        assert [f.path for f in report.fetches].count("root/svc/ci.json") == 1

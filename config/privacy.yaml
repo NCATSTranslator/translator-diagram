@@ -59,7 +59,8 @@ environment_fields: []
 #
 #   otel_services      Internal service naming, but the page's OTel counts are
 #                      a finding about registration discipline, and the names
-#                      are already in components/*.yaml and unknown.yaml.
+#                      are already in catalog/components/*.yaml and
+#                      catalog/unknown.yaml.
 #   environments.*.url The deployment hosts. Every one on the page today is
 #                      either recorded in this repo or listed in the public
 #                      SmartAPI registry, and they are what makes a version

@@ -1,9 +1,9 @@
-"""Following the pointers in components/*.yaml out to their sources.
+"""Following the pointers in catalog/components/*.yaml out to their sources.
 
 Writes raw responses under data/sync/ and a manifest recording every fetch it
 attempted, including the ones that failed. The dashboard reads that directory;
 nothing here renders anything, and nothing here decides what a version *is* —
-that judgement lives in dashboard.py, so it can be tested without a network.
+that judgement lives in cells.py, so it can be tested without a network.
 
 A service being down is data, not an error. The manifest records what
 happened and the run still succeeds, because "was this endpoint reachable at
@@ -11,10 +11,6 @@ happened and the run still succeeds, because "was this endpoint reachable at
 """
 
 import json
-import os
-import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
@@ -22,19 +18,31 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from .charts import CHART_META_FILES, chart_dirs, unclaimed_charts
 from .components import (
-    CHART_META_FILES,
     ComponentFile,
     Deployment,
-    chart_matches,
-    deployments_from_smartapi,
-    derive_deployments,
     endpoint_url_in,
     github_repo,
+    read_json,
+    read_yaml,
+)
+from .deployments import (
+    deployments_from_smartapi,
+    derive_deployments,
     merge_deployments,
+    record_infores,
     smartapi_record_for,
+)
+from .fetch import (
+    DEFAULT_MAX_AGE,
+    GITHUB_API_PREFIX,
+    Fetcher,
+    FetchResult,
+    fetch_to,
+    http_fetch,
+    now,
+    probe_to,
 )
 
 SMARTAPI_QUERY = (
@@ -71,8 +79,6 @@ someone is looking at.
 ponytail: one page. A repository with more than 100 releases would lose its
 oldest, which nothing here has; paginating means following the Link header.
 """
-
-GITHUB_API_PREFIX = "https://api.github.com/"
 
 DEVOPS_RAW = (
     "https://raw.githubusercontent.com/helxplatform/translator-devops"
@@ -117,27 +123,6 @@ Verified with `curl -sI` on 2026-09-02: 200 on the `main` branch at that path.
 `raw.githubusercontent.com`, so it spends nothing from the API budget below.
 """
 
-DEFAULT_TIMEOUT = 30
-DEFAULT_MAX_AGE = 900  # seconds; 15 minutes
-USER_AGENT = "translator-diagram sync (+https://github.com/NCATSTranslator/translator-diagram)"
-
-
-@dataclass
-class FetchResult:
-    """One attempted fetch, successful or not."""
-
-    url: str
-    path: str
-    status: int | None = None
-    bytes: int = 0
-    error: str | None = None
-    cached: bool = False
-    fetched_at: str = ""
-
-    @property
-    def ok(self) -> bool:
-        return self.status == 200 and self.error is None
-
 
 @dataclass
 class SyncReport:
@@ -163,190 +148,43 @@ class SyncReport:
         }
 
 
-Fetcher = Callable[[str], tuple[int, bytes] | tuple[int, bytes, str | None]]
-"""Given a URL, return (http status, body) — or (status, body, content type).
+def _record_for(
+    component: ComponentFile, by_smartapi: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """The registry record the page will attach to this component, or `{}`.
 
-Injected so tests never fetch. The third element is optional and every reader
-here goes through `_answer`, which fills it in as None: a fetcher written
-before the root probe existed is still a fetcher, and every test fake in this
-repository returns the pair. Only `probe_to` has any use for the content type,
-because "what did this host answer with" is the whole of what it records.
-"""
-
-
-def _answer(fetcher: Fetcher, url: str) -> tuple[int, bytes, str | None]:
-    """One fetcher's answer, in the three-part shape the callers read."""
-    answer = fetcher(url)
-    if len(answer) == 3:
-        status, body, content_type = answer
-        return status, body, content_type
-    status, body = answer
-    return status, body, None
-
-
-def _headers(url: str) -> dict[str, str]:
-    """Request headers for one URL.
-
-    GitHub allows 60 unauthenticated calls an hour per address, which two
-    back-to-back `--force` syncs can exhaust between them. A `GITHUB_TOKEN` in
-    the environment raises that to 5000 and is sent to api.github.com and
-    nowhere else — every other host here is public and wants no credential.
+    `smartapi_record_for`, the same lookup `build_rows` makes: by recorded id,
+    or by infores where exactly one record claims it. Looking up by id alone
+    here left the infores-matched components — dogpark-tier-0 among them —
+    showing registered deployments that sync never fetched or probed.
     """
-    headers = {"User-Agent": USER_AGENT}
-    if url.startswith(GITHUB_API_PREFIX):
-        headers["Accept"] = "application/vnd.github+json"
-        if token := os.environ.get("GITHUB_TOKEN"):
-            headers["Authorization"] = f"Bearer {token}"
-    return headers
-
-
-def http_fetch(
-    url: str, timeout: int = DEFAULT_TIMEOUT
-) -> tuple[int, bytes, str | None]:
-    """The real fetcher. urllib rather than requests: `loading.py` already
-    reaches the network with the stdlib, and one HTTP client is enough.
-
-    Returns the declared content type alongside the body. It is the header
-    rather than a guess at the bytes, which is what makes it worth carrying: a
-    single-page app answering `text/html` to a request for `openapi.json` is
-    exactly the case the dashboard has to be able to name, and sniffing the
-    first byte would be this tool deciding rather than the server saying.
-    """
-    request = urllib.request.Request(url, headers=_headers(url))
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, response.read(), response.headers.get_content_type()
-    except urllib.error.HTTPError as exc:
-        # A 404 is a finding, not a crash: it is how we learned that ars and
-        # ploverdb serve no OpenAPI at their registered URLs.
-        return exc.code, exc.read(), exc.headers.get_content_type() if exc.headers else None
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def _is_fresh(path: Path, max_age: int) -> bool:
-    return (
-        max_age > 0
-        and path.exists()
-        and (time.time() - path.stat().st_mtime) < max_age
-    )
-
-
-def fetch_to(
-    url: str,
-    destination: Path,
-    fetcher: Fetcher,
-    *,
-    max_age: int = DEFAULT_MAX_AGE,
-    root: Path | None = None,
-) -> FetchResult:
-    """Fetch one URL into one file, recording what happened either way."""
-    relative = str(destination.relative_to(root)) if root else str(destination)
-    if _is_fresh(destination, max_age):
-        return FetchResult(
-            url=url, path=relative, status=200, cached=True,
-            bytes=destination.stat().st_size, fetched_at=_now(),
-        )
-    try:
-        status, body, _ = _answer(fetcher, url)
-    except Exception as exc:  # noqa: BLE001 - any failure is a recorded finding
-        return FetchResult(
-            url=url, path=relative,
-            error=f"{type(exc).__name__}: {exc}", fetched_at=_now(),
-        )
-    if status == 200:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(body)
-    return FetchResult(
-        url=url, path=relative, status=status,
-        bytes=len(body), fetched_at=_now(),
-    )
-
-
-def probe_to(
-    url: str,
-    destination: Path,
-    fetcher: Fetcher,
-    *,
-    max_age: int = DEFAULT_MAX_AGE,
-    root: Path | None = None,
-) -> FetchResult:
-    """Contact one URL and save how it answered, never what it said.
-
-    A sibling of `fetch_to` rather than a flag on it, because the two save
-    different things and the difference is the reason this exists. `fetch_to`
-    writes the body: that is the point of an OpenAPI or a `/status` fetch.
-    A root probe asks one question — did anything answer at this address — and
-    the answer to it is three fields. Writing the body instead would put a
-    file-browser's HTML, a login page and a single-page app's shell under
-    `data/sync/`, where every other reader expects a document it can parse, and
-    would cache a page per deployment to hold a number.
-
-    So the destination holds `{"status", "content_type", "error"}` and the
-    request still goes through a `FetchResult`, because the manifest promises
-    every attempt this run made and a probe is one.
-
-    A non-200 is written like any other outcome, which is the other half of the
-    difference: `fetch_to` leaves the previous body in place on a 404 because a
-    stale body is better than none for a document, whereas a stale *status*
-    is exactly the lie the manifest gate exists to stop. A cached probe is
-    therefore reported with the status it recorded, not with the 200 that
-    "the file is fresh" would otherwise imply.
-    """
-    relative = str(destination.relative_to(root)) if root else str(destination)
-    if _is_fresh(destination, max_age):
-        recorded = _read_probe(destination)
-        return FetchResult(
-            url=url, path=relative,
-            status=recorded.get("status"), error=recorded.get("error"),
-            cached=True, bytes=destination.stat().st_size, fetched_at=_now(),
-        )
-    error, status, content_type, size = None, None, None, 0
-    try:
-        status, body, content_type = _answer(fetcher, url)
-        size = len(body)
-    except Exception as exc:  # noqa: BLE001 - any failure is a recorded finding
-        error = f"{type(exc).__name__}: {exc}"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(
-            {"status": status, "content_type": content_type, "error": error},
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    return FetchResult(
-        url=url, path=relative, status=status, error=error,
-        bytes=size, fetched_at=_now(),
-    )
-
-
-def _read_probe(path: Path) -> dict[str, Any]:
-    """One saved probe summary, tolerating a file that is not one."""
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
+    record, _, _ = smartapi_record_for(component, list(by_smartapi.values()))
+    return record or {}
 
 
 def _plan_endpoint_fetches(
     components: Iterable[ComponentFile],
     by_smartapi: dict[str, dict[str, Any]],
+    derived: dict[str, dict[str, Deployment]],
     root: Path,
 ) -> list[tuple[str, Path]]:
-    """Every (url, destination) for the OpenAPI and status endpoints."""
+    """Every (url, destination) for the OpenAPI and status endpoints.
+
+    A host confirmed by an earlier run's derived probe (`derived`) gets its
+    `/status` only. Its OpenAPI document is fetched by this run's
+    `_confirm_derived`, which re-derives and re-checks it into the same file,
+    and two fetches of one path in one pool would race to write it.
+    """
     jobs: list[tuple[str, Path]] = []
     for component in components:
-        record = by_smartapi.get(component.smartapi_id or "", {})
+        registered = deployments_from_smartapi(_record_for(component, by_smartapi))
+        known = merge_deployments(component, registered)
         deployments = merge_deployments(
-            component, deployments_from_smartapi(record)
+            component, registered, derived.get(component.id, {})
         )
         for env, deployment in deployments.items():
-            for kind in ("openapi", "status"):
+            kinds = ("openapi", "status") if env in known else ("status",)
+            for kind in kinds:
                 url = endpoint_url_in(component, deployment, kind)
                 if url:
                     jobs.append((url, root / kind / component.id / f"{env}.json"))
@@ -378,10 +216,9 @@ def _plan_root_probes(
     """
     jobs: list[tuple[str, Path]] = []
     for component in components:
-        record = by_smartapi.get(component.smartapi_id or "", {})
         deployments = merge_deployments(
             component,
-            deployments_from_smartapi(record),
+            deployments_from_smartapi(_record_for(component, by_smartapi)),
             derived.get(component.id, {}),
         )
         for env, deployment in deployments.items():
@@ -396,12 +233,13 @@ def _confirmed_deployments(
 ) -> dict[str, dict[str, Deployment]]:
     """The previous run's confirmed derived hosts, as Deployments.
 
-    Read at the top of the run rather than in wave three, because the root
-    probes go out in wave two and a host confirmed last run is a host worth
-    contacting this run. This run's own confirmations land in `derived.json` at
-    the end and are probed by the next sync — a wave-two job cannot wait on a
-    wave-three answer, and probing the same host twice in one run to close that
-    one-run gap would cost every deployment a second request.
+    Read from last run's `derived.json`, because the root probes and the
+    candidate probes go out together in wave two and a host confirmed last run
+    is a host worth contacting this run. This run's own confirmations land in
+    `derived.json` at the end and are probed by the next sync — a root probe
+    cannot wait on a confirmation sharing its pool, and probing the same host a
+    second time after the pool to close that one-run gap would cost every
+    deployment a second request.
     """
     return {
         cid: {
@@ -419,35 +257,41 @@ def _confirmed_deployments(
 # floor: 1 chart index + ~19 repository descriptions + ~6 chart commits + ~20
 # release lists ≈ 46 calls. That fits under the 60-an-hour unauthenticated
 # ceiling once, and is nothing against the 5000 a GITHUB_TOKEN raises it to
-# (see `_headers`). Every planner below is keyed by the thing being fetched
-# rather than by the component asking for it, which is what keeps the count at
-# the number of distinct answers -- the three shepherds share a repository and
-# a chart, and pay for one of each between them. Everything else this module
-# fetches is raw.githubusercontent.com or a public API, and costs nothing here.
+# (see `fetch._headers`). Every planner below is keyed by the thing being
+# fetched rather than by the component asking for it, which is what keeps the
+# count at the number of distinct answers -- the three shepherds share a
+# repository and a chart, and pay for one of each between them. Everything else
+# this module fetches is raw.githubusercontent.com or a public API, and costs
+# nothing here.
 #
 # A run that runs out of budget loses facts, not the run: a 403 is recorded
 # like any other status, named in the wave-one summary, and picked up by the
 # next sync.
 
 
+def _source_repos(components: Iterable[ComponentFile]) -> list[str]:
+    """Every distinct source repository, as `owner/name`, sorted.
+
+    Planners are keyed by the repository rather than by the component, because
+    three shepherd components share one repository and fetching it three times
+    would spend three of GitHub's sixty hourly calls on the same answer. The
+    `github_repo` rule also rejects a `helm-chart` URL, which names a path
+    *inside* translator-devops: that repository is the devops team's, not this
+    component's.
+    """
+    return sorted(
+        {repo for c in components if (repo := github_repo(c.repository("source")))}
+    )
+
+
 def _plan_release_fetches(
     components: Iterable[ComponentFile], root: Path
 ) -> list[tuple[str, Path]]:
-    """Every (url, destination) for a source repository's GitHub releases.
-
-    Keyed by the repository rather than by the component, because three
-    shepherd components share one repository and fetching it three times would
-    spend three of GitHub's sixty hourly calls on the same answer.
-    """
-    jobs: dict[str, tuple[str, Path]] = {}
-    for component in components:
-        repo = github_repo(component.repository("source"))
-        if repo:
-            jobs[repo] = (
-                GITHUB_RELEASES.format(repo=repo),
-                root / "releases" / f"{repo}.json",
-            )
-    return [jobs[repo] for repo in sorted(jobs)]
+    """Every (url, destination) for a source repository's GitHub releases."""
+    return [
+        (GITHUB_RELEASES.format(repo=repo), root / "releases" / f"{repo}.json")
+        for repo in _source_repos(components)
+    ]
 
 
 def _plan_chart_fetches(
@@ -479,44 +323,19 @@ def _claimed_charts(components: Iterable[ComponentFile]) -> list[str]:
     return sorted({chart for c in components for chart in c.helm_charts})
 
 
-def _plan_chart_index(root: Path) -> list[tuple[str, Path]]:
-    """The one call that lists every chart directory in translator-devops.
-
-    A list, not a pair, so it composes with the other planners in `sync`.
-    """
-    return [(DEVOPS_HELM_INDEX, root / "helm" / "index.json")]
+def _plan_repo_meta(
+    components: Iterable[ComponentFile], root: Path
+) -> list[tuple[str, Path]]:
+    """Every (url, destination) for a source repository's own metadata."""
+    return [
+        (GITHUB_REPO_META.format(repo=repo), root / "repos" / f"{repo}.json")
+        for repo in _source_repos(components)
+    ]
 
 
 def _chart_names(root: Path) -> list[str]:
-    """Chart directory names from the cached index, tolerating its absence.
-
-    Directories only. `helm/` also holds loose files, and a `redirects` entry
-    that is raw Ingress manifests with no Chart.yaml would otherwise be planned
-    as a chart and 404 every run.
-
-    A throttled or missing contents call answers with an *object* carrying a
-    message rather than an array. `fetch_to` never writes a non-200 body, so
-    what is on disk is the last good index — but read defensively anyway: an
-    unreadable one has to mean "we do not know", not "the repository has no
-    charts", which is a claim.
-    """
-    path = root / "helm" / "index.json"
-    if not path.exists():
-        return []
-    try:
-        entries = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return []
-    if not isinstance(entries, list):
-        return []
-    return sorted(
-        entry["name"]
-        for entry in entries
-        if isinstance(entry, dict)
-        and entry.get("type") == "dir"
-        and isinstance(entry.get("name"), str)
-        and entry["name"]
-    )
+    """Chart directory names from the cached index, tolerating its absence."""
+    return chart_dirs(read_json(root / "helm" / "index.json"))
 
 
 def _plan_index_chart_fetches(
@@ -565,32 +384,6 @@ def _plan_chart_commits(
     ]
 
 
-def _plan_repo_meta(
-    components: Iterable[ComponentFile], root: Path
-) -> list[tuple[str, Path]]:
-    """Every (url, destination) for a source repository's own metadata.
-
-    Keyed by repository for the same reason `_plan_release_fetches` is, and by
-    the same `github_repo` rule: a `helm-chart` URL names a path *inside*
-    translator-devops, and that repository's description is the devops team's,
-    not this component's.
-    """
-    jobs: dict[str, tuple[str, Path]] = {}
-    for component in components:
-        repo = github_repo(component.repository("source"))
-        if repo:
-            jobs[repo] = (
-                GITHUB_REPO_META.format(repo=repo),
-                root / "repos" / f"{repo}.json",
-            )
-    return [jobs[repo] for repo in sorted(jobs)]
-
-
-def _plan_catalog(root: Path) -> list[tuple[str, Path]]:
-    """The infores catalog: one raw file, no API budget, every resource in it."""
-    return [(INFORES_CATALOG, root / "infores_catalog.yaml")]
-
-
 def _chart_totals(
     components: Iterable[ComponentFile], root: Path
 ) -> tuple[int, int]:
@@ -609,7 +402,7 @@ def _chart_totals(
 
 
 def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Every cached chart, in the shape `chart_matches` reads.
+    """Every cached chart, in the shape `charts.chart_matches` reads.
 
     The same three files `HELM_FILES` fetches, keyed by what the matcher calls
     them rather than by filename — `CHART_META_FILES` owns that vocabulary, so
@@ -623,21 +416,11 @@ def _cached_chart_meta(root: Path, charts: Iterable[str]) -> dict[str, dict[str,
     """
     return {
         chart: {
-            key: _read_yaml(root / "helm" / chart / name)
+            key: read_yaml(root / "helm" / chart / name)
             for key, name in CHART_META_FILES.items()
         }
         for chart in charts
     }
-
-
-def _read_yaml(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, UnicodeDecodeError):
-        return None
-    return loaded if isinstance(loaded, dict) else None
 
 
 def _previous_urls(root: Path) -> dict[str, str]:
@@ -649,13 +432,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
     answer a different question, and the new field would appear to be missing
     upstream until someone thought to run --force.
     """
-    path = root / "manifest.json"
-    if not path.exists():
-        return {}
-    try:
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+    manifest = read_json(root / "manifest.json")
     if not isinstance(manifest, dict):
         return {}
     return {
@@ -667,13 +444,7 @@ def _previous_urls(root: Path) -> dict[str, str]:
 
 def _read_derived(root: Path) -> dict[str, Any]:
     """The previous run's derived.json, tolerating absence or an older shape."""
-    path = root / "derived.json"
-    if not path.exists():
-        return {}
-    try:
-        loaded = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return {}
+    loaded = read_json(root / "derived.json")
     return loaded if isinstance(loaded, dict) else {}
 
 
@@ -688,12 +459,23 @@ def _still_fresh(record: dict[str, Any] | None, max_age: int) -> bool:
     return datetime.now(UTC) - checked < timedelta(seconds=max_age)
 
 
+def _confirmation_url(component: ComponentFile, candidate: Deployment) -> str | None:
+    """The document that can confirm a candidate, or None if only a root probe can.
+
+    Checking an answer needs an infores to check it against and an OpenAPI
+    document to read one from; without both, the address can only be probed.
+    """
+    return endpoint_url_in(component, candidate, "openapi") if component.infores else None
+
+
 def _confirm_derived(
     component: ComponentFile,
     candidate: Deployment,
     fetcher: Fetcher,
     root: Path,
     max_age: int,
+    *,
+    age_for: Callable[[str, Path], int] | None = None,
 ) -> tuple[FetchResult | None, bool]:
     """Contact a derived host, and keep it only if it is really this component.
 
@@ -716,46 +498,170 @@ def _confirm_derived(
     such host" and "we never looked" are different gaps and only the first is
     a finding. Six of the ten candidates this repository derives fall in here,
     and they were the six the page could say nothing about.
+
+    `age_for` is `sync`'s cache rule: a cached file counts only if the
+    previous run fetched it from this same URL. A candidate whose derived
+    hostname changed would otherwise be judged on the document its old
+    hostname served, and accepted or rejected on someone else's evidence.
     """
-    url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
+    def age(url: str, destination: Path) -> int:
+        return age_for(url, destination) if age_for else max_age
+
+    url = _confirmation_url(component, candidate)
     if not url:
         # Nothing to check an answer against — no infores, or no OpenAPI
         # document to ask for one. Probe the root so the rejection carries a
         # verdict, and reject it whatever comes back: an unverifiable 200 is
         # exactly the guess this function exists not to make.
+        probed = root / "root" / component.id / f"{candidate.env}.json"
         return (
             probe_to(
-                candidate.url,
-                root / "root" / component.id / f"{candidate.env}.json",
-                fetcher,
-                max_age=max_age,
-                root=root,
+                candidate.url, probed, fetcher,
+                max_age=age(candidate.url, probed), root=root,
             ),
             False,
         )
     destination = root / "openapi" / component.id / f"{candidate.env}.json"
-    result = fetch_to(url, destination, fetcher, max_age=max_age, root=root)
+    result = fetch_to(
+        url, destination, fetcher, max_age=age(url, destination), root=root)
     if not result.ok:
         return result, False
-    try:
-        document = json.loads(destination.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        document = None
-    # Every level checked, because a guessed hostname answers with whatever it
-    # likes: a JSON array, or `{"info": null}`, both of which are valid JSON and
-    # neither of which has an infores. Chaining `.get` through them raises
-    # AttributeError, and one unlucky candidate would end the whole sync.
-    info = document.get("info") if isinstance(document, dict) else None
-    translator = info.get("x-translator") if isinstance(info, dict) else None
-    reported = (
-        translator.get("infores") if isinstance(translator, dict) else None
-    )
-    if reported != component.infores:
+    # A guessed hostname answers with whatever it likes — a JSON array, or
+    # `{"info": null}` — and `record_infores` checks every level, so one
+    # unlucky candidate cannot end the whole sync.
+    if record_infores(read_json(destination)) != component.infores:
         # Answered, but it is not this component. Drop the body so a later run
         # does not read it as though it were.
         destination.unlink(missing_ok=True)
         return result, False
     return result, True
+
+
+def _plan_derived_probes(
+    components: list[ComponentFile],
+    by_smartapi: dict[str, dict[str, Any]],
+    previous: dict[str, Any],
+    max_age: int,
+) -> tuple[list[tuple[ComponentFile, str, Deployment]], dict[str, dict[str, Any]]]:
+    """The environments nobody registered, as candidates to probe.
+
+    ITRB's hostnames follow a convention, so knowing one tells us where to look
+    for the others — answer-appraiser registers only production but is deployed
+    to ci and test as well. The candidates are derived from wave one's registry
+    answer and nothing later, which is why they can go out in wave two's pool.
+
+    Returns the candidates to probe as (component, env, candidate), and the
+    fresh rejections carried forward instead of being probed again.
+    """
+    rejected_before = previous.get("rejected", {})
+    rejected: dict[str, dict[str, Any]] = {}
+    pending = []
+    for component in components:
+        known = merge_deployments(
+            component, deployments_from_smartapi(_record_for(component, by_smartapi))
+        )
+        for env, candidate in derive_deployments(known).items():
+            stale = rejected_before.get(component.id, {}).get(env)
+            if _still_fresh(stale, max_age) and stale.get("url") == candidate.url:
+                # Most candidates are hostnames that do not resolve, and there
+                # are nine of those for every one that does. Re-probing them
+                # every run buys nothing: carry the answer forward until it is
+                # as stale as anything else we cache.
+                rejected.setdefault(component.id, {})[env] = stale
+                continue
+            pending.append((component, env, candidate))
+    return pending, rejected
+
+
+def _root_probed_candidates(
+    pending: list[tuple[ComponentFile, str, Deployment]], root: Path
+) -> set[Path]:
+    """Where the candidates that can only be root-probed save their probe.
+
+    The same path wave two's root probe uses for a host confirmed on an earlier
+    run, which a candidate can also be — a component that has since lost its
+    infores, or recorded `openapi: null`, is re-derived and root-probed. One request answers both questions,
+    and two in one pool would race to write one file.
+    """
+    return {
+        root / "root" / component.id / f"{env}.json"
+        for component, env, candidate in pending
+        if _confirmation_url(component, candidate) is None
+    }
+
+
+def _record_derived(
+    confirmed: list[tuple[ComponentFile, str, Deployment, tuple[FetchResult | None, bool]]],
+    rejected: dict[str, dict[str, Any]],
+    previous: dict[str, Any],
+    root: Path,
+    echo: Callable[[str], None],
+) -> list[FetchResult]:
+    """Record what the candidate probes found, and write `derived.json`.
+
+    Each candidate is believed only if it reported the component's own infores
+    (`_confirm_derived`). Returns every request the probes made, for the
+    manifest.
+    """
+    confirmed_before = previous.get("confirmed", {})
+    results: list[FetchResult] = []
+    derived: dict[str, dict[str, Any]] = {}
+    for component, env, candidate, (result, accepted) in confirmed:
+        url = _confirmation_url(component, candidate)
+        # Every request, not every success: nine of these hostnames do not
+        # resolve, and a manifest that leaves them out is one that cannot
+        # be used to ask what this run actually did.
+        if result is not None:
+            results.append(result)
+        if not accepted:
+            # How it was turned away, not just that it was. A hostname that
+            # does not resolve and a host that answers as something else
+            # are both "not confirmed" and they are not the same finding —
+            # the first says there is nothing there, the second says there
+            # is, and it belongs to somebody else. Recorded here rather
+            # than left to be read out of the manifest, because a rejection
+            # is carried forward for as long as it is fresh and the
+            # manifest entry that explained it is not.
+            rejected.setdefault(component.id, {})[env] = {
+                "url": candidate.url,
+                "checked_at": now(),
+                "status": result.status if result else None,
+                "error": result.error if result else None,
+                # Which question was asked, because a 200 means two
+                # different things depending on it. To a document check, a
+                # 200 reporting somebody else's infores is evidence the
+                # host belongs to another service. To a root probe -- all
+                # this component had, having no infores to check against --
+                # a 200 is only "something answers here", and calling that
+                # another service would be inventing the finding the check
+                # exists to make.
+                "checked": "document" if url else "root",
+            }
+            continue
+        derived.setdefault(component.id, {})[env] = {
+            "url": candidate.url, "location": candidate.location,
+        }
+    if confirmed:
+        found = sum(len(envs) for envs in derived.values())
+        echo(f"  {found} confirmed by the infores they report")
+    # Carry forward anything confirmed earlier whose candidate was not re-derived
+    # this run — a URL recorded in a component file stops being derived, and
+    # dropping it here would look like the deployment had disappeared.
+    #
+    # Not the ones this run probed and rejected, though: those were asked and
+    # answered, and reinstating them would publish a derived deployment forever
+    # on the strength of one confirmation, however long ago it stopped being
+    # true. A rejection is the newer fact.
+    for cid, envs in confirmed_before.items():
+        for env, spec in envs.items():
+            if env in rejected.get(cid, {}):
+                continue
+            derived.setdefault(cid, {}).setdefault(env, spec)
+    (root / "derived.json").write_text(
+        json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return results
 
 
 def _echo_matching_summary(
@@ -771,10 +677,7 @@ def _echo_matching_summary(
     reads as a missing check on the good day.
     """
     names = _chart_names(root)
-    matched = chart_matches(names, _cached_chart_meta(root, names), components)
-    unclaimed = sorted(
-        chart for chart, match in matched.items() if match["confidence"] == "none"
-    )
+    unclaimed = unclaimed_charts(names, _cached_chart_meta(root, names), components)
     echo(
         f"Charts matching no component: {len(unclaimed)}"
         + (f" ({', '.join(unclaimed)})" if unclaimed else "")
@@ -811,12 +714,27 @@ def sync(
 ) -> SyncReport:
     """Fetch everything the component files point at, into `root`.
 
-    Runs in waves because each depends on the one before it: SmartAPI is what
-    tells us which environments most components have and the chart index is
-    what tells us which charts exist, so neither the per-endpoint fetches nor
-    the per-chart ones can be planned until wave one has landed.
+    Runs in two waves because the second depends on the first: SmartAPI is
+    what tells us which environments most components have and the chart index
+    is what tells us which charts exist, so neither the per-endpoint fetches
+    nor the per-chart ones can be planned until wave one has landed.
+
+    1. Wave one waits on nothing: the SmartAPI registry, the OpenTelemetry
+       collectors, the infores catalog, the chart index, the claimed charts'
+       files and last commits, and each source repository's releases and
+       description.
+    2. Wave two waits on wave one and nothing else, so it all goes out in one
+       pool: the OpenAPI and `/status` endpoints the registry and the
+       component files point at, a `Chart.yaml` for every chart the index
+       names, a root probe of every known deployment, and the conventional
+       `transltr.io` hosts nobody registered — each believed only if it
+       reports the component's own infores. What it confirms is probed by the
+       next run (`_confirmed_deployments`).
+
+    Then the run writes `derived.json`, prints the chart and matching summaries,
+    and writes the manifest.
     """
-    report = SyncReport(started_at=_now())
+    report = SyncReport(started_at=now())
     root.mkdir(parents=True, exist_ok=True)
 
     previous_urls = _previous_urls(root)
@@ -829,6 +747,7 @@ def sync(
 
     def run_all(
         *groups: tuple[list[tuple[str, Path]], Callable[..., FetchResult]],
+        pool: ThreadPoolExecutor | None = None,
     ) -> list[FetchResult]:
         """Several groups of jobs in one pool, each with its own writer.
 
@@ -837,21 +756,24 @@ def sync(
         disk. Grouped rather than run one list after another so a wave stays
         one wave: the root probes and the endpoint fetches wait on the same
         registry answer and on nothing else, and two sequential pools would
-        pay the slowest host's latency twice for no reason.
+        pay the slowest host's latency twice for no reason. Pass `pool` to share
+        one with other work, as wave two does with the candidate probes.
         """
         planned = [(url, dest, do) for jobs, do in groups for url, dest in jobs]
         if not planned:
             return []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = list(
-                pool.map(
-                    lambda job: job[2](
-                        job[0], job[1], fetcher,
-                        max_age=age_for(job[0], job[1]), root=root,
-                    ),
-                    planned,
-                )
+        if pool is None:
+            with ThreadPoolExecutor(max_workers=workers) as own:
+                return run_all(*groups, pool=own)
+        results = list(
+            pool.map(
+                lambda job: job[2](
+                    job[0], job[1], fetcher,
+                    max_age=age_for(job[0], job[1]), root=root,
+                ),
+                planned,
             )
+        )
         report.fetches.extend(results)
         return results
 
@@ -876,8 +798,10 @@ def sync(
     ]
     registry_results = run(
         registry_jobs
-        + _plan_catalog(root)
-        + _plan_chart_index(root)
+        + [
+            (INFORES_CATALOG, root / "infores_catalog.yaml"),
+            (DEVOPS_HELM_INDEX, root / "helm" / "index.json"),
+        ]
         + chart_jobs
         + commit_jobs
         + repo_jobs
@@ -920,117 +844,53 @@ def sync(
         }
         echo(f"  {len(by_smartapi)} SmartAPI records")
 
-    # Wave two: the endpoints those registries point at, and a Chart.yaml for
-    # every chart the index just named. Neither could be planned before wave
-    # one landed — one waits on SmartAPI, the other on the index — and neither
-    # waits on the other, so they go out in one pool.
-    endpoint_jobs = _plan_endpoint_fetches(components, by_smartapi, root)
+    # Wave two: the endpoints those registries point at, a Chart.yaml for
+    # every chart the index just named, the deployment roots, and the
+    # conventional hostnames nobody registered. None could be planned before
+    # wave one landed and none waits on another, so they go out in one pool.
+    previous = _read_derived(root)
+    endpoint_jobs = _plan_endpoint_fetches(
+        components, by_smartapi, _confirmed_deployments(previous), root
+    )
     index_chart_jobs = _plan_index_chart_fetches(
         root, [destination for _, destination in chart_jobs]
     )
-    previous = _read_derived(root)
-    root_jobs = _plan_root_probes(
-        components, by_smartapi, _confirmed_deployments(previous), root
-    )
+    pending, rejected = _plan_derived_probes(components, by_smartapi, previous, max_age)
+    candidate_roots = _root_probed_candidates(pending, root)
+    root_jobs = [
+        job
+        for job in _plan_root_probes(
+            components, by_smartapi, _confirmed_deployments(previous), root
+        )
+        if job[1] not in candidate_roots
+    ]
     echo(
         f"Fetching {len(endpoint_jobs)} component endpoints and "
         f"{len(index_chart_jobs)} unclaimed charts, and probing "
         f"{len(root_jobs)} deployment roots ..."
     )
-    run_all((endpoint_jobs + index_chart_jobs, fetch_to), (root_jobs, probe_to))
-
-    # Wave three: the environments nobody registered. ITRB's hostnames follow a
-    # convention, so knowing one tells us where to look for the others —
-    # answer-appraiser registers only production but is deployed to ci and test
-    # as well. Each candidate is confirmed against the infores it reports
-    # before it is believed.
-    confirmed_before = previous.get("confirmed", {})
-    rejected_before = previous.get("rejected", {})
-
-    derived: dict[str, dict[str, Any]] = {}
-    rejected: dict[str, dict[str, Any]] = {}
-    pending, skipped = [], 0
-    for component in components:
-        known = merge_deployments(
-            component, deployments_from_smartapi(
-                by_smartapi.get(component.smartapi_id or "", {})
-            )
-        )
-        for env, candidate in derive_deployments(known).items():
-            stale = rejected_before.get(component.id, {}).get(env)
-            if _still_fresh(stale, max_age) and stale.get("url") == candidate.url:
-                # Most candidates are hostnames that do not resolve, and there
-                # are nine of those for every one that does. Re-probing them
-                # every run buys nothing: carry the answer forward until it is
-                # as stale as anything else we cache.
-                rejected.setdefault(component.id, {})[env] = stale
-                skipped += 1
-                continue
-            pending.append((component, env, candidate))
-    if skipped:
+    if rejected:
+        skipped = sum(len(envs) for envs in rejected.values())
         echo(f"  {skipped} hostnames already known not to resolve")
     if pending:
         echo(f"Probing {len(pending)} conventional hostnames ...")
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            confirmed = list(pool.map(
-                lambda job: (job[0], job[1], job[2],
-                             _confirm_derived(job[0], job[2], fetcher, root, max_age)),
-                pending,
-            ))
-        for component, env, candidate, (result, accepted) in confirmed:
-            url = endpoint_url_in(component, candidate, "openapi") if component.infores else None
-            # Every request, not every success: nine of these hostnames do not
-            # resolve, and a manifest that leaves them out is one that cannot
-            # be used to ask what this run actually did.
-            if result is not None:
-                report.fetches.append(result)
-            if not accepted:
-                # How it was turned away, not just that it was. A hostname that
-                # does not resolve and a host that answers as something else
-                # are both "not confirmed" and they are not the same finding —
-                # the first says there is nothing there, the second says there
-                # is, and it belongs to somebody else. Recorded here rather
-                # than left to be read out of the manifest, because a rejection
-                # is carried forward for as long as it is fresh and the
-                # manifest entry that explained it is not.
-                rejected.setdefault(component.id, {})[env] = {
-                    "url": candidate.url,
-                    "checked_at": _now(),
-                    "status": result.status if result else None,
-                    "error": result.error if result else None,
-                    # Which question was asked, because a 200 means two
-                    # different things depending on it. To a document check, a
-                    # 200 reporting somebody else's infores is evidence the
-                    # host belongs to another service. To a root probe -- all
-                    # this component had, having no infores to check against --
-                    # a 200 is only "something answers here", and calling that
-                    # another service would be inventing the finding the check
-                    # exists to make.
-                    "checked": "document" if url else "root",
-                }
-                continue
-            derived.setdefault(component.id, {})[env] = {
-                "url": candidate.url, "location": candidate.location,
-            }
-        found = sum(len(envs) for envs in derived.values())
-        echo(f"  {found} confirmed by the infores they report")
-    # Carry forward anything confirmed earlier whose candidate was not re-derived
-    # this run — a URL recorded in a component file stops being derived, and
-    # dropping it here would look like the deployment had disappeared.
-    #
-    # Not the ones this run probed and rejected, though: those were asked and
-    # answered, and reinstating them would publish a derived deployment forever
-    # on the strength of one confirmation, however long ago it stopped being
-    # true. A rejection is the newer fact.
-    for cid, envs in confirmed_before.items():
-        for env, spec in envs.items():
-            if env in rejected.get(cid, {}):
-                continue
-            derived.setdefault(cid, {}).setdefault(env, spec)
-    (root / "derived.json").write_text(
-        json.dumps({"confirmed": derived, "rejected": rejected}, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        probing = [
+            pool.submit(
+                _confirm_derived, component, candidate, fetcher, root, max_age,
+                age_for=age_for,
+            )
+            for component, _, candidate in pending
+        ]
+        run_all(
+            (endpoint_jobs + index_chart_jobs, fetch_to), (root_jobs, probe_to),
+            pool=pool,
+        )
+        confirmed = [
+            (component, env, candidate, future.result())
+            for (component, env, candidate), future in zip(pending, probing)
+        ]
+    report.fetches.extend(_record_derived(confirmed, rejected, previous, root, echo))
 
     # How much of the chart repository the component files account for. Two
     # numbers rather than a list of names: naming the unclaimed charts is a
@@ -1045,12 +905,12 @@ def sync(
     # guessed at. Both lines are the sync's half of the data PR they ask for:
     # a chart nothing accounts for wants an entry in unknown.yaml, and a
     # registry record found by infores wants its id recorded in the component
-    # file. Neither is written anywhere by this command — components/*.yaml and
+    # file. Neither is written anywhere by this command — catalog/components/*.yaml and
     # unknown.yaml are hand-edited and test-enforced, and a fetcher that edited
     # them would be deciding what the maintainers decide.
     _echo_matching_summary(components, root, by_smartapi, echo)
 
-    report.finished_at = _now()
+    report.finished_at = now()
     (root / "manifest.json").write_text(
         json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8"
     )

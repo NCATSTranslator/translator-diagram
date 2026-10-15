@@ -201,22 +201,19 @@
     owners.forEach((owner, index) => {
       const id = `mp-metal-${index}`;
       gradientId.set(owner, id);
-      const style = styles[owner] || {};
-      const stops = Array.isArray(style.metal) && style.metal.length >= 4
-        ? style.metal
-        : [style.base, style.base, style.base, style.base];
       const gradient = svg("linearGradient", { id, x1: 0, y1: 0, x2: 1, y2: 1 });
       [0, 0.38, 0.72, 1].forEach((offset, i) => {
-        gradient.append(svg("stop", { offset, "stop-color": stops[i] || style.base || "#888888" }));
+        gradient.append(svg("stop", { offset, "stop-color": styles[owner].metal[i] }));
       });
       defs.append(gradient);
     });
 
     // One clip path for every node, not one per node: the owner rail is a 3px
     // rectangle at x=0 and the clip is applied inside the node's own
-    // translated group, where all the rectangles are the same 188x60.
+    // translated group, where every rectangle is the layout's nodeW x nodeH.
+    const { nodeW, nodeH } = scene.meta.options;
     const clip = svg("clipPath", { id: "mp-nodeclip", clipPathUnits: "userSpaceOnUse" });
-    clip.append(svg("rect", { x: 0, y: 0, width: 188, height: 60, rx: 6 }));
+    clip.append(svg("rect", { x: 0, y: 0, width: nodeW, height: nodeH, rx: 6 }));
     defs.append(clip);
 
     // refX at the tip so the arrowhead's point lands exactly on the port,
@@ -273,7 +270,9 @@
     nameBox.append(name);
     group.append(nameBox);
 
-    const type = row.type || row.component_type;
+    // The x-translator type, or for software we deploy but did not write --
+    // which has none -- what it is: "MongoDB", "Redis".
+    const type = row.type || row.component_type || (row.third_party || {}).software;
     if (type) {
       group.append(svg("text", {
         class: "mp-type", x: node.w - 10, y: 20, "text-anchor": "end",
@@ -384,7 +383,10 @@
     root = svg("svg", {
       class: "mp-svg",
       xmlns: NS,
-      role: "img",
+      // `group`, not `img`: an image's subtree is presentational, which would
+      // hide the focusable `role="button"` nodes from assistive technology.
+      // The exported file is a picture, and `exportText` sets `img` there.
+      role: "group",
       "aria-label": "Component map: which component connects to which, in pipeline order",
     });
     const built = buildDefs();
@@ -502,7 +504,7 @@
       const nameBox = group.querySelector(".mp-namebox");
       const type = group.querySelector(".mp-type");
       const nodeBox = group.querySelector(".mp-box");
-      const nodeWidth = Number(nodeBox && nodeBox.getAttribute("width")) || 188;
+      const nodeWidth = Number(nodeBox && nodeBox.getAttribute("width")) || scene.meta.options.nodeW;
       const limit = nodeNameLimit(nodeWidth, measuredTextWidth(type, 6));
       if (nameBox) nameBox.setAttribute("width", limit);
       truncate(name, limit);
@@ -881,7 +883,12 @@
       if (node) highlight(node.dataset.id);
     });
     root.addEventListener("mouseout", (event) => {
-      if (event.target.closest(".mp-node")) highlight("");
+      const node = event.target.closest(".mp-node");
+      // Moving between a node's own parts fires mouseout too; clearing and
+      // re-lighting on each would sweep every node, external and edge twice.
+      const into = event.relatedTarget instanceof Element
+        ? event.relatedTarget.closest(".mp-node") : null;
+      if (node && into !== node) highlight("");
     });
     root.addEventListener("focusin", (event) => {
       const node = event.target.closest(".mp-node");
@@ -1182,6 +1189,8 @@
     if (cameraG) cameraG.removeAttribute("transform");
     clone.querySelectorAll(".mp-hit, .mp-lane-hit, use, foreignObject").forEach((el) => el.remove());
     clone.querySelectorAll("[tabindex]").forEach((el) => el.removeAttribute("tabindex"));
+    clone.querySelectorAll('[role="button"]').forEach((el) => el.removeAttribute("role"));
+    clone.setAttribute("role", "img");
     // The lanes carry `animation-delay: calc(n * var(--stagger))` for the
     // first-paint fade; a custom property with nothing to resolve it against
     // is the one thing that would still say `var(` in the finished file.
@@ -1298,8 +1307,6 @@
     else { size(); paint(); }
   };
 
-  map.fit = () => fit(true);
-  map.zoomBy = zoomBy;
   map.ring = ring;
 
   map.focus = function focus(id) {
@@ -1308,15 +1315,5 @@
     flyTo(nodeById.get(id), Math.max(1.25, cam.k));
   };
 
-  map.setEdgeKinds = function setEdgeKinds(kinds) {
-    const list = [...(kinds || [])].filter((kind) => KINDS.some((k) => k.key === kind));
-    allOff = list.length === 0;
-    TD.commit({ edges: list });
-  };
-
-  map.exportSvg = exportSvg;
-  map.exportPng = exportPng;
-  map.exportText = () => exportText();
-  map.KINDS = KINDS;
   map.nodeNameLimit = nodeNameLimit;
 })();

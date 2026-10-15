@@ -350,7 +350,8 @@ def _scrubbed(value: Any, patterns: tuple[re.Pattern[str], ...]) -> tuple[Any, i
 # mapping. URLs are deliberately absent: rewriting one breaks the link, and a
 # URL naming a withheld component is a reference for `verify` to stop on.
 ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
-    ((), ("notes",)),
+    ((), ("notes", "summary", "description")),
+    (("third_party",), ("software",)),
     (("smartapi_record",), ("title", "description_text", "tags")),
     (("smartapi_record", "servers"), ("description",)),
     (("smartapi_record", "contact"), ("name",)),
@@ -361,7 +362,7 @@ ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("helm_charts",), ("description",)),
     (("helm_charts", "last_changed"), ("subject",)),
     (("catalog",), ("name", "description")),
-    (("environments", "*"), ("status_message",)),
+    (("environments", "*"), ("status_message", "openapi_title")),
 )
 
 # `unclaimed_charts` names no component, but its descriptions are still prose.

@@ -47,10 +47,6 @@ code {
 }
 
 .dash { color: var(--muted); }
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-}
 
 /* --- Top bar -------------------------------------------------------------- */
 
@@ -77,15 +73,20 @@ code {
   gap: var(--sp-3);
   min-width: 0;
 }
-/* The Translator UI's own mark (NCATSTranslator/ui-fe, src/assets/images/
-   Logo.svg), reduced to its two glyph paths — the wordmark beside them is
-   dropped, because the words next to it here are already the title. Inlined
-   rather than linked: the page has to open from file://. Neither path carries
-   its own fill, so the mark follows the theme the way the rest of the chrome
-   does. */
-.brandmark .mark { height: 28px; width: auto; flex: none; display: block; }
-.brandmark .mark .plate { fill: var(--muted); }
-.brandmark .mark .wedge { fill: var(--accent); }
+/* A "Tr" tile, not the Translator UI's logo: that one spells NIH, and this
+   page is not an NIH page (BRAND_MARK in app.js says more). Inlined rather
+   than linked, because the page has to open from file://. The tile takes the
+   accent and the letters the page colour, so it is $purpleOne with white
+   letters in light and $lightPurpleOne with dark letters in dark. */
+.brandmark .mark { height: 28px; width: 28px; flex: none; display: block; }
+.brandmark .mark .tile { fill: var(--accent); }
+.brandmark .mark .glyph {
+  fill: var(--page);
+  font-family: var(--font);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
 .brandmark .name {
   font-size: var(--fs-body);
   font-weight: 600;

@@ -10,15 +10,17 @@ Nothing imports this module, in either direction — same rule as cli.py.
 from pathlib import Path
 
 import click
+from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
-from .dashboard import SyncedData, build_payload, write_dashboard
+from .dashboard import build_payload, write_dashboard
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
 from .sync import DEFAULT_MAX_AGE, sync
+from .synced_data import SyncedData
 
-DEFAULT_COMPONENTS = Path("components")
+DEFAULT_COMPONENTS = Path("catalog/components")
 DEFAULT_SYNC_DIR = Path("data/sync")
 DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 # A full build gets its own directory, so it cannot overwrite the publishable
@@ -59,6 +61,13 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
     of every fetch, and the dashboard shows it. The command fails only if it
     could not fetch anything at all, so a non-zero exit stays meaningful.
     """
+    # For GITHUB_TOKEN, which `fetch._headers` reads from the environment. The
+    # same lookup `download_sheet_csv` makes for GOOGLE_SHEET_ID, and
+    # usecwd=True for the reason given there. load_dotenv never overrides a
+    # variable already set, so the token a CI runner exports wins over any
+    # file.
+    if env_file := find_dotenv(usecwd=True):
+        load_dotenv(env_file)
     components = _load(components_dir)
     click.echo(f"Following the pointers in {len(components)} component files ...")
     report = sync(
@@ -151,3 +160,30 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
     click.echo(f"Wrote {json_path}")
     click.echo(f"Wrote {html_path}")
+    _warn_about_leftovers(output_dir, {html_path, json_path})
+
+
+def _warn_about_leftovers(output_dir: Path, written: set[Path]) -> None:
+    """Name what is in the output directory that this build did not write.
+
+    A preview serves the whole directory, so a leftover there — an earlier
+    build's file, a copy made by hand — is served beside the page. Warned
+    about rather than deleted: --output-dir can name any directory, and the
+    screenshot recipe in web/AGENTS.md puts a themed copy of index.html there
+    on purpose. CI always builds into a fresh checkout, so Pages never sees
+    one.
+    """
+    leftovers = sorted(
+        p.relative_to(output_dir).as_posix()
+        for p in output_dir.rglob("*")
+        if p.is_file() and p not in written
+    )
+    if leftovers:
+        shown = ", ".join(leftovers[:5])
+        if len(leftovers) > 5:
+            shown += f" and {len(leftovers) - 5} more"
+        click.echo(
+            f"Also in {output_dir}, not written by this build: {shown}. "
+            "A preview served from there serves them too.",
+            err=True,
+        )

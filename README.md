@@ -11,8 +11,8 @@ platform, built from the same set of components:
   which services call each other.
 
 They are two commands over two sources that are converging: the dashboard reads
-`components/*.yaml`, which are committed here; the diagram still reads a Google
-Sheet. Merging them is
+`catalog/components/*.yaml`, which are committed here; the diagram still reads a
+Google Sheet. Merging them is
 [issue #19](https://github.com/NCATSTranslator/translator-diagram/issues/19).
 
 The platform comprises many components maintained by different teams, and both
@@ -29,7 +29,7 @@ dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 
 ```bash
 uv sync                    # first-time setup; creates .venv/
-uv run sync-components     # follow what components/*.yaml points at -> data/sync/
+uv run sync-components     # follow what catalog/components/*.yaml points at -> data/sync/
 uv run build-dashboard     # compile that into a page      -> data/dashboard/
 open data/dashboard/index.html
 ```
@@ -69,12 +69,14 @@ on what is currently relevant.
 
 | If you want to | Look at |
 |---|---|
-| change what a component records | `components/<id>.yaml`, and [`schema/component.schema.json`](schema/component.schema.json) for the field reference |
-| change the dashboard's row order or its stage descriptions | [`config/flow-steps.yaml`](config/flow-steps.yaml) |
-| change a team's colour | [`config/owner-colors.csv`](config/owner-colors.csv), with the four constraints in [`docs/owner-colours.md`](docs/owner-colours.md) |
+| add or change a component, or investigate an unattributed identifier | [`catalog/`](catalog/), whose [README](catalog/README.md) is the curator's guide |
+| change what a component records | `catalog/components/<id>.yaml`, and [`catalog/schema/component.schema.json`](catalog/schema/component.schema.json) for the field reference |
+| change the dashboard's row order or its stage descriptions | [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml) |
+| change a team's colour | [`catalog/owner-colors.csv`](catalog/owner-colors.csv), with the four constraints in [`catalog/owner-colors.md`](catalog/owner-colors.md) |
 | change what a published dashboard withholds | [`config/privacy.yaml`](config/privacy.yaml) |
-| change the code | `src/translator_diagram/`, with the module map in [AGENTS.md](AGENTS.md) |
-| know why something is the way it is | [AGENTS.md](AGENTS.md) for the working agreements, [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) for the code — particularly *Things that look wrong but aren't* |
+| change the code | `src/translator_diagram/`, with the module map in [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) |
+| see how the parts fit together | [`docs/design.md`](docs/design.md) |
+| know why something is the way it is | [CONTRIBUTING.md](CONTRIBUTING.md) for how to work here, [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) for the code and [`web/AGENTS.md`](src/translator_diagram/web/AGENTS.md) for the page — particularly *Things that look wrong but aren't* |
 | see what is planned | the [issue tracker](https://github.com/NCATSTranslator/translator-diagram/issues) and [`FUTURE.md`](FUTURE.md) |
 
 The first four are data files, editable by anyone who knows the platform
@@ -175,22 +177,27 @@ the second gets a `_2` suffix and a warning.
 
 ## Component metadata files
 
-`components/<id>.yaml` records one file per component: what it is (owner,
-refactor status, layer, where it runs), its identifier in each of the naming
+Everything a curator edits is under [`catalog/`](catalog/), and
+[`catalog/README.md`](catalog/README.md) is the guide to it: how to add a
+component, the rules the tests enforce, and what each `unknown.yaml` status
+means.
+
+`catalog/components/<id>.yaml` records one file per component: what it is
+(owner, refactor status, layer, where it runs), its identifier in each of the naming
 spaces Translator uses (GitHub repo, Helm chart, infores CURIE, wiki page),
 ITRB's own `app` and `group`, links to its repositories and documentation, and
 the `connections:` edges between components.
-[`schema/component.schema.json`](schema/component.schema.json) is the field
-reference; `tests/test_component_files.py` validates every file against it, and
-`tests/test_components.py` covers the parser.
+[`catalog/schema/component.schema.json`](catalog/schema/component.schema.json)
+is the field reference; `tests/test_component_files.py` validates every file
+against it, and `tests/test_components.py` covers the parser.
 
 These files are the dashboard's only input, and they are committed — which is
 why the dashboard needs no credentials to run.
 
-[`unknown.yaml`](unknown.yaml) is the holding pen for identifiers seen in the
-platform that no component file claims yet — currently the OpenTelemetry
-service names that could not be attributed. Entries leave it by being promoted
-into a component file or confirmed out of use.
+[`catalog/unknown.yaml`](catalog/unknown.yaml) is the holding pen for
+identifiers seen in the platform that no component file claims yet —
+currently OpenTelemetry service names and Helm chart directories. Entries
+leave it by being promoted into a component file or confirmed out of use.
 
 **The dashboard reads these files; the diagram does not.**
 `build-dashboard` follows their pointers, but `generate-diagram` still loads
@@ -237,7 +244,7 @@ is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
 A service being down is recorded rather than fatal, so the run still succeeds
 and the page shows what was reachable.
 
-It exists to test whether the metadata in `components/` is worth keeping. Two
+It exists to test whether the metadata in `catalog/` is worth keeping. Two
 things it reports are the answer:
 
 - **Where each version came from.** A version is read from the live OpenAPI
@@ -262,12 +269,29 @@ things it reports are the answer:
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
 
+To see a branch's page the way the published build will be — built on a
+GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
+the branch and download what it builds. On any branch but `main` it deploys
+nothing. The run list is narrowed to manual runs and the newest one, because
+older runs on the same branch can still hold a `dashboard` artifact built from
+an earlier commit:
+
+```bash
+gh workflow run pages.yml --ref my-branch
+sleep 5   # the new run takes a moment to be listed
+id=$(gh run list --workflow pages.yml --branch my-branch \
+       --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$id" --exit-status
+gh run download "$id" --name dashboard --dir data/pages-preview
+```
+
 ### What a published build leaves out
 
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
 names — today the tracing console, the internal test rig, and the container
 image tags that would turn the version grid into a CVE-matching inventory.
-`--include-private` builds the full picture for local use. Helm chart
+`--include-private` builds the full picture for local use, into
+`data/dashboard-private/` rather than over the publishable build. Helm chart
 `appVersion` and other chart metadata stay in the published build; only image
 tags are redacted.
 
@@ -287,11 +311,14 @@ the public/private split this anticipates.
 [`docs/Security.md`](docs/Security.md) collects what the page publishes, what it
 withholds, and the security questions still open.
 
-Release lists come from the GitHub API, which allows 60 calls an hour to an
-unauthenticated address. That covers a sync of this repository twice over, but
-if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
-a higher limit. It is sent to `api.github.com` and to nothing else, and a
-throttled fetch costs some release tags, not the run.
+Release lists and repository metadata come from the GitHub API, which allows
+60 calls an hour to an unauthenticated address. A full sync spends about 46,
+so a second `--force` sync within the hour runs short. Set `GITHUB_TOKEN` in
+`.env` (see [`env.default`](env.default)) or in the environment for a limit of
+5000; with `gh` logged in, `GITHUB_TOKEN=$(gh auth token) uv run
+sync-components` does it without a file. The token is sent to `api.github.com`
+and to nothing else, and a throttled fetch costs some release tags, not the
+run.
 
 **Every column sorts.** Click a header to sort by it, click again to reverse,
 and a third click returns to stage order — which is also what the ✕ beside
@@ -302,7 +329,7 @@ stage — each band naming what that stage is for — and sorting by owner bands
 them by owner instead.
 
 The stages, their order, and the components in each are
-[`config/flow-steps.yaml`](config/flow-steps.yaml), edited by hand. The
+[`catalog/flow-steps.yaml`](catalog/flow-steps.yaml), edited by hand. The
 recorded dependency edges are too sparse to order twenty-six components: with
 nothing recording that the UI calls Name Lookup, a computed order put Name
 Lookup up beside the data sources. A written order is more honest than a
@@ -339,7 +366,7 @@ browser blocks downloads from `file://`.
 ### Node colours (by Owner)
 
 Owner-to-colour mappings live in
-[`config/owner-colors.csv`](config/owner-colors.csv) (two columns: `owner`,
+[`catalog/owner-colors.csv`](catalog/owner-colors.csv) (two columns: `owner`,
 `color`). Edit that file to add a new owner, re-order the legend, or change a
 colour — no Python edit required.
 
@@ -433,7 +460,7 @@ uv run generate-diagram [OPTIONS]
                                    Write the legends as separate PNGs rather than
                                    embedding them  [default: split-legends]
   --owner-colors FILE              Owner-colour CSV to use instead of
-                                   config/owner-colors.csv
+                                   catalog/owner-colors.csv
   --layer-column TEXT              Column to drive per-layer sub-figures, with
                                    in-layer nodes bold-bordered and their
                                    neighbours from other layers at normal
@@ -447,57 +474,73 @@ uv run generate-diagram [OPTIONS]
 ```text
 translator-diagram/
 ├── src/translator_diagram/
-│   │                     # shared by both stacks
-│   ├── colors.py         # Owner colours and the palette
-│   ├── components.py     # Reads components/<id>.yaml
-│   ├── privacy.py        # What a published dashboard withholds
-│   │                     # the diagram
-│   ├── model.py          # Component, index_by_id (one sheet row)
-│   ├── naming.py         # SVG ids and output filename stems
-│   ├── loading.py        # CSV parsing and the Google Sheet download
-│   ├── validation.py     # Reference and id checks
-│   ├── render.py         # The diagram and the per-layer sub-figures
-│   ├── legend.py         # The two legends
-│   ├── export.py         # components.json
-│   ├── cli.py            # generate-diagram
-│   │                     # the dashboard
-│   ├── sync.py           # Fetches what the component files point at
-│   ├── flow.py           # Data-flow depths, and the stage-order check
-│   ├── dashboard.py      # Version-source chain, drift, the rendered page
-│   ├── dashboard_cli.py  # sync-components and build-dashboard
-│   ├── web/              # dashboard.css and dashboard.js, inlined into the page
-│   └── CLAUDE.md         # The module map and the non-obvious decisions
-├── components/           # One YAML file per component — see docs/
-│   └── CLAUDE.md         # What a component file must contain
-├── unknown.yaml          # Identifiers no component file claims yet
-├── config/               # The data files, edited by hand
-│   ├── owner-colors.csv  # Owner → fill colour
-│   ├── flow-steps.yaml   # The dashboard's stages, in page order
-│   └── privacy.yaml      # What a published build leaves out
-├── schema/               # JSON Schema for components/*.yaml and unknown.yaml
-├── docs/                 # The metadata case, its research, owner colours
-├── tests/                # One test file per module
-├── .github/workflows/    # ci.yml (tests and lints), pages.yml (build + deploy)
-├── pyproject.toml        # uv/hatchling project metadata and dependencies
-├── uv.lock               # Pinned dependency versions
-├── env.default           # Template for .env (diagram only)
-├── FUTURE.md             # Ideas with their costs worked out
-├── AGENTS.md             # Working agreements, and where the rest is
-└── data/                 # Gitignored — every input and output goes here
-    ├── sync/             # Cached upstream responses + manifest.json
-    ├── dashboard/        # index.html and overview.json
-    ├── components.csv    # Downloaded from the Google Sheet
-    └── diagram.png       # Rendered diagram (plus .dot, .json, .svg, .pdf)
+│   │                       # shared by both stacks
+│   ├── colors.py           # Owner colours and the palette
+│   ├── components.py       # Reads catalog/components/<id>.yaml
+│   ├── privacy.py          # What a published dashboard withholds
+│   │                       # the diagram
+│   ├── model.py            # Component, index_by_id (one sheet row)
+│   ├── naming.py           # SVG ids and output filename stems
+│   ├── loading.py          # CSV parsing and the Google Sheet download
+│   ├── validation.py       # Reference and id checks
+│   ├── render.py           # The diagram and the per-layer sub-figures
+│   ├── legend.py           # The two legends
+│   ├── export.py           # components.json
+│   ├── cli.py              # generate-diagram
+│   │                       # the dashboard
+│   ├── deployments.py      # Where each component runs: recorded, registered, derived
+│   ├── charts.py           # Which component each Helm chart belongs to
+│   ├── fetch.py            # One URL into one file: fetch_to, probe_to
+│   ├── sync.py             # Fetches what the component files point at
+│   ├── flow.py             # Data-flow depths, and the stage-order check
+│   ├── synced_data.py      # Reads the sync cache; where the 200 gate lives
+│   ├── payload_details.py  # Pure shapers over the cache and component files
+│   ├── stages.py           # The bands, from catalog/flow-steps.yaml
+│   ├── cells.py            # The version-source chain, one cell at a time
+│   ├── rows.py             # One row per component: drift, dates, releases
+│   ├── dashboard.py        # The payload, the graph views, the rendered page
+│   ├── dashboard_cli.py    # sync-components and build-dashboard
+│   ├── web/                # The page's CSS and JS, inlined into it
+│   │   └── AGENTS.md       # How to look at the page, and its non-obvious decisions
+│   └── AGENTS.md           # The module map and the non-obvious decisions
+├── catalog/                # Everything a curator edits, by hand
+│   ├── components/         # One YAML file per component
+│   ├── unknown.yaml        # Identifiers no component file claims yet
+│   ├── flow-steps.yaml     # The dashboard's stages, in page order
+│   ├── owner-colors.csv    # Owner → fill colour
+│   ├── owner-colors.md     # The rules for choosing a new colour
+│   ├── schema/             # JSON Schema for components/*.yaml and unknown.yaml
+│   ├── README.md           # The curator's guide to all of the above
+│   └── AGENTS.md           # Agent notes for this directory
+├── config/
+│   └── privacy.yaml        # What a published build leaves out
+├── docs/                   # The design, the metadata case and its research
+├── tests/                  # One test file per module
+├── tools/                  # replay_sync.py: sync() offline, from a recorded cache;
+│                           # make_favicon.py: renders web/favicon.ico
+├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
+├── pyproject.toml          # uv/hatchling project metadata and dependencies
+├── uv.lock                 # Pinned dependency versions
+├── env.default             # Template for .env: the sheet ID, a GitHub token
+├── FUTURE.md               # Ideas with their costs worked out
+├── CONTRIBUTING.md         # How to work here: checks, conventions
+├── AGENTS.md               # What only an agent needs, and where the rest is
+└── data/                   # Gitignored — every input and output goes here
+    ├── sync/               # Cached upstream responses + manifest.json
+    ├── dashboard/          # index.html and overview.json
+    ├── components.csv      # Downloaded from the Google Sheet
+    └── diagram.png         # Rendered diagram (plus .dot, .json, .svg, .pdf)
 ```
 
 ## Status and next steps
 
 Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
-runs the tests, lints and a build on every pull request, and
-`.github/workflows/pages.yml` builds the page on every pull request as a
-downloadable artifact while deploying only from `main`, a nightly schedule, or
-an explicit manual run. A published build applies
-[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+runs the tests and lints on every pull request, and
+`.github/workflows/pages.yml` builds and deploys the page from `main` — on a
+push, a nightly schedule, or a manual run — and, run by hand on any other
+branch, builds it as a downloadable artifact without deploying. A published
+build applies [`config/privacy.yaml`](config/privacy.yaml) and carries
+`noindex`.
 
 What is *not* built is the interactive view of the **diagram** — a static page
 over the generated SVG and `components.json`. That is
@@ -533,25 +576,17 @@ is the live list. Ideas that started here:
 
 ## Contributing
 
-```bash
-uv sync              # first-time setup
-uv run pytest        # the test suite
-uv run ruff check    # Python lint
-uv run rumdl check . # Markdown lint
-```
+[CONTRIBUTING.md](CONTRIBUTING.md) is how to work here: the setup and the
+checks CI runs (`uv run pytest`, `ruff check`, `rumdl check .`), how to check
+a change to the diagram or the page, and the conventions. Read
+[`docs/design.md`](docs/design.md) and the module map in
+[`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) before
+a first change.
 
-All four run in CI on every pull request, along with a dashboard build. The
-source is one module per subject under `src/translator_diagram/`, and `tests/`
-has one file per module — a change to `loading.py` belongs in
-`tests/test_loading.py`.
-
-Two things are worth reading before a first change. [AGENTS.md](AGENTS.md) has
-the module map, the rule about which module may import which (enforced by
-`tests/test_package_layout.py`), and a *Things that look wrong but aren't*
-section that exists because most of them were arrived at the hard way. And if
-you change the dashboard, render it and look at it: the page has passed a full
-test suite while visibly broken more than once, and AGENTS.md carries the
-headless-Firefox recipe for checking it at several widths and in both themes.
+Changes reach `main` only through a pull request approved by a code owner.
+[`.github/CODEOWNERS`](.github/CODEOWNERS) lists them: gaurav maintains the
+whole repository, and anyone who wants responsibility for part of the code is
+welcome to add themselves for that path.
 
 ## Licence
 

@@ -47,7 +47,7 @@
   /* --- Small helpers ------------------------------------------------------- */
 
   const esc = (value) => TD.fmt.esc(value);
-  const DASH = '<span class="dash">—</span>';
+  const DASH = TD.fmt.DASH;
 
   const data = () => TD.DATA || {};
   const envs = () => (Array.isArray(TD.ENVS) && TD.ENVS.length ? TD.ENVS : []);
@@ -106,11 +106,11 @@
      eases. The grid-template-rows 0fr→1fr trick is what does the easing; it
      collapses to nothing under prefers-reduced-motion because --dur-layout
      does. */
-  function disclosure(summary, html, open) {
+  function disclosure(summary, html) {
     if (!html) return "";
     const id = `dw-disc-${++discId}`;
     return `<button type="button" class="dw-disc" data-disc="${id}"
-        aria-expanded="${open ? "true" : "false"}" aria-controls="${id}"
+        aria-expanded="false" aria-controls="${id}"
         >${TD.ui.CHEVRON}<span>${esc(summary)}</span></button>
       <div class="dw-disc-body" id="${id}"><div>${html}</div></div>`;
   }
@@ -148,7 +148,7 @@
       <tbody>${body}</tbody></table></div>`;
   }
 
-  const sourceLabel = (key) => (data().source_labels || {})[key] || key;
+  const sourceLabel = TD.fmt.sourceLabel;
 
   /* Colour is never the only carrier here either: the dot has a word beside
      it in every place it is used. */
@@ -166,26 +166,19 @@
   /* --- Header -------------------------------------------------------------- */
 
   /* Derived from the same four stops colors.py hands the map, so the rule
-     under the name and the rail on the map node are the same metal. A build
-     from before owner_styles existed still gets the flat hex; a component
-     with no owner at all gets a hairline rather than a gap. */
+     under the name and the rail on the map node are the same metal. A
+     component with no owner style gets a hairline rather than a gap. */
   function metalRule(owner) {
-    const style = TD.owner.style(owner);
-    if (!style) return "background: var(--hairline-strong)";
-    const metal = Array.isArray(style.metal) && style.metal.length >= 4
-      ? `linear-gradient(90deg, ${style.metal.join(", ")})`
-      : style.base;
-    return `background: ${metal}`;
+    return `background: ${TD.owner.metal(owner, "90deg") || "var(--hairline-strong)"}`;
   }
 
   function headerLinks(row) {
-    const ids = row.identifiers || {};
     const links = [];
     if (row.repository) links.push(ext(row.repository, "Repository"));
-    const doc = list(row.docs)[0] || (row.documentation ? { url: row.documentation } : null);
+    const doc = list(row.docs)[0];
     if (doc && doc.url) links.push(ext(doc.url, "Docs"));
-    if (ids.translator_all_wiki) {
-      links.push(ext(WIKI_BASE + ids.translator_all_wiki, "Wiki"));
+    if (row.translator_all_wiki) {
+      links.push(ext(WIKI_BASE + row.translator_all_wiki, "Wiki"));
     }
     const record = row.smartapi_record;
     if (record && record.registry_url) links.push(ext(record.registry_url, "SmartAPI registry"));
@@ -194,11 +187,28 @@
     return links.length ? `<div class="dw-links">${links.join("")}</div>` : "";
   }
 
+  /* The catalog's `summary`, else GitHub's one-liner for the repository: the
+     shortest true sentence about what this thing is. The catalog's wins
+     because a repository's blurb can describe the repository rather than the
+     service (docmetadata-api's reads as a fork request). */
+  function blurbFor(row) {
+    const summary = (row || {}).summary;
+    if (filled(summary)) return summary;
+    const description = ((row || {}).repository_meta || {}).description;
+    return filled(description) ? description : "";
+  }
+
+  /* The upstream software this component is a deployment of -- "Jaeger",
+     "MongoDB" -- when the catalog says the code is not ours, else "". */
+  function thirdPartyText(row) {
+    const block = (row || {}).third_party;
+    return block && filled(block.software) ? String(block.software) : "";
+  }
+
   function headerHtml(row) {
-    // GitHub's own one-liner for the repository. It is the shortest true
-    // sentence about what this thing is, and it costs one line.
-    const blurb = (row.repository_meta || {}).description || "";
-    const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer]
+    const blurb = blurbFor(row);
+    const meta = [row.refactor_status, row.hosted_at, row.component_type || row.type, row.layer,
+      thirdPartyText(row) ? "third-party" : ""]
       .filter(filled)
       .map(esc)
       .join(" · ");
@@ -220,9 +230,7 @@
   /* --- Overview tab -------------------------------------------------------- */
 
   function otelHtml(row) {
-    const names = list((row.identifiers || {}).otel_services).length
-      ? list((row.identifiers || {}).otel_services)
-      : list(row.otel_services);
+    const names = list(row.otel_services);
     if (!names.length) return "";
     const presence = list(row.otel_presence);
     const items = names.map((name) => {
@@ -263,7 +271,7 @@
 
   function docsHtml(row) {
     const docs = list(row.docs);
-    if (!docs.length) return row.documentation ? stack([ext(row.documentation)]) : "";
+    if (!docs.length) return "";
     return stack(docs.map((doc) =>
       `${ext(doc.url, docLabel(doc.url))} ${doc.kind ? note(doc.kind) : ""}`));
   }
@@ -308,7 +316,6 @@
   }
 
   function panelOverview(row) {
-    const ids = row.identifiers || {};
     const itrb = row.itrb || {};
     const record = row.smartapi_record;
 
@@ -318,15 +325,14 @@
 
     const stage = [row.step_label, row.step_title].filter(filled).map(esc).join(" · ");
 
-    const smartapiId = ids.smartapi || row.smartapi;
+    const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
       ? (record && record.registry_url
         ? ext(record.registry_url, smartapiId, "dw-link dw-mono")
         : mono(smartapiId))
       : "";
 
-    const charts = list(ids.helm_charts).length ? list(ids.helm_charts)
-      : (ids.helm_chart || row.helm_chart ? [ids.helm_chart || row.helm_chart] : []);
+    const charts = list(row.chart_names);
     const chartDetails = list(row.helm_charts);
     const chartCell = charts.length
       ? charts.map((name) => {
@@ -344,8 +350,19 @@
       ? `${dot(row.uptime)}${esc(row.uptime)} ${note("from SmartAPI, whole record")}`
       : "";
 
+    // Software we deploy but did not write. Saying whose it is beside the
+    // name is what stops the Releases and Repositories below reading as
+    // claims about code of ours.
+    const software = thirdPartyText(row);
+    const softwareUrl = software ? (row.third_party || {}).url : "";
+    const softwareHtml = software
+      ? `${softwareUrl ? ext(softwareUrl, software) : esc(software)} ${
+        note("third-party; only the deployment is ours")}`
+      : "";
+
     const identity = dl([
       drow("Type", typeValue ? esc(typeValue) + typeExtra : "", true),
+      drow("Software", softwareHtml),
       drow("Layer", row.layer ? esc(row.layer) : "", true),
       drow("Stage", stage ? `${stage}${row.step_description
         ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
@@ -354,11 +371,11 @@
       drow("Part of", row.part_of ? esc(row.part_of) : ""),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
         ? `${itrb.app ? mono(itrb.app) : DASH}${itrb.group ? ` ${note(`group ${itrb.group}`)}` : ""}` : ""),
-      drow("infores", ids.infores || row.infores ? mono(ids.infores || row.infores) : "", true),
+      drow("infores", row.infores ? mono(row.infores) : "", true),
       drow("SmartAPI id", smartapiCell, true),
       drow("Helm chart", chartCell),
-      drow("Wiki", ids.translator_all_wiki
-        ? ext(WIKI_BASE + ids.translator_all_wiki, ids.translator_all_wiki) : ""),
+      drow("Wiki", row.translator_all_wiki
+        ? ext(WIKI_BASE + row.translator_all_wiki, row.translator_all_wiki) : ""),
       drow("OTel services", otelHtml(row)),
       drow("Repositories", repositoriesHtml(row)),
       drow("Documentation", docsHtml(row)),
@@ -375,8 +392,14 @@
 
     const meta = repoMetaHtml(row);
 
+    // What the component is, then what is odd about our record of it: the
+    // catalog's `description` and `notes` answer those two questions, which
+    // is why the notes carry a heading and the description does not.
     return sections([
-      row.notes ? `<p class="dw-prose">${esc(row.notes)}</p>` : "",
+      row.description ? `<div class="dw-prose dw-desc">${TD.fmt.prose(row.description)}</div>` : "",
+      row.notes
+        ? `<div class="dw-notes">${heading("Notes")}<p class="dw-prose">${esc(row.notes)}</p></div>`
+        : "",
       identity,
       meta ? heading("Repository") + meta : "",
     ]);
@@ -512,22 +535,21 @@
 
   /* --- Releases tab -------------------------------------------------------- */
 
-  /* Which environments run this tag. Two sources, deliberately: `releases[]`
-     carries a `deployed` flag computed on the Python side, and the environment
-     cells carry the tag they are actually running. The second is what names
-     the environments, which is the part a reader asks about. */
-  function deployedIn(row, tag) {
+  /* Which environments run this release. Two sources, deliberately: the
+     release carries a `deployed` flag computed on the Python side, and the
+     environment cells carry the tag they are actually running. The second is
+     what names the environments, which is the part a reader asks about. */
+  function deployedIn(row, release) {
     const where = envs().filter((env) => {
       const cell = (row.environments || {})[env];
-      return cell && cell.deployed && cell.release_tag === tag;
+      return cell && cell.deployed && cell.release_tag === release.tag;
     });
     if (where.length) return where;
-    const short = list(row.releases).find((release) => release && release.tag === tag);
-    return short && short.deployed ? [] : null;
+    return release.deployed ? [] : null;
   }
 
   function releaseItem(row, release) {
-    const where = deployedIn(row, release.tag);
+    const where = deployedIn(row, release);
     const isDeployed = where !== null;
     const marks = [];
     if (isDeployed) {
@@ -551,8 +573,7 @@
   }
 
   function panelReleases(row) {
-    const detail = list(row.releases_detail).length ? list(row.releases_detail) : list(row.releases);
-    const usable = detail.filter((release) => release && release.tag);
+    const usable = list(row.releases_detail);
     if (!usable.length) return sections([muted("No releases recorded.")]);
     const items = usable.map((release) => releaseItem(row, release));
     const head = items.slice(0, LIST_LIMIT).join("");
@@ -611,7 +632,7 @@
 
   function panelHelm(row) {
     const charts = list(row.helm_charts);
-    const status = row.helm_status || (charts.length ? "recorded" : null);
+    const status = row.helm_status;
     const parts = [caption(
       "From the chart in translator-devops: what should be deployed, not what is running.")];
 
@@ -648,24 +669,12 @@
           c.title ? esc(c.title) : ""}`));
   }
 
-  function suggestionHtml(row) {
-    const hits = list(data().smartapi_suggestions)
-      .filter((entry) => entry && entry.component === row.id);
-    if (!hits.length) return "";
-    return caption("The registry holds an entry matching this component's infores, "
-      + "which the component file does not record:")
-      + stack(hits.map((hit) =>
-        `${ext(`https://smart-api.info/ui/${hit.smartapi_id}`, hit.smartapi_id, "dw-link dw-mono")} ${
-          hit.title ? esc(hit.title) : ""} ${note(`matched by ${hit.matched_by || "infores"}`)}`));
-  }
-
   function panelSmartapi(row) {
     const record = row.smartapi_record;
     if (!record) {
       return sections([
         muted("Not registered in SmartAPI."),
         candidatesHtml(row),
-        suggestionHtml(row),
       ]);
     }
 
@@ -1173,7 +1182,8 @@
   /* --- Public API ---------------------------------------------------------- */
 
   drawer.open = open;
-  drawer.close = close;
   drawer.isOpen = () => !!root && !root.hidden;
-  drawer.current = () => (drawer.isOpen() ? currentId : "");
+  // For tests/web/drawer.test.js; nothing on the page calls it from outside.
+  drawer.blurbFor = blurbFor;
+  drawer.thirdPartyText = thirdPartyText;
 })();

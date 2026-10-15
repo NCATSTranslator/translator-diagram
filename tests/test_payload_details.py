@@ -18,6 +18,7 @@ from translator_diagram.payload_details import (
     helm_detail,
     releases_detail,
     repo_meta_detail,
+    same_version,
     smartapi_detail,
     strip_html,
 )
@@ -409,6 +410,24 @@ class TestHelmDetail:
 
     def test_the_directory_name_stands_in_for_a_chart_with_no_name(self):
         assert helm_detail("shepherd", {}, {}, None)["chart"] == "shepherd"
+
+
+class TestSameVersion:
+    def test_the_v_prefix_is_ignored(self):
+        # NameResolution tags v1.5.2 and reports 1.5.2.
+        assert same_version("v1.5.2", "1.5.2")
+        assert same_version("1.5.2", "V1.5.2")
+
+    def test_different_versions_do_not_match(self):
+        assert not same_version("v1.5.2", "1.5.1")
+        # node-annotator reports "1.0" in ci and "1.0.0" in prod; they are not
+        # the same string, and guessing they are the same release would put a
+        # wrong link on a row.
+        assert not same_version("v1.0.0", "1.0")
+
+    def test_a_missing_side_never_matches(self):
+        assert not same_version(None, "1.0")
+        assert not same_version("v1.0", None)
 
 
 class TestReleasesDetail:

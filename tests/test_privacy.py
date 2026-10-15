@@ -7,7 +7,7 @@ import click
 import pytest
 
 from translator_diagram.components import ComponentFile
-from translator_diagram.dashboard import SyncedData, build_payload, build_rows
+from translator_diagram.dashboard import build_payload
 from translator_diagram.privacy import (
     UNCLAIMED_CHART_FREE_TEXT,
     Policy,
@@ -18,6 +18,8 @@ from translator_diagram.privacy import (
     scrub,
     verify,
 )
+from translator_diagram.rows import build_rows
+from translator_diagram.synced_data import SyncedData
 
 
 def _policy(components=(), fields=(), environment_fields=()):
@@ -169,6 +171,8 @@ class TestApply:
             {
                 "id": "keep",
                 "notes": "Traces go to jaeger, then to Jaeger's console.",
+                "summary": "A jaeger forwarder.",
+                "description": "Forwards spans to jaeger.",
                 "smartapi_record": {
                     "title": "jaeger bridge",
                     "description_text": "Reads from jaeger.",
@@ -184,13 +188,15 @@ class TestApply:
         kept, report = apply(rows, _policy(components=["jaeger"]))
         record = kept[0]["smartapi_record"]
         assert kept[0]["notes"] == "Traces go to …, then to …'s console."
+        assert kept[0]["summary"] == "A … forwarder."
+        assert kept[0]["description"] == "Forwards spans to …."
         assert record["title"] == "… bridge"
         assert record["description_text"] == "Reads from …."
         assert record["tags"] == ["…", "tracing"]
         assert kept[0]["releases_detail"][0]["name"] == "… support"
         assert kept[0]["releases_detail"][0]["body_excerpt"] == "Adds …."
-        assert report.mentions == 7
-        assert "7 mentions in free text" in report.summary()
+        assert report.mentions == 9
+        assert "9 mentions in free text" in report.summary()
 
     def test_every_free_text_field_on_a_row_is_scrubbed(self):
         """Repository topics, chart commit subjects, catalog prose and the
@@ -209,13 +215,16 @@ class TestApply:
                     {"description": "jaeger", "last_changed": {"subject": "bump jaeger"}}
                 ],
                 "catalog": {"name": "jaeger", "description": "jaeger"},
-                "environments": {"ci": {"status_message": "jaeger ok"}},
+                "third_party": {"software": "jaeger"},
+                "environments": {
+                    "ci": {"status_message": "jaeger ok", "openapi_title": "jaeger API"}
+                },
             },
             {"id": "jaeger", "environments": {}},
         ]
         kept, report = apply(rows, _policy(components=["jaeger"]))
         assert "jaeger" not in json.dumps(kept)
-        assert report.mentions == 11
+        assert report.mentions == 13
 
     def test_unclaimed_chart_descriptions_are_scrubbed(self):
         charts = [{"name": "tracing", "description": "Deploys jaeger."}]
@@ -457,14 +466,14 @@ class TestVerify:
     def test_the_real_public_build_verifies(self):
         """What `build-dashboard` does before it writes, on real data."""
         from translator_diagram.components import load_components
-        from translator_diagram.dashboard import SyncedData
+        from translator_diagram.synced_data import SyncedData
 
         sync_dir = pathlib.Path("data/sync")
         if not (sync_dir / "manifest.json").exists():
             pytest.skip("no local sync; run sync-components")
         policy = load_policy()
         payload = build_payload(
-            load_components(pathlib.Path("components")), SyncedData(sync_dir), policy
+            load_components(pathlib.Path("catalog/components")), SyncedData(sync_dir), policy
         )
         verify(payload, policy)
 

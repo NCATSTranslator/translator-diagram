@@ -99,26 +99,16 @@
 
   /* --- Brand mark ------------------------------------------------------------- */
 
-  /* The two glyph paths of the Translator UI's own logo
-     (NCATSTranslator/ui-fe, src/assets/images/Logo.svg): the plate and the
-     wedge. The wordmark that follows them in the original is dropped — the
-     title beside it already says the words. Fills are left to base.css so the
-     mark follows the theme, and the whole thing is `aria-hidden` because the
-     name is right there in text. */
-  const BRAND_MARK = `<svg class="mark" viewBox="0 0 64.1 40" aria-hidden="true"
-    xmlns="http://www.w3.org/2000/svg"><path class="wedge" d="M63.791 19.2182L54.0164
-    2.04559C53.2974 0.78236 51.9407 0 50.4691 0H47.1602L58.0991 19.2182C58.3755 19.7039 58.3755
-    20.2961 58.0991 20.7818L47.1602 40H50.4691C51.9407 40 53.2974 39.2176 54.0164
-    37.9544L63.791 20.7818C64.0675 20.2961 64.0675 19.7039 63.791 19.2182Z"/><path class="plate"
-    fill-rule="evenodd" clip-rule="evenodd" d="M4.06567 0H44.7224L55.6613 19.2182C55.9378 19.7039
-    55.9378 20.2961 55.6613 20.7818L44.7224 40H4.06567C1.82026 40 0 38.2091 0 36V4C0 1.79086
-    1.82026 0 4.06567 0ZM18.2574 29.6H22.0055V11.325H19.223V20.9375C19.2315 21.4875 19.2442
-    22.0583 19.2611 22.65C19.2865 23.2333 19.312 23.8 19.3374 24.35C19.3628 24.9 19.3839 25.3875
-    19.4009 25.8125H19.312L10.2277 11.325H6.50508V29.6H9.27482V20.05C9.25788 19.45 9.2367 18.8583
-    9.21129 18.275C9.19435 17.6917 9.16894 17.125 9.13506 16.575C9.10965 16.025 9.08 15.5042
-    9.04612 15.0125H9.16047L18.2574 29.6ZM24.5424 11.325V29.6H27.5917V11.325H24.5424ZM41.7667
-    29.6H44.8032V11.325H41.7667V18.8H33.2033V11.325H30.1541V29.6H33.2033V21.35H41.7667V29.6Z"/>
-    </svg>`;
+  /* A "Tr" tile in the Translator UI's purple, and deliberately not that UI's
+     own logo (NCATSTranslator/ui-fe, src/assets/images/Logo.svg), whose plate
+     spells NIH: this page is not an official NIH page, and a mark that reads
+     as one would be taken as a claim that it is. tools/make_favicon.py draws
+     the favicon from the same design. Fills are left to base.css so the tile
+     follows the theme, and the whole thing is `aria-hidden` because the name
+     is right there in text. */
+  const BRAND_MARK = `<svg class="mark" viewBox="0 0 32 32" aria-hidden="true"
+    xmlns="http://www.w3.org/2000/svg"><rect class="tile" width="32" height="32"
+    rx="6"/><text class="glyph" x="16" y="22.6" text-anchor="middle">Tr</text></svg>`;
 
   /* --- Prose ----------------------------------------------------------------- */
 
@@ -128,7 +118,7 @@
     const named = ["openapi", "status", "smartapi", "helm"]
       .filter((key) => tally[key])
       .map((key) => `<strong>${tally[key]}</strong> from ${
-        esc((DATA.source_labels || {})[key] || key)}`);
+        esc(TD.fmt.sourceLabel(key))}`);
     const none = tally.none
       ? `, and <strong>${tally.none}</strong> from nothing at all`
       : "";

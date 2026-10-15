@@ -1,0 +1,541 @@
+# src/translator_diagram/
+
+The code for both commands. How to work in this repository — how to check your
+work, `data/` as scratch space, the conventions — is in
+[../../CONTRIBUTING.md](../../CONTRIBUTING.md), and what only an agent needs,
+such as leaving the visual verdict to a human, is in
+[../../AGENTS.md](../../AGENTS.md). This file is the module map and the decisions
+that are not visible from the line you are changing.
+
+| Section | What it answers |
+|---|---|
+| [Package layout](#package-layout-srctranslator_diagram) | Which module holds what, and which may import which |
+| [Data model](#data-model) | CSV column → `Component` field |
+| [Common change patterns](#common-change-patterns) | "I want to change X" → the file to open |
+| [What the dashboard refuses to claim](#what-the-dashboard-refuses-to-claim) | Correctness rules that were each a bug first |
+| [Things that look wrong but aren't](#things-that-look-wrong-but-arent) | Decisions with a reason that is not visible locally |
+| [Special features](#special-features) | Ubiquitous clones, the SVG id namespace, ghost nodes |
+
+## Package layout (`src/translator_diagram/`)
+
+One module per subject, and one test file per module. No line numbers here on
+purpose — they rot within a commit or two.
+
+A test belongs to the module whose *decision* it pins, not to the function it
+happens to call. Most of the dashboard's tests reach their assertion through
+`build_rows` or `build_payload`, so sorting them by call graph would pile
+almost all of them into `tests/test_rows.py` and leave the other files empty —
+which is how a 2000-line test file grows back.
+
+| Module | What's there |
+|---|---|
+| `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
+| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
+| `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
+| `loading.py` | `_parse_bool`, `parse_id_list`, `parse_externals`, `_valid_url`, `load_components`, and `download_sheet_csv` for `--google-sheet` |
+| `validation.py` | `validate` — duplicate IDs, unknown references, SVG id collisions |
+| `render.py` | `build_graph`, `build_layer_subgraph`, and the `_compute_*` / `_emit_*` / `_add_*` helpers below |
+| `legend.py` | The owner and edge-style legends, embedded (`--no-split-legends`) or standalone |
+| `export.py` | `write_json` — every non-hidden component, into `components.json` |
+| `cli.py` | The `click` command: one `@click.option` per flag, then the run sequence |
+
+The dashboard is a second, parallel stack over the same components:
+
+| Module | What's there |
+|---|---|
+| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
+| `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
+| `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
+| `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
+| `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the two waves, derived-host confirmation, and the manifest |
+| `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
+| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
+| `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
+| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
+| `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
+| `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
+| `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
+| `dashboard_cli.py` | `sync-components` and `build-dashboard` |
+| `web/*.css`, `web/*.js` | The browser half, concatenated by `CSS_FILES`/`JS_FILES` in `dashboard.py` and inlined into the generated page. `tokens.css`/`core.js` first; `app.js` last. [`web/AGENTS.md`](web/AGENTS.md) has how to look at the page and the browser-side decisions |
+
+`web/` holds what the browser gets, plus its agent notes in `web/AGENTS.md`
+— it was `data/`, which collided with the gitignored `/data/` scratch space at
+the root. The notes sit beside the files they describe but are never served:
+the page inlines only what `CSS_FILES`, `JS_FILES` and `FAVICON_FILE` name, and
+a build writes only `index.html` and `overview.json`, which is everything Pages
+publishes. Tests in `tests/test_dashboard.py` and `tests/test_dashboard_cli.py`
+hold both in place: inlining the notes into the page, raw, escaped or rendered
+from Markdown, or writing them beside it, fails CI rather than publishing
+them. A build does not clear its output directory, so it names on stderr any
+file there it did not write, which a local preview would serve. The packaged
+fallback copy of `owner-colors.csv` sits at the package root instead: a colour
+table the diagram generator reads is not a web file.
+
+**Imports run one way**, and a new one must not break it:
+
+```text
+# the diagram
+model → naming → {validation, export, render}
+colors → {render, legend}
+legend → render
+cli → everything above
+
+# the dashboard
+components → {charts, deployments, fetch, flow, sync, synced_data, stages, cells, rows, dashboard}
+charts → {sync, synced_data, dashboard}
+deployments → {sync, cells, rows}
+fetch → sync
+synced_data → {cells, rows, dashboard}
+flow → {stages, rows}
+stages → {rows, dashboard}
+cells → {rows, dashboard}
+rows → dashboard
+colors → dashboard
+privacy → dashboard
+payload_details → rows
+dashboard_cli → everything above
+```
+
+The dashboard stack reads downward and only downward: `synced_data` reads the
+cache, `cells` resolves one cell out of it, `rows` assembles one component's
+row, `stages` says what order the rows go in, and `dashboard` assembles the
+payload and renders the page. Two edges are the reason it is shaped this way
+rather than any other: `build_rows` calls `load_stages`, so `stages` has to sit
+below `rows` rather than beside `build_payload`; and `SyncedData.chart_commit`
+needs `_commit_facts`, which is why that one shaper lives in `synced_data.py`
+next to its only caller instead of with the other fact extractors in
+`cells.py`. Getting either wrong is a cycle, and
+`tests/test_package_layout.py` fails on it.
+
+Nothing imports either CLI. The palette constants live in `colors.py` rather
+than `render.py` for exactly this reason: `render` and `legend` both need
+`EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
+other.
+
+**The two halves meet only at `colors`.** `model.py` parses a sheet row and
+`components.py` parses a YAML file; they describe the same components but not
+the same data, and neither imports the other. Merging them is what issue #19
+is for — doing it early would mean one of the two losing fields it needs.
+
+`tests/test_package_layout.py` enforces it, so a wrong-direction import fails
+CI rather than sitting there working. Widening its `ALLOWED` map to silence a
+failure will not help: a separate assertion checks the map itself is acyclic.
+Move the shared code down the graph instead, the way the palette constants
+went.
+
+**`build_graph` and `build_layer_subgraph` share `render.py` on purpose.** They
+duplicate the edge-suppression rules, drift between them has already caused a
+real bug (see the two suppression sets, below), and a file boundary would make
+the next drift easier to miss. Deduplicating them is worth doing; splitting
+them without deduplicating them is not.
+
+### Inside render.py
+
+| Function | Purpose |
+|---|---|
+| `_compute_active_set` | IDs to render, per the refactor-status filter |
+| `_compute_ghost_ids` | Excluded-but-referenced IDs, rendered dimmed |
+| `_node_tooltip` | SVG hover text (owner, status, notes) |
+| `_emit_component_node` | Renders one component node — used for both primary nodes and ubiquitous clones |
+| `_compute_groups` | Groups node IDs by their `Part of` label |
+| `_add_active_nodes` | Emits all non-grouped, non-ubiquitous active nodes |
+| `_add_ghost_nodes` | Emits dimmed nodes for excluded-but-referenced components |
+| `_add_group_clusters` | Wraps `Part of` groups in labelled dotted-border subgraphs |
+| `_add_edges` | Emits all dependency edges; also emits ubiquitous clones via its inner `edge_target` |
+| `_add_external_nodes_and_edges` | External source/sink nodes from the `Externals` column |
+| `build_graph` | Top-level assembler — calls all the above in order |
+| `build_layer_subgraph` | One per-layer sub-figure (`--layer-column`) |
+
+## Data model
+
+CSV column → `Component` field:
+
+| CSV column | Field | Notes |
+|---|---|---|
+| `id` | `id` | Unique identifier; references to it are case-insensitive |
+| `Name` | `name` | Display name; falls back to `id` if blank |
+| `Owner` | `owner` | Defaults to `"None"` if blank |
+| `URL` | `url` | Becomes the graphviz `URL` node attribute — a real link in SVG output. `_valid_url` drops anything that isn't `http(s)` |
+| `Component in ITRB` | `itrb` | Informational only; not currently rendered |
+| `Refactor status` | `refactor_status` | Drives active-set filtering |
+| `Gets results from` | `depends_on` / `depends_on_planned` | Comma-separated IDs; `~` prefix = planned |
+| `Calls` | `uses` / `uses_planned` | Comma-separated IDs; `~` prefix = planned |
+| `Notes` | `notes` | Not in the diagram; surfaces as an SVG tooltip. The component files split this column's job three ways (`summary`, `description`, `notes`); when #19 moves the diagram onto them, the tooltip should show `summary` |
+| `Ubiquitous` | `ubiquitous` | TRUE/yes/y/1 → render as per-caller clones |
+| `Hide` | `hide` | TRUE/yes/y/1 → suppress entirely: not even as a ghost, and not in `components.json` either |
+| `Part of` | `part_of` | Groups the node into a named cluster subgraph |
+| `Hosted at` | `hosted_at` | `ITRB` is the default and shows nothing; others get a third label line, e.g. `Hosted at: RENCI 🌐` |
+| `Externals` | `externals` | `<Source` = data in, `>Sink` = data out |
+| *(`--layer-column`)* | `layer` | Whichever column that flag names. In the current sheet it is `Tier`, not `Layer`. |
+
+Every column but `id` is optional at parse time — `load_components` uses
+`row.get(...)` throughout, so an older sheet export missing a column yields
+empty values rather than a `KeyError`. Keep it that way. `id` is the one
+exception: without that column every row parses as id-less, and the run used
+to end with an empty diagram at exit 0, which is what the wrong `--sheet-gid`
+produces. A missing `id` column, and a file whose rows are all id-less, are
+`ClickException`s.
+
+## Common change patterns
+
+**Change the dashboard's row order, or what a band says** →
+`catalog/flow-steps.yaml`. It lists the stages in page order, each with a title,
+a description and the components it holds, shown in the order it lists them.
+Prose about the platform, and the order it is read in, belong where the people
+who know both can edit them — same reasoning as `catalog/owner-colors.csv`.
+
+**That file is the order**, not labels on a computed one. It began as the
+latter, and the computed order was wrong in ways the edges cannot fix: only 13
+of 26 components appear in a results edge at all, so Name Lookup sorted up
+beside the data sources. `flow.py` still computes depths — `isolated` draws the
+left bar and `build-dashboard` reports it — but nothing derives the page order
+from them, and `flow_steps` was deleted rather than left as a second answer.
+
+A component no stage names lands in a trailing band, and
+`tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
+the same contract as `unknown.yaml`. The file is required, found by the same
+upward walk `load_owner_colors` and `load_policy` use, and `build-dashboard`
+fails without it. `in_stage_order` *does* still fall back to `in_flow_order`
+with no bands, and that fallback is exactly why a missing file is refused: a
+build run from outside a checkout would otherwise publish the derived order the
+file exists to replace, and look finished doing it.
+
+**Change owner node colours** → edit `catalog/owner-colors.csv`. No code
+change. Row order is legend order. Keeping this a data file is deliberate:
+project managers change colours without touching Python. Don't move it into a
+constant. There is one copy: the wheel build maps this file to
+`translator_diagram/owner-colors.csv`, which is where an install with no
+checkout to read falls back to, so nothing has to be kept in step by hand. In
+a source checkout that packaged path does not exist and nothing needs it,
+because `catalog/` is right there. See `load_owner_colors` for the resolution
+ order and `[tool.hatch.build.targets.wheel.force-include]` for the mapping.
+
+The four rules constraining a new owner colour — which hues are reserved, the
+contrast floor, the luminance line, and the fact that the palette is full — are
+in [`catalog/owner-colors.md`](../../catalog/owner-colors.md), where somebody
+choosing a colour will find them.
+
+Generating that copy at build time is the obvious simplification and it does
+not work: hatchling's `force-include` reaches the wheel but not an editable
+install, so `uv sync` would leave every developer — and CI — without the
+fallback wheel users get.
+
+**Change ghost or external node colours** → the `GHOST_*` /
+`EXTERNAL_FILL_COLOR` constants in `colors.py`.
+
+**Change which statuses count as active** → `DEFAULT_STATUSES` in `cli.py`.
+
+**Change node label format** → `_emit_component_node`. Labels are
+`display_name\nid`, plus a third line for non-ITRB hosts; the emoji map is
+`HOSTED_AT_EMOJI`.
+
+**Change node shape or border style** → `_emit_component_node` for active
+nodes, `_add_ghost_nodes` for ghosts. The bold "New in Refactor" border is the
+`penwidth` argument in `_emit_component_node`.
+
+**Change edge styles** → `_add_edges`. Each of the four dependency lists
+(`depends_on`, `depends_on_planned`, `uses`, `uses_planned`) has its own
+`dot.edge(...)` call.
+
+**Change graph layout** (dpi, ranksep, splines) → the `graph_attr` dict in
+`build_graph`.
+
+**Add a new CSV column** → five places: the `Component` dataclass in
+`model.py`, `load_components` in `loading.py`, `write_json` in `export.py`, the
+data-model table above, and the CSV-format table in the README.
+
+**Add a new CLI flag** → an `@click.option` above `main` in `cli.py`, plus the
+matching parameter in the `main` signature, plus the options block in the
+README (it is a hand-maintained paraphrase of `--help`, not generated).
+
+**Add a column to the dashboard** → `build_cell` in `cells.py` or `build_rows`
+in `rows.py` for the value, then **one entry in the `COLUMNS` table** in
+`web/table.js`, and the matching `table.css` rule if it needs a style. That entry
+owns the header, the body cell, the `drop-*` class that hides both at narrow
+widths, the sort value and the column count the empty row's colspan needs —
+they used to be written out separately, which is how a header ends up hidden
+without its column. The payload written to `overview.json` is a contract a
+scheduled job would publish, so adding a key is safe and renaming one is not.
+The payload keys are independent of the YAML keys they happen to be spelled
+like: `layer` and `refactor_status` moved out of `diagram:` in the component
+files without the payload changing at all, because `build_rows` writes those
+names as string literals. Rename a YAML key freely; renaming a payload key
+breaks `web/table.js`.
+
+**Add a field to the drawer** → the value in `build_rows` (`rows.py`) or
+`payload_details.py` if it needs sync data, then the tab renderer in
+`web/drawer.js`. Per-environment fields that come from a live document must
+respect the same 200 gate as the table: `SyncedData` only reads bodies this
+run fetched successfully. Chart facts are labelled as intent, not deployment.
+`privacy.verify` runs on the finished payload, so a field added to the drawer
+must survive it — a withheld id in a new string aborts the published build.
+
+`type` and `layer` are the exception in the other direction: the page no
+longer shows either — neither told a reader anything the stage bands and the
+owner chip do not — so both are payload keys with no column, no filter and no
+query-string parameter. They stay in `overview.json` because it is a contract
+and dropping a key from it is the change that breaks a consumer.
+
+**Change what the published page withholds** → `config/privacy.yaml`. No code
+change: it lists whole components to drop and row or per-environment fields to
+empty, each with a reason. `build-dashboard` applies it by default and
+`--include-private` skips it, which is the safe way round — a forgotten flag
+costs information rather than publishing it, and
+`.github/workflows/pages.yml` passes no flag at all so it cannot be edited into
+a full build.
+
+An entry that matches nothing is a hard error. Withholding *nothing* is the
+one failure this file must not have, so renaming a component without updating
+the policy stops the build instead of quietly publishing the row. For the same
+reason `build-dashboard` calls `privacy.verify` on the finished payload before
+writing it: `apply` removes, `verify` re-reads the serialised result and looks
+for what should be gone, which catches a field added later that carries a
+withheld id somewhere `apply` never looks. It looks for the id as a whole
+word, bounded by anything that is not a letter or a digit — a substring search
+would fail every published build the day someone withholds a component called
+`ars` or `ui`, naming a leak that is not there, and the only way to clear a
+false alarm is to stop running the check.
+
+**Add a new upstream source** → a fetch in `sync.py` and a tier in the
+version-source chain in `cells.build_cell`. Order that chain by how close
+the source is to what is actually running: a live endpoint, then a manual
+registration, then a chart describing what should have been deployed. Whatever
+you add must appear in `SOURCE_LABELS` so the badge names it — a version whose
+provenance is invisible is the thing the dashboard exists to avoid.
+
+**Touch anything that calls the GitHub API** → it is the one host here with a
+budget: 60 calls an hour per address unauthenticated, 5000 with a
+`GITHUB_TOKEN` in the environment, which `_headers` sends to api.github.com and
+nowhere else. Release lists are keyed by repository rather than by component so
+the three shepherds cost one call, and a throttled 403 is reported by name at
+the end of wave one (the waves are listed in `sync`'s docstring) — a silent one
+reads as "this repository has no releases", which is a different and wrong
+finding. Nothing here fails the run: the dashboard shows fewer tags, and the
+next sync picks them up.
+
+**Only a `source` repository whose URL names a whole repository gets releases.**
+`github_repo` rejects `.../translator-devops/tree/develop/helm/<chart>`, which
+is what every `helm-chart` entry looks like: those releases belong to the
+devops repository and labelling them as a component's would be worse than
+showing none.
+
+**Add anything that lands in the SVG with an id** → route it through
+`naming.py`: give it an id shape that cannot collide (see below), and claim it
+in `validate` so a collision is caught at parse time rather than in a
+browser.
+
+## What the dashboard refuses to claim
+
+Each of these is a rule with a test behind it, and each was a bug first. They
+are collected because the failure mode they share is silence: the page keeps
+rendering, and says something that is not true.
+
+- **A version it did not fetch.** `sync` writes a body only on a 200 and leaves
+  the previous one where it is, so `SyncedData` reads an OpenAPI or `/status`
+  body only when this run's manifest entry for that path is a 200 with no
+  error. Otherwise a component whose prod had gone away kept reporting the
+  version it last served, with `reachable: true` beside its own 404. Release
+  lists and Helm charts are deliberately *not* gated: neither says anything
+  about what is running now, and dropping a cached release list because GitHub
+  rate-limited the run would lose real information.
+- **A data release as a software version.** `/status` has no Translator-wide
+  schema, so the version is the first `*_version` key — with `babel_version`,
+  `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a
+  body that lists Biolink first would have that badged as its software.
+- **An odd one out where there is none.** A tie in a version split marks *every*
+  reporting environment. `Counter.most_common` breaks ties by insertion order,
+  which here is column order, so two-against-two used to tint whichever pair sat
+  further right.
+- **A derived host it has not confirmed.** `_confirm_derived` believes a guessed
+  hostname only if the document it returns reports the component's own
+  `infores`; without a recorded infores the candidate is dropped, because an
+  unverifiable guess is worth less than a gap. A host that answers 200 with
+  something else has its body deleted rather than cached. A rejection this run
+  also outranks an older confirmation — otherwise one success published a
+  deployment for good. And a cached document is evidence only if the previous
+  run fetched it from the same URL (`sync`'s `age_for`), or a hostname that
+  moved would be judged on what its old one served.
+- **A deployment it shows but never asked about.** `sync`'s planners find a
+  component's SmartAPI record with `smartapi_record_for`, the lookup
+  `build_rows` makes: by recorded id, or by infores where exactly one record
+  claims it. Planning by recorded id alone left the infores-matched
+  components' registered hosts on the page and never fetched or probed.
+- **A hostname chosen by the alphabet.** Where a component's known URLs span two
+  `transltr.io` stems, the derived host uses the commonest stem, earliest on the
+  ladder among equals.
+- **Fewer release chips than it has.** The "newest three" cut counts chips kept,
+  not entries seen, or two draft releases spend two of the three places.
+- **Attempts it did not record.** Every probe reaches `report.fetches`,
+  including the ones that fail, which is why the Fetches tile counts more than
+  the endpoints — the manifest promises every attempt.
+- **A host it never contacted.** `reachable` is three states, not two. Every
+  deployment gets a root probe of its own URL — `fetch.probe_to`, which saves a
+  `{status, content_type, error}` summary rather than the page — and the cell
+  is reachable if the root or any document answered 2xx/3xx, not reachable if
+  every probe failed, and *null* if nothing was probed. Before the root probe
+  it meant "an API document parsed", so the four UI environments, which record
+  `openapi: null` and were therefore never fetched, were drawn as down with no
+  HTTP status beside them. `root_status` and `http_status` are separate keys
+  for the same reason: a host serving its app at `/` and nothing at
+  `openapi.json` is two facts.
+- **An empty cell with no explanation.** A cell with no version carries a
+  `reason` from `CELL_REASONS` — the one place the vocabulary lives, so the
+  page and this module cannot come to disagree about it. The distinctions it
+  draws are the ones that were being lost: an endpoint that 404s against one
+  that was never recorded, a host that does not resolve against one that
+  answers as another service, a 200 that was HTML against a 200 with no
+  version in it. `SyncedData.openapi_outcome` is what makes the last of those
+  visible: `synced.openapi` answers None for "not fetched", "not JSON" and
+  "fetch failed" alike, which is three findings wearing one face.
+- **A maturity read off a hostname.** `deployments_from_smartapi` will infer an
+  environment from a server's prose `description` when the record declares no
+  `x-maturity` — smartapi's own registration describes a production and a
+  development server and declares neither, and used to yield an empty row. It
+  never reads the URL: `dev.smart-api.info` and `x.ci.transltr.io` look like
+  they name a maturity, and a production host containing "test" would be filed
+  as test on the strength of a substring. What it infers is marked `inferred`
+  all the way to the cell, because a field somebody filled in and a sentence
+  somebody wrote are two strengths of claim.
+- **A leak that is not one.** `privacy.verify` matches a withheld id bounded by
+  non-alphanumerics. As a substring it would abort every published build the day
+  someone withholds `ars` or `ui`, and a false alarm nobody can clear ends with
+  the check switched off.
+- **Live operations where only a registration exists.** OpenAPI `operations`
+  and SmartAPI `paths` are read only from bodies this run fetched with a 200.
+  A stale registration that lists endpoints the live host no longer serves is
+  not shown as current.
+- **Per-environment uptime.** OpenTelemetry service counts are a platform-wide
+  tile, not a per-cell claim about whether one deployment is healthy.
+- **Free text as fact.** Repository descriptions, SmartAPI prose, and Helm
+  `description` fields are scrubbed for withheld ids and shown as context, not
+  as version or deployment truth.
+
+Two more of the same family live in the code because they are local: a
+malformed OpenTelemetry answer costs its tile rather than the run, and a
+registry or guessed host answering unexpected JSON is caught rather than
+raising, through `sync` and through the build alike: `SyncedData` hands out
+an endpoint body only when it is a JSON object.
+
+## Things that look wrong but aren't
+
+**`--concentrate` defaults to off.** It merges partially-parallel edges, which
+looks tidier but can visually blend a solid edge with a dashed one between
+nearby nodes, losing the distinction the diagram exists to show.
+
+**Dashed edges are suppressed where a solid edge already exists** between the
+same two nodes in the same direction, for the same reason.
+
+**Half the rows have no date.** `Last updated` is null for 13 of 26
+components — they publish no GitHub releases and are in no SmartAPI record, and
+those are the only two date sources we fetch. They sort to the bottom in *both*
+directions, deliberately: reversing a sort must not promote the rows we know
+least about. `FUTURE.md` records what it would cost to fill them in.
+
+**A cached `data/sync/` body can predate a change to the URL that fetched it.**
+`fetch_to` judges freshness by the destination's mtime, so adding a field to
+`SMARTAPI_QUERY` used to leave a perfectly fresh `smartapi.json` that answered
+the older question. `sync` now carries the previous manifest's path-to-URL map
+and re-fetches anything whose URL moved. If you add a fetcher, give it a stable
+destination path and let that map do the work.
+
+**The privacy filter is about reach, not secrecy.** Everything the dashboard
+shows is read from public services, this repository is public, and
+`config/privacy.yaml` names what it withholds and why — so it hides nothing
+from anyone who looks. What it does is keep a handful of things off an indexed
+page that arrives without being asked for. The corollary matters more than the
+filter: because nothing here comes from the private spreadsheet any more, a
+genuine leak would be a secret already being served by a public API, and the
+fix for that is upstream, at that API. Redacting it here would only make it
+harder to notice. So treat a finding as "review it and revert" rather than as
+an emergency, and do not let the filter become the reason nobody looks at what
+the sources are publishing.
+
+**A published build is the local build minus rows, not a different page.**
+`privacy.apply` runs inside `build_payload` *after* `build_rows`, so
+`flow_depths` and `isolated` still see every component and the rows that
+survive keep their depths, steps and left bars. Filtering the component list
+before building the rows would let a withheld component move everything else,
+and the two builds would disagree about the shape of the platform rather than
+about how much of it is shown. It also runs *before* `source_tally` and
+`unregistered_count`, which are computed from `rows` — that is what stops a
+tile counting things the table does not show.
+
+**A stage whose components are all withheld disappears entirely.** Bands are
+rendered from the rows in them, so the Engineering stage — `jaeger` and
+`test-harness`, the only two in it — is absent from a published build rather
+than showing as an empty header. Step numbers come from the stage's position
+in `catalog/flow-steps.yaml`, so the others are not renumbered; a published page
+runs 1–8 and skips 9.
+
+**`edges` and `stages` are built after `privacy.apply`.** The map reads the
+published payload, so withheld components must disappear from the graph as well
+as the table. Building the graph before redaction would leave ghost nodes a
+published build must not name.
+
+**OpenTelemetry joins are case-sensitive.** A service name in the OTel answer
+must match the deployment record exactly; normalising case would merge two
+different services and over-count.
+
+**`newrank="true"`** in `build_graph` is required for `rank=same` to work
+across cluster boundaries — the legend clusters rely on it.
+
+**`utf-8-sig`** when reading CSVs strips the BOM an Excel resave prepends.
+Without it the first header parses as `"﻿id"` and everything downstream
+KeyErrors.
+
+**The Google Sheet download checks `Content-Type: text/csv`.** A private or
+missing sheet returns a *200* with an HTML login page, which would otherwise be
+saved as `components.csv` and fail confusingly much later.
+
+**Components are sorted by lowercase `id`** in `load_components` so the `.dot`
+and `.json` output is stable when someone reorders rows in the sheet.
+
+**Planned edges are red**, hardcoded as `color="red"` at two sites in
+`_add_edges` and two more in `build_layer_subgraph`, both in `render.py`. An earlier
+`PLANNED_EDGE_COLOR` constant (soft indigo) was defined but never referenced,
+and has been deleted — red is what ships and what the README documents.
+
+**There are two suppression sets, and they are not interchangeable.**
+`solid_edges` suppresses a dashed edge that duplicates a solid one in the same
+direction; `dashed_edges` suppresses a planned (red) "Calls" edge when an
+implemented one already covers the pair, mirroring how `depends_on` outranks
+`depends_on_planned`. Recording a dashed edge in `solid_edges` drops the wrong
+edge — a real bug `build_layer_subgraph` used to have. `_add_edges` and
+`build_layer_subgraph` must stay in step on both.
+
+## Special features
+
+**Ubiquitous components** (telemetry, logging, name resolution): set
+`Ubiquitous=TRUE`. Instead of one central node with long converging edges, a
+clone is emitted next to each caller with a synthetic id from `_clone_svg_id`.
+No central node exists, so these are skipped by `_add_active_nodes` and
+`_compute_ghost_ids`; the logic is in `edge_target()` inside `_add_edges`. A
+ubiquitous component therefore has *no* node bearing its own id, which is why
+`components.json` gives every row a `node_ids` list rather than one id.
+
+**The SVG id namespace has four families**, and no two members of it may
+claim the same id — a duplicate XML id makes `getElementById` return whichever
+graphviz emitted first. The families are component nodes (`_svg_id`), the
+per-caller clones of ubiquitous components (`_clone_svg_id`), external
+entities (`external_svg_ids`) — all in `naming.py` — and the `a_`-prefixed
+`<g>` graphviz wraps around every node carrying a tooltip or a URL, which here
+is all of them.
+Clone and external ids use a `__` joiner, which `_svg_id` can never produce
+because it collapses runs of punctuation to a single `_`; that keeps them off
+component ids by construction. `validate` then folds all four families into
+one dict and hard-errors on any remaining collision, so `Foo` plus `A Foo`
+(whose id is `Foo`'s wrapper id) fails the run rather than silently rebinding
+a node.
+
+**Ghost nodes**: an active component referencing a filtered-out one makes that
+component appear dimmed and labelled `(excluded)`, so cross-boundary edges stay
+visible. See `_compute_ghost_ids`.
+
+**SVG attributes**: `_emit_component_node` sets `id` (stable per-node handle),
+`tooltip`, and `URL`/`target` when the row has a URL. Graphviz turns `URL` into
+an `<a xlink:href>` wrapper in SVG output. These are inert in PNG. They exist
+for the planned GitHub Pages view ([#10](https://github.com/NCATSTranslator/translator-diagram/issues/10))
+— a static page over the generated SVG and `components.json`, no build step.
+Don't port this tool to JavaScript to serve that view; the browser needs the
+generated DOT, not the generator.

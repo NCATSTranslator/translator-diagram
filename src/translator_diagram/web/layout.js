@@ -1026,7 +1026,5 @@
     };
   }
 
-  TD.layout = {
-    compute, DEFAULTS, arrange, portPos, elbow, cubicDown, samplePath, checkPaths,
-  };
+  TD.layout = { compute, DEFAULTS };
 })();
