@@ -243,17 +243,6 @@ is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
 A service being down is recorded rather than fatal, so the run still succeeds
 and the page shows what was reachable.
 
-To see a branch's page the way the published build will be — built on a
-GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
-the branch and download what it builds. On any branch but `main` it deploys
-nothing:
-
-```bash
-gh workflow run pages.yml --ref my-branch
-gh run list --workflow pages.yml --branch my-branch   # the run's id
-gh run download <run id> --name dashboard --dir data/pages-preview
-```
-
 It exists to test whether the metadata in `catalog/` is worth keeping. Two
 things it reports are the answer:
 
@@ -278,6 +267,22 @@ things it reports are the answer:
   recorded a URL for are three different things, and an empty cell said all
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
+
+To see a branch's page the way the published build will be — built on a
+GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
+the branch and download what it builds. On any branch but `main` it deploys
+nothing. The run list is narrowed to manual runs and the newest one, because
+older runs on the same branch can still hold a `dashboard` artifact built from
+an earlier commit:
+
+```bash
+gh workflow run pages.yml --ref my-branch
+sleep 5   # the new run takes a moment to be listed
+id=$(gh run list --workflow pages.yml --branch my-branch \
+       --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$id" --exit-status
+gh run download "$id" --name dashboard --dir data/pages-preview
+```
 
 ### What a published build leaves out
 
@@ -572,10 +577,9 @@ uv run ruff check    # Python lint
 uv run rumdl check . # Markdown lint
 ```
 
-All four run in CI on every pull request. The
-source is one module per subject under `src/translator_diagram/`, and `tests/`
-has one file per module — a change to `loading.py` belongs in
-`tests/test_loading.py`.
+All four run in CI on every pull request. The source is one module per subject
+under `src/translator_diagram/`, and `tests/` has one file per module — a
+change to `loading.py` belongs in `tests/test_loading.py`.
 
 Two things are worth reading before a first change.
 [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) has the
