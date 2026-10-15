@@ -291,8 +291,7 @@
 
   function renderView() {
     if (TD.state.view === "map") {
-      TD.map.render(document.getElementById("view-map"));
-      const shown = TD.table.visibleRows().length;
+      const shown = TD.map.render(document.getElementById("view-map"));
       setStatus(shown, (DATA.rows || []).length);
       return;
     }

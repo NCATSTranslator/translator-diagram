@@ -57,6 +57,25 @@
   };
   const DEFAULT_VIEW = "all";
 
+  /* Everything the search box can match on a row, lowercased and joined once.
+     Keyed by the row object, so a new payload gets new haystacks and a
+     keystroke does not rebuild twenty-seven arrays. */
+  const haystacks = new WeakMap();
+
+  function haystack(row) {
+    let text = haystacks.get(row);
+    if (text === undefined) {
+      text = [
+        row.id, row.name, row.owner, row.infores,
+        row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
+        ...(row.releases || []).map((release) => release.tag),
+        ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
+      ].map((value) => String(value ?? "").toLowerCase()).join("\n");
+      haystacks.set(row, text);
+    }
+    return text;
+  }
+
   function visibleRows() {
     const s = state();
     const needle = (s.q || "").trim().toLowerCase();
@@ -64,16 +83,7 @@
     return (TD.DATA.rows || [])
       .filter((row) => !owners.length || owners.indexOf(row.owner) >= 0)
       .filter((VERSION_VIEWS[s.versions] || VERSION_VIEWS[DEFAULT_VIEW]).test)
-      .filter((row) => {
-        if (!needle) return true;
-        const haystack = [
-          row.id, row.name, row.owner, row.infores,
-          row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
-          ...(row.releases || []).map((release) => release.tag),
-          ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
-        ];
-        return haystack.some((value) => String(value ?? "").toLowerCase().includes(needle));
-      });
+      .filter((row) => !needle || haystack(row).includes(needle));
   }
 
   /* --- Cells --------------------------------------------------------------- */
@@ -610,9 +620,13 @@
   /* The gutter between rows, in pixels: the open item's measured height has to
      stop at the last detail row's surface rather than at the six transparent
      pixels under it, or the shadow sits six pixels low. */
+  let gap = null;
   function rowGap() {
-    const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
-    return parseFloat(raw) || 0;
+    if (gap === null) {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
+      gap = parseFloat(raw) || 0;
+    }
+    return gap;
   }
 
   /* The item's outer box, for the one shadow drawn round it. Width comes from

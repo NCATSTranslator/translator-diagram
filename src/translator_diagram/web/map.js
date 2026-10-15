@@ -503,13 +503,14 @@
 
     wire();
     fit(false);
-    paint();
+    const shown = paint();
 
     if (firstPaint && TD.motion.enabled) {
       box.classList.add("mp-first");
       drawOn();
     }
     firstPaint = false;
+    return shown;
   }
 
   /* The edges arrive by drawing themselves, once. Their dash pattern is the
@@ -990,7 +991,7 @@
   }
 
   function paint() {
-    if (!scene) return;
+    if (!scene) return 0;
     const kinds = activeKinds();
     const visible = new Set(TD.table.visibleRows().map((row) => row.id));
 
@@ -1003,8 +1004,7 @@
       el.classList.toggle("out", dim);
     });
     extEls.forEach((el, name) => {
-      const anchored = edgeEls.some(({ edge, kind }) =>
-        kinds.has(kind) && (edge.from === name || edge.to === name));
+      const anchored = (edgesOf.get(name) || []).some(({ kind }) => kinds.has(kind));
       el.style.display = anchored ? "" : "none";
     });
 
@@ -1020,6 +1020,7 @@
       const node = nodeById.get(wanted);
       if (node) flyTo(node, Math.max(1.25, cam.k));
     }
+    return visible.size;
   }
 
   function ring(id) {
@@ -1294,10 +1295,12 @@
 
   /* --- Public ------------------------------------------------------------- */
 
+  /* Returns how many rows the filters left on the map, so app.js's status
+     line does not run the filters a second time to find out. */
   map.render = function render(container) {
-    if (!container) return;
-    if (host !== container || !scene) build(container);
-    else paint();
+    if (!container) return 0;
+    if (host !== container || !scene) return build(container);
+    return paint();
   };
 
   map.ring = ring;
