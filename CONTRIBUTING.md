@@ -86,6 +86,12 @@ matters inside one directory.
   `sync` itself cannot be compared across two live runs, because upstream
   answers change in between, so replay a recorded one with
   `tools/replay_sync.py` — its docstring has the recipe.
+- **When a change adds a field, a source, a fetch, a rendering path or a
+  workflow step, run the checklist** at the end of
+  [docs/security.md](docs/security.md#checklist-for-a-change). The page is
+  public and much of what it shows is written by people outside this
+  repository, so each of those is a question about what it publishes, whom it
+  loads, or what it trusts.
 
 ## Conventions
 
