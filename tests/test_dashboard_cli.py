@@ -110,6 +110,30 @@ class TestTheFlagDefaultsToWithholding:
         assert "Withheld 1 components (secret)" in result.output
 
 
+class TestTheOutputIsOnlyThePage:
+    def test_a_build_writes_the_page_and_its_payload_and_nothing_else(self, workspace):
+        """What write_dashboard writes is pinned in test_dashboard.py. This
+        pins that the command adds nothing of its own beside it, since the
+        command is what the Pages workflow runs before uploading the whole
+        directory."""
+        result, _ = _run(workspace)
+        assert result.exit_code == 0, result.output
+        written = {p.relative_to(workspace / "out").as_posix()
+                   for p in (workspace / "out").rglob("*")}
+        assert written == {"index.html", "overview.json"}
+        assert "not written by this build" not in result.output
+
+    def test_a_build_names_what_it_found_there_and_did_not_write(self, workspace):
+        """A leftover is served beside the page by a preview, so the build
+        says so — and leaves it, since --output-dir can name any directory."""
+        (workspace / "out" / "notes").mkdir(parents=True)
+        (workspace / "out" / "notes" / "AGENTS.md").write_text("stale")
+        result, _ = _run(workspace)
+        assert result.exit_code == 0, result.output
+        assert "not written by this build: notes/AGENTS.md." in result.output
+        assert (workspace / "out" / "notes" / "AGENTS.md").exists()
+
+
 class TestAMissingPolicyStopsTheBuild:
     def test_no_policy_and_no_flag_is_an_error(self, workspace):
         """Not an empty policy. "Cannot find the file" must never be the path
