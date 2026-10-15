@@ -1,4 +1,6 @@
-"""Owner colours, and the palette constants the diagram is drawn from."""
+"""Owner colours: the table they are read from, the palette constants the
+diagram is drawn from, the chip styles the dashboard derives from each, and
+the separation rule (`delta_e`) the palette test holds them to."""
 
 import csv
 import re

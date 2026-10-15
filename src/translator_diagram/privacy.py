@@ -271,11 +271,12 @@ def apply(
 def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
     """Drop withheld components from a kept row's recorded connections.
 
-    The tilde is a marker on the reference and not part of the id, so
-    `~jaeger` is the same component as `jaeger` and goes for the same reason —
-    a planned edge to a withheld component names it just as plainly as an
-    implemented one does. Matching is case-insensitive because that is how
-    references resolve everywhere else here.
+    A row's `connections` come from `ComponentFile.connection_ids`, which has
+    already stripped the planned-edge tilde and sorted each reference into
+    its list, so a withheld id is matched as written. The tilde is stripped
+    again here all the same: it costs nothing, and it keeps the rule true for
+    a row built any other way. Matching is case-insensitive because that is
+    how references resolve everywhere else here.
 
     Every list under `connections` is walked rather than the four keys being
     named, so a fifth edge kind added later is pruned without anyone

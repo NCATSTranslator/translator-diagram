@@ -338,13 +338,16 @@ are collected because the failure mode they share is silence: the page keeps
 rendering, and says something that is not true.
 
 - **A version it did not fetch.** `sync` writes a body only on a 200 and leaves
-  the previous one where it is, so `SyncedData` reads an OpenAPI or `/status`
-  body only when this run's manifest entry for that path is a 200 with no
-  error. Otherwise a component whose prod had gone away kept reporting the
-  version it last served, with `reachable: true` beside its own 404. Release
-  lists and Helm charts are deliberately *not* gated: neither says anything
-  about what is running now, and dropping a cached release list because GitHub
-  rate-limited the run would lose real information.
+  the previous one where it is, so `SyncedData` refuses an OpenAPI or
+  `/status` body when this run's manifest records a failed fetch of that path.
+  Otherwise a component whose prod had gone away kept reporting the version
+  it last served, with `reachable: true` beside its own 404. A body with no
+  manifest entry at all is still read, and `openapi_outcome` is stricter than
+  the cells (a 200 this run, or nothing); `synced_data.py`'s docstring has the
+  three rules side by side. Release lists and Helm charts are deliberately
+  *not* gated: neither says anything about what is running now, and dropping
+  a cached release list because GitHub rate-limited the run would lose real
+  information.
 - **A data release as a software version.** `/status` has no Translator-wide
   schema, so the version is the first `*_version` key — with `babel_version`,
   `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a

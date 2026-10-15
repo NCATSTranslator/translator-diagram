@@ -2,11 +2,21 @@
 
 `SyncedData` is the build's reader of the sync cache (`sync` reads its own
 previous run through the same `files` parsers), and it is where the 200 gate
-lives: a body answers for a cell only when *this* run recorded a hit
-for it, so a document cached before a service started 404ing cannot answer for
-the current one. Every reader returns `None` or an empty container rather than
-raising — a missing file in a gitignored scratch directory is the normal case,
-not an error.
+lives. The gate is three rules, not one, and they differ on purpose:
+
+- An endpoint body (`openapi`, `status`) is refused when this run's manifest
+  records a failed fetch of it, so a document cached before a service started
+  404ing cannot answer for the current one. A body with *no* manifest entry
+  is still read: nothing this run says it is wrong, and a build from a cache
+  that predates a component file's new endpoint would otherwise go blank.
+- `openapi_outcome` is stricter — it answers only for a path this run fetched
+  with a 200 — because its job is to say what *this run* got back.
+- A root probe is read whenever this run made it, whatever the status: a 404
+  at `/` is the answer, not a reason to look away.
+
+Every reader returns `None` or an empty container rather than raising — a
+missing file in a gitignored scratch directory is the normal case, not an
+error.
 """
 
 from collections.abc import Callable
@@ -136,7 +146,7 @@ class SyncedData:
         different things: nothing was fetched, something was fetched and was
         not JSON, or the fetch failed. The middle one is real — BioThings'
         pending API answers every path with the single-page app's HTML and a
-        200, so `fetch_to` saves a page of markup that `_read_json` then
+        200, so `fetch_to` saves a page of markup that `read_json` then
         refuses — and reported as None it is indistinguishable from never
         having asked.
 
@@ -170,6 +180,10 @@ class SyncedData:
         next to its own `http_status` of 404 — the one contradiction this page
         must never print, because "was this endpoint up at 14:05" is the
         question it exists to answer.
+
+        A body this run never asked about is read as it is: the manifest says
+        nothing against it, and `test_a_body_this_run_never_asked_for_is_left_alone`
+        pins that. `openapi_outcome` is the stricter reader.
 
         Only the endpoints are gated this way. A release list or a Helm chart
         makes no claim about what is running right now, so dropping a cached
