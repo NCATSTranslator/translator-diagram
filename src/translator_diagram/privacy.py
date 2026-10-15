@@ -34,6 +34,8 @@ from typing import Any
 import click
 import yaml
 
+from .files import find_upward
+
 CONFIG_POLICY_PATH = Path("config/privacy.yaml")
 """Where the policy lives, relative to the working directory or a parent.
 
@@ -124,28 +126,6 @@ class Report:
             or self.mentions
         )
 
-    def summary(self) -> str:
-        """One line for the build log."""
-        parts = []
-        if self.components:
-            parts.append(
-                f"{len(self.components)} components "
-                f"({', '.join(self.components)})"
-            )
-        if self.fields:
-            parts.append(f"{len(self.fields)} fields ({', '.join(self.fields)})")
-        if self.environment_fields:
-            parts.append(
-                f"{len(self.environment_fields)} environment fields "
-                f"({', '.join(self.environment_fields)})"
-            )
-        if self.mentions:
-            parts.append(
-                f"{self.mentions} mention{'' if self.mentions == 1 else 's'} "
-                f"in free text"
-            )
-        return "Withheld " + ", and ".join(parts) + "."
-
     def for_payload(self) -> dict[str, Any]:
         """The block the page reads, so it can say something was withheld.
 
@@ -169,10 +149,10 @@ def load_policy(path: Path | None = None) -> Policy:
     """Read the policy, or fail saying which file was missing.
 
     With no path, `config/privacy.yaml` in the working directory or any
-    directory above it — the same walk `load_owner_colors` does, so running
-    from a subdirectory of the checkout behaves the same way.
+    directory above it (`find_upward`, the same walk `load_owner_colors` does),
+    so running from a subdirectory of the checkout behaves the same way.
     """
-    found = path if path is not None else _find_policy()
+    found = path if path is not None else find_upward(CONFIG_POLICY_PATH)
     if found is None:
         raise click.ClickException(
             f"No privacy policy at {CONFIG_POLICY_PATH}. A published build "
@@ -206,15 +186,6 @@ def load_policy(path: Path | None = None) -> Policy:
         fields=_redactions(loaded, "fields", found),
         environment_fields=_redactions(loaded, "environment_fields", found),
     )
-
-
-def _find_policy() -> Path | None:
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / CONFIG_POLICY_PATH
-        if candidate.exists():
-            return candidate
-    return None
 
 
 def _redactions(
@@ -299,11 +270,12 @@ def apply(
 def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
     """Drop withheld components from a kept row's recorded connections.
 
-    The tilde is a marker on the reference and not part of the id, so
-    `~jaeger` is the same component as `jaeger` and goes for the same reason —
-    a planned edge to a withheld component names it just as plainly as an
-    implemented one does. Matching is case-insensitive because that is how
-    references resolve everywhere else here.
+    A row's `connections` come from `ComponentFile.connection_ids`, which has
+    already stripped the planned-edge tilde and sorted each reference into
+    its list, so a withheld id is matched as written. The tilde is stripped
+    again here all the same: it costs nothing, and it keeps the rule true for
+    a row built any other way. Matching is case-insensitive because that is
+    how references resolve everywhere else here.
 
     Every list under `connections` is walked rather than the four keys being
     named, so a fifth edge kind added later is pruned without anyone

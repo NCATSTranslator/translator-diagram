@@ -46,7 +46,7 @@ def components():
 
 @pytest.fixture(scope="module")
 def listed(stages):
-    return [cid for stage in stages for cid in stage["components"]]
+    return [cid for stage in stages for cid in stage.components]
 
 
 def test_every_component_is_accounted_for(components, listed):
@@ -72,16 +72,16 @@ def test_the_stages_are_the_page_order(components, stages):
     ordered = in_stage_order(components, stages)
     numbers = [number for _, number, _ in ordered]
     assert numbers == sorted(numbers), "Stages must come out in file order"
-    assert [c.id for c, _, _ in ordered][: len(stages[0]["components"])] == list(
-        stages[0]["components"]
+    assert [c.id for c, _, _ in ordered][: len(stages[0].components)] == list(
+        stages[0].components
     ), "Components must keep the order their stage lists them in"
 
 
 def test_every_stage_says_what_it_is_and_what_it_is_for(stages):
     blank = [
-        stage.get("title") or "(untitled)"
+        stage.title or "(untitled)"
         for stage in stages
-        if not (stage["title"].strip() and stage["description"].strip())
+        if not (stage.title.strip() and stage.description.strip())
     ]
     assert not blank, f"Stages missing a title or a description: {blank}"
 
@@ -90,16 +90,16 @@ def test_a_title_is_a_name_not_a_sentence(stages):
     # The title sits in small caps beside "Step 3"; the sentence goes in the
     # description, which is styled to be read as one.
     long = [
-        stage["title"] for stage in stages
-        if len(stage["title"]) > 40 or stage["title"].endswith(".")
+        stage.title for stage in stages
+        if len(stage.title) > 40 or stage.title.endswith(".")
     ]
     assert not long, f"Titles that should be descriptions: {long}"
 
 
 def test_the_unplaced_block_is_last_and_named(stages):
-    assert stages[-1]["unplaced"] is True
-    assert stages[-1]["title"] == UNPLACED_TITLE
-    assert not any(stage.get("unplaced") for stage in stages[:-1])
+    assert stages[-1].unplaced is True
+    assert stages[-1].title == UNPLACED_TITLE
+    assert not any(stage.unplaced for stage in stages[:-1])
 
 
 def test_unplaced_is_a_deliberate_list_not_a_leftover(raw):

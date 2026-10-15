@@ -115,81 +115,81 @@ def smartapi_detail(record: Any) -> dict[str, Any] | None:
     """
     if not record or not isinstance(record, dict):
         return None
-    info = _mapping(record.get("info"))
-    translator = _mapping(info.get("x-translator"))
-    trapi = _mapping(info.get("x-trapi"))
-    status = _mapping(record.get("_status"))
-    meta = _mapping(record.get("_meta"))
-    contact = _mapping(info.get("contact"))
-    api_id = _text(record.get("_id"))
+    info = mapping(record.get("info"))
+    translator = mapping(info.get("x-translator"))
+    trapi = mapping(info.get("x-trapi"))
+    status = mapping(record.get("_status"))
+    meta = mapping(record.get("_meta"))
+    contact = mapping(info.get("contact"))
+    api_id = text(record.get("_id"))
     return {
         "id": api_id,
         "registry_url": f"https://smart-api.info/ui/{api_id}" if api_id else None,
-        "title": _text(info.get("title")),
-        "version": _text(info.get("version")),
-        "team": _strings(translator.get("team")),
-        "component": _text(translator.get("component")),
-        "infores": _text(translator.get("infores")),
+        "title": text(info.get("title")),
+        "version": text(info.get("version")),
+        "team": strings(translator.get("team")),
+        "component": text(translator.get("component")),
+        "infores": text(translator.get("infores")),
         # Both spellings, hyphen first because that is what 98 of the 127
         # records use. Retriever registers `biolink_version` with an
         # underscore, and reading only the hyphen showed it as having no
         # Biolink version at all — a gap that reads as a finding about the
         # team rather than about our parser.
-        "biolink_version": _text(
+        "biolink_version": text(
             translator.get("biolink-version") or translator.get("biolink_version")
         ),
         "trapi": {
-            "version": _text(trapi.get("version")),
+            "version": text(trapi.get("version")),
             "asyncquery": trapi.get("asyncquery"),
-            "operations": _strings(trapi.get("operations")),
+            "operations": strings(trapi.get("operations")),
             "batch_size_limit": trapi.get("batch_size_limit"),
             "rate_limit": trapi.get("rate_limit"),
             "test_data_location": _test_data(trapi.get("test_data_location")),
         },
         "servers": [
             {
-                "url": _text(server.get("url")),
-                "maturity": _text(server.get("x-maturity")),
-                "location": _text(server.get("x-location")),
-                "description": _text(server.get("description")),
+                "url": text(server.get("url")),
+                "maturity": text(server.get("x-maturity")),
+                "location": text(server.get("x-location")),
+                "description": text(server.get("description")),
             }
-            for server in _items(record.get("servers"))
+            for server in items(record.get("servers"))
         ],
         "status": {
-            "uptime_status": _text(status.get("uptime_status")),
-            "uptime_ts": _text(status.get("uptime_ts")),
+            "uptime_status": text(status.get("uptime_status")),
+            "uptime_ts": text(status.get("uptime_ts")),
             # ponytail: passed through whole. The registry writes one line per
             # path probed, and the longest seen is Retriever's 23 — small
             # enough that a cap would be a guess about the ceiling rather than
             # a protection against it. If a record ever arrives with hundreds,
             # cut it here and say how many were dropped.
-            "uptime_msg": _strings(status.get("uptime_msg")),
+            "uptime_msg": strings(status.get("uptime_msg")),
             "refresh_status": status.get("refresh_status"),
-            "refresh_ts": _text(status.get("refresh_ts")),
+            "refresh_ts": text(status.get("refresh_ts")),
         },
         "meta": {
-            "date_created": _text(meta.get("date_created")),
-            "last_updated": _text(meta.get("last_updated")),
-            "username": _text(meta.get("username")),
-            "source_url": _text(meta.get("url")),
+            "date_created": text(meta.get("date_created")),
+            "last_updated": text(meta.get("last_updated")),
+            "username": text(meta.get("username")),
+            "source_url": text(meta.get("url")),
             "has_metakg": meta.get("has_metakg"),
         },
         "tags": [
             name
-            for tag in _items(record.get("tags"))
-            if (name := _text(tag.get("name")))
+            for tag in items(record.get("tags"))
+            if (name := text(tag.get("name")))
         ],
         "contact": {
-            "name": _text(contact.get("name")),
-            "email": _text(contact.get("email")),
-            "url": _text(contact.get("url")),
+            "name": text(contact.get("name")),
+            "email": text(contact.get("email")),
+            "url": text(contact.get("url")),
         },
         "description_text": strip_html(
             info.get("description"), limit=DESCRIPTION_EXCERPT
         ),
         # How this record came to be attached to this component, so a reader
         # can tell a registered identifier from a match we made ourselves.
-        "matched_by": _text(record.get("_matched_by")) or "id",
+        "matched_by": text(record.get("_matched_by")) or "id",
     }
 
 
@@ -215,9 +215,9 @@ def _test_data(value: Any) -> dict[str, str] | None:
         url = entry.get("url")
         if isinstance(url, list):
             url = next((item for item in url if isinstance(item, str)), None)
-        text = _text(url)
-        if text:
-            found[maturity] = text
+        cleaned = text(url)
+        if cleaned:
+            found[maturity] = cleaned
     return found or None
 
 
@@ -304,20 +304,20 @@ def helm_detail(
     """
     if not chart:
         return None
-    meta = _mapping(chart_yaml)
-    values = _mapping(values_yaml)
-    name = _text(meta.get("name")) or str(chart)
+    meta = mapping(chart_yaml)
+    values = mapping(values_yaml)
+    name = text(meta.get("name")) or str(chart)
     services, storage, hosts = _read_values(values, name)
     return {
         "chart": name,
         "chart_version": _version(meta.get("version")),
         "app_version": _version(meta.get("appVersion")),
-        "description": _text(meta.get("description")),
+        "description": text(meta.get("description")),
         "dependencies": _dependencies(meta.get("dependencies")),
         "services": services,
         "storage": storage,
         "ingress_hosts": hosts,
-        "source_url": _text(source_url),
+        "source_url": text(source_url),
     }
 
 
@@ -350,7 +350,7 @@ def _read_values(
             # block (answer-appraiser and test-harness carry theirs at the root,
             # so the service is named for the chart) or a replica count
             # (shepherd's `arax_pathfinder`, answer-appraiser's `redis.master`).
-            resources = _mapping(node.get("resources"))
+            resources = mapping(node.get("resources"))
             services[name] = {
                 "name": name,
                 # `counted` and not `replicas or None`: answer-appraiser scales
@@ -415,7 +415,7 @@ def _ingress_hosts(block: dict[str, Any]) -> list[str]:
     a `jaegerHost` elsewhere in the file is not mistaken for a public name.
     """
     found = []
-    host = _text(block.get("host"))
+    host = text(block.get("host"))
     if host and not _is_placeholder(host):
         found.append(host)
     entries = block.get("hosts")
@@ -423,7 +423,7 @@ def _ingress_hosts(block: dict[str, Any]) -> list[str]:
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
-            host = _text(entry.get("host"))
+            host = text(entry.get("host"))
             if host and not _is_placeholder(host):
                 found.append(host)
     return found
@@ -438,11 +438,11 @@ def _dependencies(value: Any) -> list[dict[str, str | None]]:
     """
     return [
         {
-            "name": _text(entry.get("name")),
+            "name": text(entry.get("name")),
             "version": _version(entry.get("version")),
-            "repository": _text(entry.get("repository")),
+            "repository": text(entry.get("repository")),
         }
-        for entry in _items(value)
+        for entry in items(value)
     ]
 
 
@@ -465,9 +465,8 @@ def _quantity(value: Any) -> str | None:
     """
     if isinstance(value, str):
         return value.strip() or None
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return str(value)
-    return None
+    quantity = number(value)
+    return None if quantity is None else str(quantity)
 
 
 def _version(value: Any) -> str | None:
@@ -538,8 +537,8 @@ def releases_detail(
         return []
     running = list(running)
     kept: list[dict[str, Any]] = []
-    for entry in sorted(_items(entries), key=_published_key, reverse=True):
-        tag = _text(entry.get("tag_name"))
+    for entry in sorted(items(entries), key=_published_key, reverse=True):
+        tag = text(entry.get("tag_name"))
         if not tag or entry.get("draft"):
             continue
         deployed = any(same_version(tag, version) for version in running)
@@ -549,14 +548,14 @@ def releases_detail(
             {
                 "tag": tag,
                 "deployed": deployed,
-                "name": _text(entry.get("name")),
-                "url": _text(entry.get("html_url")),
+                "name": text(entry.get("name")),
+                "url": text(entry.get("html_url")),
                 "published": _date_part(entry.get("published_at")),
                 "prerelease": entry.get("prerelease"),
                 # The login and nothing else. The author object also carries
                 # avatar, gravatar and a dozen API urls, none of which the page
                 # shows and all of which would be republished by keeping it.
-                "author": _text(_mapping(entry.get("author")).get("login")),
+                "author": text(mapping(entry.get("author")).get("login")),
                 "body_excerpt": strip_html(entry.get("body"), limit=BODY_EXCERPT),
             }
         )
@@ -570,32 +569,32 @@ def _published_key(entry: dict[str, Any]) -> str:
     used here, for the same reason undated rows stay last in both directions of
     the table: an unknown date must not be promoted to the top.
     """
-    return _text(entry.get("published_at")) or ""
+    return text(entry.get("published_at")) or ""
 
 
 def _date_part(value: Any) -> str | None:
     """The calendar date out of an ISO timestamp. The panel shows days."""
-    text = _text(value)
-    return text.split("T")[0] if text else None
+    stamp = text(value)
+    return stamp.split("T")[0] if stamp else None
 
 
 def repo_meta_detail(doc: Any) -> dict[str, Any] | None:
     """A GitHub repository document, reduced to what a reader would ask about."""
     if not doc or not isinstance(doc, dict):
         return None
-    license_doc = _mapping(doc.get("license"))
+    license_doc = mapping(doc.get("license"))
     return {
-        "description": _text(doc.get("description")),
-        "default_branch": _text(doc.get("default_branch")),
-        "pushed_at": _text(doc.get("pushed_at")),
+        "description": text(doc.get("description")),
+        "default_branch": text(doc.get("default_branch")),
+        "pushed_at": text(doc.get("pushed_at")),
         "archived": doc.get("archived"),
         # The SPDX id when GitHub recognised the licence, its own name when it
         # only guessed; either is more useful than the whole licence object.
-        "license": _text(license_doc.get("spdx_id")) or _text(license_doc.get("name")),
-        "topics": _strings(doc.get("topics")),
+        "license": text(license_doc.get("spdx_id")) or text(license_doc.get("name")),
+        "topics": strings(doc.get("topics")),
         "open_issues": doc.get("open_issues_count"),
         "stars": doc.get("stargazers_count"),
-        "homepage": _text(doc.get("homepage")),
+        "homepage": text(doc.get("homepage")),
     }
 
 
@@ -610,21 +609,29 @@ def catalog_detail(entry: Any) -> dict[str, Any] | None:
     if not entry or not isinstance(entry, dict):
         return None
     return {
-        "name": _text(entry.get("name")),
-        "description": _text(entry.get("description")),
-        "status": _text(entry.get("status")),
-        "knowledge_level": _text(entry.get("knowledge_level")),
-        "agent_type": _text(entry.get("agent_type")),
-        "xref": _strings(entry.get("xref")),
-        "consumes": _strings(entry.get("consumes")),
-        "consumed_by": _strings(entry.get("consumed_by")),
+        "name": text(entry.get("name")),
+        "description": text(entry.get("description")),
+        "status": text(entry.get("status")),
+        "knowledge_level": text(entry.get("knowledge_level")),
+        "agent_type": text(entry.get("agent_type")),
+        "xref": strings(entry.get("xref")),
+        "consumes": strings(entry.get("consumes")),
+        "consumed_by": strings(entry.get("consumed_by")),
     }
 
 
-# --- Shared readers --------------------------------------------------------
+# --- Reading somebody else's document -----------------------------------------
+#
+# Every upstream body here — a registry record, an OpenAPI document, a chart, a
+# GitHub answer — is written by another team, and a key that is present and
+# null is how a hand-edited file spells "not set yet". These readers answer
+# with an empty value for any shape they were not expecting, so a reader loses
+# a field rather than raising. Public because `cells`, `synced_data`,
+# `deployments` and `dashboard` read the same documents; this module has no
+# package imports, so any of them may use these without a cycle.
 
 
-def _mapping(value: Any) -> dict[str, Any]:
+def mapping(value: Any) -> dict[str, Any]:
     """A mapping, or an empty one.
 
     Chaining `.get` through a key that is absent — or, worse, present and null,
@@ -634,14 +641,14 @@ def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def _items(value: Any) -> list[dict[str, Any]]:
+def items(value: Any) -> list[dict[str, Any]]:
     """The mappings in a list, in order. A list that is not a list is empty."""
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, dict)]
 
 
-def _text(value: Any) -> str | None:
+def text(value: Any) -> str | None:
     """A non-blank string, or nothing.
 
     A number, a list or a mapping arriving in a text field is a shape the page
@@ -650,8 +657,15 @@ def _text(value: Any) -> str | None:
     return (value.strip() or None) if isinstance(value, str) else None
 
 
-def _strings(value: Any) -> list[str]:
+def strings(value: Any) -> list[str]:
     """The non-blank strings in a list. Anything else in it is left out."""
     if not isinstance(value, list):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+
+def number(value: Any) -> int | float | None:
+    """A real number, or nothing. `bool` is an int in Python and never a count."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return None

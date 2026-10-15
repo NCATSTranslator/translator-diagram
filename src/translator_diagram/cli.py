@@ -10,7 +10,12 @@ from .legend import _build_edge_legend_graph, _build_owners_graph
 from .loading import download_sheet_csv, load_components
 from .model import index_by_id
 from .naming import _layer_filenames
-from .render import _compute_active_set, build_graph, build_layer_subgraph
+from .render import (
+    _compute_active_set,
+    build_graph,
+    build_layer_subgraph,
+    layer_members,
+)
 from .validation import validate
 
 # Refactor status values that indicate active components
@@ -162,13 +167,12 @@ def main(
         active_statuses = {
             s.strip() for s in refactor_status.split(",") if s.strip()
         }
-        active_count = sum(
-            # Must match _compute_active_set, which also drops hidden rows.
-            1 for c in components
-            if c.refactor_status in active_statuses and not c.hide
-        )
+    # One set for the echo and the layer loop below, so the count printed is
+    # the set the sub-figures are drawn from.
+    active_set = _compute_active_set(components, active_statuses)
+    if active_statuses is not None:
         click.echo(
-            f"Filtering to {active_count} components with status: "
+            f"Filtering to {len(active_set)} components with status: "
             + ", ".join(sorted(active_statuses))
         )
 
@@ -211,7 +215,6 @@ def main(
     # Per-layer sub-figures
     if layer_column:
         _index = index_by_id(components)
-        _active_set = _compute_active_set(components, active_statuses)
         layers = sorted({c.layer for c in components if c.layer})
         if not layers:
             click.echo(
@@ -225,21 +228,14 @@ def main(
             )
             stems = _layer_filenames(layers)
             for layer_value in layers:
-                in_layer_count = sum(
-                    1 for c in components
-                    if c.id in _active_set
-                    and c.layer == layer_value
-                    and not c.ubiquitous
-                    and not c.hide
-                )
-                if in_layer_count == 0:
+                if not layer_members(components, layer_value, active_set):
                     click.echo(
                         f"  Skipping '{layer_value}' "
                         "(no active non-ubiquitous components)."
                     )
                     continue
                 layer_dot = build_layer_subgraph(
-                    components, layer_value, _active_set, _index, direction, colors
+                    components, layer_value, active_set, _index, direction, colors
                 )
                 stem = f"{output_name}_{stems[layer_value]}"
                 layer_dot_path = output_dir / f"{stem}.dot"

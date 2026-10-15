@@ -14,10 +14,10 @@ from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
-from .flow import isolated
+from .files import manifest_path
 from .privacy import load_policy
 from .privacy import verify as verify_policy
-from .sync import DEFAULT_MAX_AGE, sync
+from .sync import DEFAULT_MAX_AGE, DEFAULT_WORKERS, sync
 from .synced_data import SyncedData
 
 DEFAULT_COMPONENTS = Path("catalog/components")
@@ -26,6 +26,16 @@ DEFAULT_OUTPUT_DIR = Path("data/dashboard")
 
 
 def _load(components_dir: Path):
+    """Every component file in `components_dir`, relative to the working
+    directory and never walked up to, unlike the stage file, the policy and
+    the colours (`files.find_upward`).
+
+    The walk was tried, and it turned a refusal into a run in the wrong place:
+    `--output-dir` and `--sync-dir` stay relative to the working directory, so
+    a sync from `src/` found the components and wrote its cache to
+    `src/data/sync/`, which `.gitignore` (anchored at `/data/`) does not
+    cover. Failing here is what keeps the cache at the root.
+    """
     if not components_dir.is_dir():
         raise click.ClickException(
             f"No components directory at {components_dir}. Run from the "
@@ -49,7 +59,7 @@ def _load(components_dir: Path):
                    "seconds. 0 fetches everything.")
 @click.option("--force", is_flag=True,
               help="Re-fetch everything, ignoring --max-age.")
-@click.option("--workers", type=int, default=12, show_default=True,
+@click.option("--workers", type=int, default=DEFAULT_WORKERS, show_default=True,
               help="Parallel fetches.")
 def sync_main(components_dir, output_dir, max_age, force, workers):
     """Fetch what the component files point at, into a local cache.
@@ -79,7 +89,7 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
         f"{counts['succeeded']}/{counts['attempted']} fetches succeeded "
         f"({counts['cached']} from cache, {counts['failed']} failed)."
     )
-    click.echo(f"Wrote {output_dir / 'manifest.json'}")
+    click.echo(f"Wrote {manifest_path(output_dir)}")
     if counts["succeeded"] == 0:
         raise click.ClickException(
             "Every fetch failed — check the network rather than the data."
@@ -108,9 +118,10 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     at all, so it cannot regress into a full build by being edited.
     """
     components = _load(components_dir)
-    if not (sync_dir / "manifest.json").exists():
+    manifest = manifest_path(sync_dir)
+    if not manifest.exists():
         raise click.ClickException(
-            f"No manifest at {sync_dir / 'manifest.json'}. Run sync-components first."
+            f"No manifest at {manifest}. Run sync-components first."
         )
     synced = SyncedData(sync_dir)
     policy = None if include_private else load_policy()
@@ -149,7 +160,9 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
         "Version sources: "
         + ", ".join(f"{source} {count}" for source, count in sorted(tally.items()))
     )
-    stranded = isolated(components)
+    # Read off the rows rather than recomputed: build_rows has already walked
+    # the flow depths, and the log should name what the page marks isolated.
+    stranded = sorted(row["id"] for row in payload["rows"] if row["isolated"])
     if stranded:
         click.echo(f"No recorded dependencies for: {', '.join(stranded)}")
     click.echo(f"Wrote {json_path}")

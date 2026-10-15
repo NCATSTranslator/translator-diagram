@@ -8,7 +8,7 @@ from html import unescape
 from importlib import resources
 from pathlib import Path
 
-from tests.dashboard_helpers import _comp, _row
+from tests.dashboard_helpers import _comp, _Probes, _row
 from translator_diagram import dashboard
 from translator_diagram.dashboard import (
     build_catalog_edges,
@@ -20,7 +20,6 @@ from translator_diagram.dashboard import (
     write_dashboard,
 )
 from translator_diagram.rows import build_rows
-from translator_diagram.synced_data import SyncedData
 
 
 class TestPayload:
@@ -57,59 +56,51 @@ class TestPayload:
         assert len(one["metal"]) == 4
         assert one["base"].startswith("#")
 
-    def test_unclaimed_charts_and_suggestions_reach_the_payload(self, synced):
+    def test_unclaimed_charts_and_suggestions_reach_the_payload(self, tmp_path):
         # The two lists a data PR is written from: charts nothing accounts for,
         # and registry records we attached ourselves that want an id recording.
-        root = synced.root
-        (root / "helm").mkdir(exist_ok=True)
-        (root / "helm" / "index.json").write_text(json.dumps([
+        probes = _Probes(tmp_path).chart_index(entries=[
             {"name": "my-chart", "type": "dir"},
             {"name": "robokop", "type": "dir"},
             {"name": "README.md", "type": "file"},
-        ]))
+        ])
         for chart, description in (
             ("my-chart", "A Helm chart for Kubernetes"),
             ("robokop", "The ROBOKOP user interface"),
         ):
-            (root / "helm" / chart).mkdir()
-            (root / "helm" / chart / "Chart.yaml").write_text(
-                f"name: {chart}\ndescription: {description}\n"
-            )
-        (root / "smartapi.json").write_text(json.dumps({"hits": [{
+            probes.chart(chart, chart=f"name: {chart}\ndescription: {description}\n")
+        probes.registry([{
             "_id": "xyz",
             "info": {"title": "Service API",
                      "x-translator": {"infores": "infores:svc"}},
             "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}],
-        }]}))
+        }])
         component = _comp("svc", identifiers={
             "infores": "infores:svc", "helm_chart": "my-chart"})
-        payload = build_payload([component], SyncedData(root))
+        payload = build_payload([component], probes.build())
         assert payload["unclaimed_charts"] == [
             {"name": "robokop", "description": "The ROBOKOP user interface"}]
         assert payload["smartapi_suggestions"] == [{
             "component": "svc", "smartapi_id": "xyz", "title": "Service API"}]
 
-    def test_a_chart_a_withheld_component_claims_is_not_unclaimed(
-        self, synced, tmp_path
-    ):
+    def test_a_chart_a_withheld_component_claims_is_not_unclaimed(self, tmp_path):
         # `unclaimed_charts` is matched against every component rather than the
         # kept rows, and this is why: asking the rows would publish `jaeger` by
         # name on the one build that must not say it.
         from translator_diagram.privacy import Policy, Redaction
 
-        root = synced.root
-        (root / "helm").mkdir(exist_ok=True)
-        (root / "helm" / "index.json").write_text(
-            json.dumps([{"name": "jaeger", "type": "dir"}])
+        synced = (
+            _Probes(tmp_path)
+            .chart_index(["jaeger"])
+            .chart("jaeger", chart="name: jaeger\n")
+            .build()
         )
-        (root / "helm" / "jaeger").mkdir()
-        (root / "helm" / "jaeger" / "Chart.yaml").write_text("name: jaeger\n")
         components = [
             _comp("svc", identifiers={"smartapi": "abc"}),
             _comp("jaeger", identifiers={"helm_chart": "jaeger"}),
         ]
         payload = build_payload(
-            components, SyncedData(root), Policy(components=(Redaction("jaeger"),))
+            components, synced, Policy(components=(Redaction("jaeger"),))
         )
         assert payload["unclaimed_charts"] == []
 
@@ -171,12 +162,10 @@ class TestCatalogEdges:
 
 class TestOtelTile:
     def _synced(self, tmp_path, bodies):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "otel").mkdir()
+        probes = _Probes(tmp_path)
         for env, body in bodies.items():
-            (tmp_path / "otel" / f"{env}.json").write_text(json.dumps(body))
-        return SyncedData(tmp_path)
+            probes.otel(env, body=body)
+        return probes.build()
 
     def test_the_total_is_distinct_across_collectors(self, tmp_path, component):
         # Only a couple of services report to all three, so summing the three

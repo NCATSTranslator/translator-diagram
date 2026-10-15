@@ -29,8 +29,9 @@ which is how a 2000-line test file grows back.
 
 | Module | What's there |
 |---|---|
+| `files.py` | The filesystem both stacks share: `find_upward` (how `catalog/owner-colors.csv`, `catalog/flow-steps.yaml` and `config/privacy.yaml` are found from any directory in the checkout), the tolerant `read_json`/`read_yaml` readers, every path under `data/sync/` (`endpoint_key`, `releases_path`, ...) and the parsers of the cache's own files (`smartapi_hits`, `manifest_fetches`, `confirmed_hosts`, `rejected_hosts`). A leaf |
 | `model.py` | `Component` (one CSV row after parsing) and `index_by_id` |
-| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, and the `_layer_filename*` output stems |
+| `naming.py` | Every name the tool hands out: `_svg_id`, `_clone_svg_id`, `_unique_svg_id`, `external_svg_ids`, `_svg_node_ids`, the `_layer_filename*` output stems, `_dedupe` (the one suffixing loop behind the ids and the stems) and `ubiquitous_clones` (the one walk behind the clone ids, which `validate` claims through it) |
 | `colors.py` | `ColorAssigner`, `text_color_for`, `load_owner_colors`, and the palette constants — `FALLBACK_COLORS`, `GHOST_*`, `EXTERNAL_FILL_COLOR` |
 | `loading.py` | `_parse_bool`, `parse_id_list`, `parse_externals`, `_valid_url`, `load_components`, and `download_sheet_csv` for `--google-sheet` |
 | `validation.py` | `validate` — duplicate IDs, unknown references, SVG id collisions |
@@ -43,16 +44,16 @@ The dashboard is a second, parallel stack over the same components:
 
 | Module | What's there |
 |---|---|
-| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS`, and the `read_json`/`read_yaml` readers the modules above it share |
+| `components.py` | `ComponentFile` and `Deployment` (one `catalog/components/<id>.yaml`), `parse_component`, `load_components`, `endpoint_url_in`, `github_repo`, `ENVIRONMENTS`, `DEFAULT_ENDPOINT_PATHS` |
 | `deployments.py` | Where a component is deployed: `smartapi_record_for`, `deployments_from_smartapi` (declared, then described), `derive_deployments` (the ITRB hostname convention) and `merge_deployments` (recorded beats registered beats derived) |
 | `charts.py` | Which component each translator-devops chart belongs to: `chart_matches` and its five ordered rules, `unclaimed_charts`, `chart_dirs`, `CHART_META_FILES` — below both `sync` and `dashboard`, which each ask and may not import each other |
 | `flow.py` | `flow_depths`, `in_flow_order`, `isolated` — ordering components from the data sources to the user |
 | `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
 | `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the two waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
-| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version` |
-| `synced_data.py` | `SyncedData` — the only reader of the sync cache, and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
-| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
+| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version`, and the readers over somebody else's JSON — `mapping`, `items`, `text`, `strings`, `number` — that every module reading an upstream document uses |
+| `synced_data.py` | `SyncedData` — the build's reader of the sync cache (`files.py` holds the layout and the parsers it shares with `sync`), and where the 200 gate lives: a body this run's manifest records as a failed fetch never answers for a cell, though one it has no entry for still does (the module docstring has all three rules) |
+| `stages.py` | `Stage`, `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
 | `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
@@ -75,6 +76,9 @@ table the diagram generator reads is not a web file.
 **Imports run one way**, and a new one must not break it:
 
 ```text
+# shared
+files → {colors, privacy, stages, fetch, sync, synced_data, cells, dashboard_cli}
+
 # the diagram
 model → naming → {validation, export, render}
 colors → {render, legend}
@@ -82,8 +86,8 @@ legend → render
 cli → everything above
 
 # the dashboard
-components → {charts, deployments, fetch, flow, sync, synced_data, stages, cells, rows, dashboard}
-charts → {sync, synced_data, dashboard}
+components → {charts, deployments, flow, sync, synced_data, stages, cells, rows, dashboard}
+charts → {sync, synced_data, cells, dashboard}
 deployments → {sync, cells, rows}
 fetch → sync
 synced_data → {cells, rows, dashboard}
@@ -93,7 +97,7 @@ cells → {rows, dashboard}
 rows → dashboard
 colors → dashboard
 privacy → dashboard
-payload_details → rows
+payload_details → {deployments, synced_data, cells, rows, dashboard}
 dashboard_cli → everything above
 ```
 
@@ -113,10 +117,11 @@ than `render.py` for exactly this reason: `render` and `legend` both need
 `EXTERNAL_FILL_COLOR`, and putting it in `render` would make them import each
 other.
 
-**The two halves meet only at `colors`.** `model.py` parses a sheet row and
-`components.py` parses a YAML file; they describe the same components but not
-the same data, and neither imports the other. Merging them is what issue #19
-is for — doing it early would mean one of the two losing fields it needs.
+**The two halves meet only at `colors` and the `files` leaf.** `model.py`
+parses a sheet row and `components.py` parses a YAML file; they describe the
+same components but not the same data, and neither imports the other. Merging
+them is what issue #19 is for — doing it early would mean one of the two losing
+fields it needs.
 
 `tests/test_package_layout.py` enforces it, so a wrong-direction import fails
 CI rather than sitting there working. Widening its `ALLOWED` map to silence a
@@ -194,12 +199,13 @@ from them, and `flow_steps` was deleted rather than left as a second answer.
 
 A component no stage names lands in a trailing band, and
 `tests/test_flow_steps.py` fails until it is placed or named under `unplaced` —
-the same contract as `unknown.yaml`. The file is required, found by the same
-upward walk `load_owner_colors` and `load_policy` use, and `build-dashboard`
-fails without it. `in_stage_order` *does* still fall back to `in_flow_order`
-with no bands, and that fallback is exactly why a missing file is refused: a
-build run from outside a checkout would otherwise publish the derived order the
-file exists to replace, and look finished doing it.
+the same contract as `unknown.yaml`. The file is required, found by
+`files.find_upward` the way `load_owner_colors` and `load_policy` find
+theirs, and `build-dashboard` fails without it. `in_stage_order` *does* still
+fall back to `in_flow_order` with no bands, and that fallback is exactly why a
+missing file is refused: a build run from outside a checkout would otherwise
+publish the derived order the file exists to replace, and look finished doing
+it.
 
 **Change owner node colours** → edit `catalog/owner-colors.csv`. No code
 change. Row order is legend order. Keeping this a data file is deliberate:
@@ -332,13 +338,16 @@ are collected because the failure mode they share is silence: the page keeps
 rendering, and says something that is not true.
 
 - **A version it did not fetch.** `sync` writes a body only on a 200 and leaves
-  the previous one where it is, so `SyncedData` reads an OpenAPI or `/status`
-  body only when this run's manifest entry for that path is a 200 with no
-  error. Otherwise a component whose prod had gone away kept reporting the
-  version it last served, with `reachable: true` beside its own 404. Release
-  lists and Helm charts are deliberately *not* gated: neither says anything
-  about what is running now, and dropping a cached release list because GitHub
-  rate-limited the run would lose real information.
+  the previous one where it is, so `SyncedData` refuses an OpenAPI or
+  `/status` body when this run's manifest records a failed fetch of that path.
+  Otherwise a component whose prod had gone away kept reporting the version
+  it last served, with `reachable: true` beside its own 404. A body with no
+  manifest entry at all is still read, and `openapi_outcome` is stricter than
+  the cells (a 200 this run, or nothing); `synced_data.py`'s docstring has the
+  three rules side by side. Release lists and Helm charts are deliberately
+  *not* gated: neither says anything about what is running now, and dropping
+  a cached release list because GitHub rate-limited the run would lose real
+  information.
 - **A data release as a software version.** `/status` has no Translator-wide
   schema, so the version is the first `*_version` key — with `babel_version`,
   `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a

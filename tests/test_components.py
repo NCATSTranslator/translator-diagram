@@ -2,6 +2,7 @@
 
 import yaml
 
+from tests.dashboard_helpers import MINIMAL, _parse
 from translator_diagram.components import (
     DEFAULT_ENDPOINT_PATHS,
     Deployment,
@@ -11,13 +12,6 @@ from translator_diagram.components import (
     load_components,
     parse_component,
 )
-
-MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
-           "refactor_status": "New in Refactor"}
-
-
-def _parse(**overrides):
-    return parse_component({**MINIMAL, **overrides})
 
 
 class TestParsing:
@@ -94,6 +88,13 @@ class TestEdges:
     def test_a_planned_edge_keeps_its_target(self):
         component = _parse(connections={"calls": ["~a"]})
         assert component.upstream == ["a"]
+
+    def test_upstream_reads_references_the_way_connection_ids_does(self):
+        # Padding around a planned reference used to keep its tilde, so it
+        # matched no component; a blank or non-string entry is no reference.
+        component = _parse(
+            connections={"calls": [" ~a ", "", 3], "gets_results_from": ["b"]})
+        assert set(component.upstream) == {"a", "b"}
 
     def test_externals_are_direction_and_name(self):
         component = _parse(connections={"externals": [
@@ -182,10 +183,6 @@ class TestEndpointUrls:
         # Defaulting it would manufacture a 404 per environment and call it data.
         assert "status" not in DEFAULT_ENDPOINT_PATHS
         assert endpoint_url_in(_parse(), self._deployment(), "status") is None
-
-    def test_the_method_only_sees_recorded_environments(self):
-        component = _parse(endpoints={"openapi": "openapi.json"})
-        assert component.endpoint_url("ci", "openapi") is None
 
 
 class TestGithubRepo:

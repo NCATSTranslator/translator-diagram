@@ -11,7 +11,6 @@ Nothing here imports anything else in the package, and nothing here reaches
 the network. `sync` fetches, this parses, `dashboard` renders.
 """
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +21,9 @@ import yaml
 # Our environment ladder, in the order a change travels along it. Also the
 # column order in the dashboard, so it is defined once, here.
 ENVIRONMENTS = ("dev", "ci", "test", "prod")
+# The environments with an OpenTelemetry collector: `sync.OTEL_COLLECTORS`
+# names one per entry, and `SyncedData.otel` reads one file per entry.
+OTEL_ENVIRONMENTS = ("ci", "test", "prod")
 
 # Where an endpoint lives when the component file does not say. Only applied
 # when the key is *absent*: an explicit null means someone checked and this
@@ -211,11 +213,13 @@ class ComponentFile:
         ordering that is the same relationship. The diagram draws them
         differently because *how* they are called differs, which is a
         rendering concern, not a flow one.
+
+        Built from `connection_ids`, so the two cannot disagree about what a
+        reference is. That puts planned references after implemented ones,
+        which no reader notices: `flow._upstream_within` makes a set of these
+        and `flow_depths` walks it sorted.
         """
-        edges = (self.connections.get("gets_results_from") or []) + (
-            self.connections.get("calls") or []
-        )
-        return [ref.lstrip("~") for ref in edges]
+        return [cid for ids in self.connection_ids().values() for cid in ids]
 
     @property
     def externals(self) -> list[tuple[str, str]]:
@@ -231,24 +235,15 @@ class ComponentFile:
 
     # -- links ------------------------------------------------------------
 
+    def repositories_with_role(self, role: str) -> list[dict[str, str]]:
+        """Every recorded repository with `role`, in the order recorded."""
+        return [repo for repo in self.repositories if repo.get("role") == role]
+
     def repository(self, role: str = "source") -> str | None:
-        for repo in self.repositories:
-            if repo.get("role") == role:
-                return repo.get("url")
+        """The first recorded repository URL with `role`, or None."""
+        for repo in self.repositories_with_role(role):
+            return repo.get("url")
         return None
-
-    def endpoint_url(self, env: str, kind: str) -> str | None:
-        """Absolute URL of this component's `kind` endpoint in `env`.
-
-        Only sees deployments recorded in the file. Most components have none,
-        deliberately — SmartAPI already knows their URLs, so recording them
-        here would be a second copy. Pass the merged mapping from
-        `deployments.merge_deployments` to `endpoint_url_in` for those.
-        """
-        deployment = self.environments.get(env)
-        if deployment is None:
-            return None
-        return endpoint_url_in(self, deployment, kind)
 
 
 def endpoint_url_in(
@@ -292,36 +287,6 @@ def github_repo(url: str | None) -> str | None:
         return None
     match = GITHUB_REPO.match(url.strip())
     return f"{match['owner']}/{match['name']}" if match else None
-
-
-_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
-
-
-def read_json(path: Path) -> Any:
-    """A cached JSON body, or None when it is missing or is not JSON.
-
-    Shared by `sync` and the dashboard, which both read the sync cache. Several
-    Translator endpoints answer 200 with an HTML error page and a throttled
-    GitHub call answers with an object where a list was asked for, so callers
-    still check the shape they get back.
-    """
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
-
-
-def read_yaml(path: Path) -> dict[str, Any] | None:
-    """A YAML mapping, or None when it is missing, malformed or not a mapping.
-
-    libyaml's loader where it is installed: the infores catalog alone takes
-    0.14 s through the pure-Python one and 0.02 s through it.
-    """
-    try:
-        loaded = yaml.load(path.read_text(encoding="utf-8"), Loader=_YAML_LOADER)
-    except (OSError, yaml.YAMLError, UnicodeDecodeError):
-        return None
-    return loaded if isinstance(loaded, dict) else None
 
 
 def _parse_environments(raw: dict[str, Any]) -> dict[str, Deployment]:

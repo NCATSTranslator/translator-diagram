@@ -470,6 +470,7 @@ uv run generate-diagram [OPTIONS]
 translator-diagram/
 ├── src/translator_diagram/
 │   │                       # shared by both stacks
+│   ├── files.py            # Finding a hand-edited file from any directory; reading JSON and YAML
 │   ├── colors.py           # Owner colours and the palette
 │   ├── components.py       # Reads catalog/components/<id>.yaml
 │   ├── privacy.py          # What a published dashboard withholds

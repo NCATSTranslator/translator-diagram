@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .components import ENVIRONMENTS, ComponentFile, Deployment
+from .payload_details import mapping
 
 # ITRB deploys on a fixed hostname convention: `<stem>.ci.transltr.io`,
 # `<stem>.test.transltr.io`, `<stem>.transltr.io`. Knowing one environment's
@@ -119,11 +120,8 @@ def smartapi_record_for(
 
 def record_infores(hit: Any) -> str | None:
     """`info.x-translator.infores` out of a registry record or OpenAPI document."""
-    if not isinstance(hit, dict):
-        return None
-    info = hit.get("info")
-    translator = info.get("x-translator") if isinstance(info, dict) else None
-    value = translator.get("infores") if isinstance(translator, dict) else None
+    translator = mapping(mapping(mapping(hit).get("info")).get("x-translator"))
+    value = translator.get("infores")
     return value if isinstance(value, str) else None
 
 
