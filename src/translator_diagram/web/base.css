@@ -110,13 +110,53 @@ code {
   gap: var(--sp-3);
   min-width: 0;
 }
-.synced {
+/* The sync panel: a <details> whose summary is drawn as a button, and whose
+   popover copies the listbox's box. */
+.sync { position: relative; }
+.sync > summary {
+  list-style: none;
   color: var(--muted);
-  font-size: var(--fs-meta);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+.sync > summary::-webkit-details-marker { display: none; }
+.sync > summary::after { content: "▾"; opacity: 0.55; margin-left: 2px; }
+.sync[open] > summary { border-color: var(--accent); color: var(--text); }
+.sync-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  right: 0;
+  width: min(440px, calc(100vw - 2 * var(--sp-3)));
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--page);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+.sync-pop h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sync-pop p { margin: 0; }
+.sync-pop .muted { color: var(--muted); }
+.sync-pop table { width: 100%; border-collapse: collapse; }
+.sync-pop td { padding: 3px 0; border-top: 1px solid var(--hairline); vertical-align: top; }
+.sync-pop td.n {
+  width: 1%;
+  padding-right: var(--sp-2);
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sync-pop td.pct { width: 1%; padding-right: var(--sp-2); text-align: right; color: var(--muted); }
+.sync-pop .bar { display: block; height: 4px; margin: 4px 0 2px; background: var(--raised); }
+.sync-pop .bar i { display: block; height: 4px; background: var(--accent); }
 
 /* --- Page body ------------------------------------------------------------ */
 

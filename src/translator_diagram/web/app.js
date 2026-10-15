@@ -100,18 +100,46 @@
     xmlns="http://www.w3.org/2000/svg"><rect class="tile" width="32" height="32"
     rx="6"/><text class="glyph" x="16" y="22.6" text-anchor="middle">Tr</text></svg>`;
 
+  /* --- The sync panel ------------------------------------------------------- */
+
+  /* What the page knows about its own data, behind the note that says when
+     it was checked: shares rather than counts, because "27 components" has
+     nothing to be compared to and "40 of 49 reachable" does, and each share
+     links to the Show view that lists the rest. A native <details>: it is
+     prose and links, not a listbox, and <details> gives the toggle, the
+     keyboard and aria-expanded for nothing. */
+  function syncPanelHtml() {
+    const f = TD.summary.figures(DATA);
+    const when = f.syncedAt ? `checked ${esc(TD.fmt.since(f.syncedAt))}` : "never checked";
+    const stamp = f.syncedAt ? f.syncedAt.slice(0, 16).replace("T", " ") + " UTC" : "";
+    const pct = (s) => Math.round((100 * s.n) / s.of);
+    const shares = f.shares.map((s) => {
+      const query = TD.url.serialize({ ...TD.url.defaults(), versions: s.view });
+      return `<tr><td class="n">${s.n} of ${s.of}</td><td class="pct">${pct(s)}%</td><td>${esc(s.label)}
+        <span class="bar"><i style="width:${pct(s)}%"></i></span>
+        <a href="?${esc(query)}" data-show="${esc(s.view)}">show which are not</a></td></tr>`;
+    }).join("");
+    const otel = f.otel.perEnv.map(([env, n]) => `${esc(env)} ${n}`).join(" · ");
+    return `<details class="sync" id="sync"><summary class="btn" title="${esc(stamp)}">${when}</summary>
+      <div class="sync-pop">
+        <p>Every deployment was checked <b>${esc(TD.fmt.since(f.syncedAt))}</b>${
+          stamp ? ` <span class="muted">(${esc(stamp)})</span>` : ""}: ${
+          f.checks.succeeded} of ${f.checks.attempted} checks succeeded, ${f.checks.failed} failed.</p>
+        ${shares ? `<h3>How much of the platform</h3><table>${shares}</table>` : ""}
+        ${f.sources.length ? `<h3>Where versions came from</h3><p>${f.sources.map(esc).join(", ")}.</p>` : ""}
+        ${f.otel.total ? `<h3>OpenTelemetry</h3><p>${f.otel.total} services reporting: ${otel}.</p>` : ""}
+      </div></details>`;
+  }
+
   /* --- Shell ------------------------------------------------------------------ */
 
   function shell() {
-    const synced = DATA.synced_at
-      ? `synced ${esc(TD.fmt.since(DATA.synced_at))}` : "never synced";
     document.getElementById("app").innerHTML = `
       <div class="topbar">
         <div class="brandmark">${BRAND_MARK}<span class="name">Translator Components</span><span
           class="tagline">what is running where, in which version, on which data</span></div>
         <div id="viewswitch"></div>
-        <div class="topright"><span class="synced" title="${esc(DATA.synced_at || "")}"
-          >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
+        <div class="topright">${syncPanelHtml()}<button type="button" class="btn icon" id="theme"></button></div>
       </div>
       <main class="page">
         <div class="filters">
@@ -205,6 +233,25 @@
     // reading this at dusk has their machine switch under them.
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
       if (currentTheme() === "auto") applyTheme("auto");
+    });
+
+    // A share's link lists the rows it leaves out: switch to the Overview on
+    // that view, set the control to match, and close the panel. The href is
+    // real too, so a middle-click opens the same view in a new tab.
+    const sync = document.getElementById("sync");
+    sync.addEventListener("click", (event) => {
+      const link = event.target.closest("a[data-show]");
+      if (!link) return;
+      event.preventDefault();
+      TD.commit({ view: "overview", versions: link.dataset.show }, { silent: true });
+      viewSwitch.set("overview");
+      versionBox.set(link.dataset.show);
+      showView(false);
+      sync.open = false;
+    });
+    // Anywhere else closes it, the way the listboxes close.
+    document.addEventListener("click", (event) => {
+      if (sync.open && !sync.contains(event.target)) sync.open = false;
     });
 
     // The order label's ✕ is the only way back to stage order when a narrow
