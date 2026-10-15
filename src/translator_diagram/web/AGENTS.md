@@ -163,14 +163,15 @@ The rule is that judgement is a pure function and the DOM is a thin layer over
 it: the filter, the band grouping, the detail-field pruning and the cell
 rendering in `table.js`, the edge kind, node version, reachability and tooltip
 buckets in `map.js`, the catalog edge direction and probe evidence in
-`drawer.js`, and the theme cycle and the clock formatting in `core.js` are all
-exported and driven under `node --test` from `tests/web/`, which
-`tests/test_web_assets.py` runs. Anything that needs a clock or the system
-preference takes it as an argument (`relativeAge(iso, now)`,
-`TD.theme.next(choice, systemDark)`), so "a future timestamp says today" is a
-test rather than a stub. What is still untested is the DOM itself — the
-drawer's focus return, the row expansion animation — which issue #22 tracks.
-`TD.row` is where a fact about a row is said once for every view.
+`drawer.js`, and the cell model, the sync panel's figures, the theme cycle and
+the clock formatting in `core.js` are all exported and driven under `node
+--test` from `tests/web/`, which `tests/test_web_assets.py` runs. Anything
+that needs a clock or the system preference takes it as an argument
+(`relativeAge(iso, now)`, `TD.theme.next(choice, systemDark)`), so "a future
+timestamp says today" is a test rather than a stub. What is still untested is
+the DOM itself — the drawer's focus return, the row expansion animation —
+which issue #22 tracks. `TD.row` is where a fact about a row is said once for
+every view.
 
 ## Things that look wrong but aren't
 
@@ -203,6 +204,20 @@ page says, in the sync panel's shares. The views (`all`, `differ`, `known`,
 versions alone. It replaced a "Drift only" toggle rather than joining it: two
 controls that select the same rows cannot be told apart by a reader. The last
 three are the complements of the sync panel's shares, which link to them.
+
+**The table is a tinted board, and it was chosen over two others.** Three
+directions were mocked up over the real payload and compared side by side: a
+ruled ledger on the page's own tokens, this status matrix, and a GitHub-styled
+table. The matrix won because the four environment columns are what a reader
+comes to compare, and a tint per state lets them be read without reading
+every cell; the GitHub mockup's rounded pills and underlined links were kept
+because they parse faster than hairline rectangles. The mockups were deleted
+once the choice was made (the commit that deleted them says why), and their
+shared cell model moved into `core.js` as `TD.cell`. Two rules in the tint:
+a lone deployment is not tinted "same", because it agrees with nobody; and an
+absence the page is sure of (no such host, no server listed, not a hosted
+service) is left white, while "no address on file" — the page's own gap — is
+grey.
 
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different

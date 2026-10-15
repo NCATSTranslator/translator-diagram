@@ -215,8 +215,11 @@ shows what a fetcher builds from one of them.
 A single self-contained HTML page with two views over the same payload:
 
 - **Overview** — one row per component, in stages (data coming in at the top,
-  the people who use it at the bottom), with a column per environment showing
-  the deployed URL and the version running there.
+  the people who use it at the bottom), with a cell per environment tinted by
+  its state: the same version as the rest of the row, a different one, up
+  with no version to read, down, or nothing on file. The version links to the
+  document it was read from, and the data release it has loaded (`babel
+  2025sep1`) sits under it.
 - **Map** — an interactive SVG diagram of which component connects to what,
   laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
   export, and the same detail drawer as the table.
@@ -252,13 +255,15 @@ things it reports are the answer:
   source?" has a number rather than an opinion. Both live sources come before
   the registry, because a registration is a copy somebody filed by hand.
 - **Which environments disagree.** A version in the minority for its component
-  is tinted, so drift between dev, ci, test and prod is visible without reading
-  every cell.
-- **Which release each environment is running.** The Repository column lists a
-  component's newest GitHub releases, plus any older release an environment is
-  still on, each tag linking to its notes. A filled tag is deployed somewhere
-  on that row, so the number in the `prod` column has its changelog one click
-  away.
+  is tinted amber and marked ≠, so drift between dev, ci, test and prod is
+  visible without reading every cell. A version copied from the registry or
+  the chart rather than read from the running service is a dashed pill, so
+  four identical copies do not read as four services agreeing.
+- **Where it is registered, and what has changed.** The SmartAPI column says
+  whether a component has a registration, how the registry's own probe finds
+  it, and when the record last changed. The Repository column dates the
+  newest GitHub release; an open row lists every release under it, each tag
+  linking to its notes, the ones running somewhere on the row filled in.
 - **Why a cell is empty.** Every cell with no version says what happened
   instead, in a few words: `no such host`, `no API document found`,
   `serves a web page, not an API document`, `SmartAPI lists no prod server`,
@@ -267,6 +272,12 @@ things it reports are the answer:
   recorded a URL for are three different things, and an empty cell said all
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
+- **How much of the platform.** The "checked N minutes ago" note at the top
+  right opens a panel of shares rather than counts: deployments reachable,
+  with a version read, listed in their SmartAPI record; components with a
+  record, running the same version everywhere — each as "n of N" with a link
+  that filters the table to the rest. Under them, where versions came from
+  and how many services report to OpenTelemetry per environment.
 
 To see a branch's page the way the published build will be — built on a
 GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
@@ -330,19 +341,19 @@ nothing recording that the UI calls Name Lookup, a computed order put Name
 Lookup up beside the data sources. A written order is more honest than a
 plausible-looking one derived from data that is missing.
 
-**`Last updated`** is the newer of a component's latest GitHub release and its
-SmartAPI registration, badged with which one it was. Thirteen of the
-twenty-six components have neither and show a dash: they publish no releases
-and are in no registry. Nothing here dates a *deployment* — see
-[`FUTURE.md`](FUTURE.md) for the closest available proxy. The environment
-columns sort by the age of the release running in that environment, which is
-the sharpest version of the same question: prod is on `0.6.1`, released
-2024-10-04.
+**Dates.** The Repository column dates a component's newest GitHub release
+and the SmartAPI column its registration's last change; about half the
+components have neither, because they publish no releases and are in no
+registry. Nothing here dates a *deployment* — see [`FUTURE.md`](FUTURE.md)
+for the closest available proxy. The environment columns sort by the age of
+the release running in that environment, which is the sharpest version of the
+same question: prod is on `0.6.1`, released 2024-10-04.
 
-**The page opens on every component.** The dropdown beside the owner filter
-narrows it: `Environments disagree` (seven of twenty-four today, and the rows
-with the most to say), `Any version known`, and `No version known` — which is
-the list of gaps in the metadata, and worth reading as a to-do list. The count
+**The page opens on every component.** The `Show` dropdown narrows it:
+`Environments disagree` (the rows with the most to say), `Any version known`,
+`No version known` — the list of gaps in the metadata, worth reading as a
+to-do list — and the three complements the sync panel links to, `Not
+reachable`, `Absent from SmartAPI record` and `No SmartAPI record`. The count
 beside the filters always says how many of the total are showing.
 
 Filters live in the URL, so a filtered view can be pasted to someone else and
@@ -350,6 +361,22 @@ arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
 which inlines its own data and so works straight from disk, and
 `overview.json`, the same payload as a file for anything that wants to consume
 it.
+
+### What travels in the URL
+
+| Parameter | Meaning |
+|---|---|
+| `view` | `overview` (the default) or `map` |
+| `q` | the search box |
+| `owner` | a comma-separated list of owners |
+| `versions` | the `Show` view: `all`, `differ`, `known`, `none`, `unreachable`, `unregistered` or `no-smartapi` |
+| `sort`, `dir` | the sorted column (`name`, `owner`, `repo`, `smartapi` or `env-<env>`) and `asc` or `desc`; absent means stage order |
+| `expand` | the ids of the rows opened with the chevron |
+| `sel`, `tab` | the component the drawer is open on, and which of its tabs |
+| `edges` | on the map, which edge kinds are shown |
+
+Only what differs from the default is written, so a shared link says what the
+sender changed and nothing else.
 
 **Map controls:** `f` fits the diagram, `+`/`-` zoom, arrow keys pan when the
 map has focus, `Esc` clears selection. Edge kinds can be toggled in the legend.

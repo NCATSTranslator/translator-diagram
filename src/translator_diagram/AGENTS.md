@@ -261,8 +261,18 @@ in `rows.py` for the value, then **one entry in the `COLUMNS` table** in
 owns the header, the body cell, the `drop-*` class that hides both at narrow
 widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
-without its column. The payload written to `overview.json` is a contract a
-scheduled job would publish, so adding a key is safe and renaming one is not.
+without its column.
+
+**Show a new per-environment fact** → one entry in the `facts` list of
+`TD.cell` in `web/core.js`. The expanded row and the cell's tooltip iterate
+that list, so the fact appears in both with no renderer change; only the cell
+itself names what it draws (`envCell` in `web/table.js`). `TD.cell` is the one
+model of an environment cell the table, its tooltip and the expansion read,
+so they cannot disagree about a version or a reason; the drawer's
+Environments tab still has its own renderer (#78).
+
+The payload written to `overview.json` is a contract a scheduled job would
+publish, so adding a key is safe and renaming one is not.
 The payload keys are independent of the YAML keys they happen to be spelled
 like: `layer` and `refactor_status` moved out of `diagram:` in the component
 files without the payload changing at all, because `build_rows` writes those
