@@ -1,14 +1,7 @@
 """Tests for translator_diagram.charts."""
 
+from tests.dashboard_helpers import _parse
 from translator_diagram.charts import chart_matches
-from translator_diagram.components import parse_component
-
-MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
-           "refactor_status": "New in Refactor"}
-
-
-def _parse(**overrides):
-    return parse_component({**MINIMAL, **overrides})
 
 
 class TestChartMatches:

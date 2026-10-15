@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .components import read_json
+from .files import read_json
 
 GITHUB_API_PREFIX = "https://api.github.com/"
 

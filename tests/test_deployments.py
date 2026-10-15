@@ -1,19 +1,13 @@
 """Tests for translator_diagram.deployments."""
 
-from translator_diagram.components import ENVIRONMENTS, Deployment, parse_component
+from tests.dashboard_helpers import _parse
+from translator_diagram.components import ENVIRONMENTS, Deployment
 from translator_diagram.deployments import (
     deployments_from_smartapi,
     derive_deployments,
     merge_deployments,
     smartapi_record_for,
 )
-
-MINIMAL = {"id": "svc", "name": "Service", "owner": "DOGSLED",
-           "refactor_status": "New in Refactor"}
-
-
-def _parse(**overrides):
-    return parse_component({**MINIMAL, **overrides})
 
 
 class TestMergeDeployments:

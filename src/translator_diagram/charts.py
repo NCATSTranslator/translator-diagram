@@ -18,11 +18,26 @@ CHART_META_FILES = {
 }
 """What one cached chart looks like to `chart_matches`, key by cached file.
 
-Two readers build this mapping — the dashboard out of its per-build cache, the
+Two readers need this mapping — the dashboard out of its per-build cache, the
 sync summary straight off disk — and a matcher that reads `values` from one and
 `values_yaml` from the other would silently match nothing for half the callers.
-So the vocabulary is written down once, here, beside the function that reads it.
+So the vocabulary is written down once, here, and `chart_meta` builds the
+mapping for both.
 """
+
+
+def chart_meta(
+    read_file: Callable[[str, str], dict[str, Any] | None], chart: str
+) -> dict[str, dict[str, Any] | None]:
+    """One chart's three files, keyed the way `chart_matches` reads them.
+
+    `read_file(chart, name)` is however the caller reaches a cached file:
+    `SyncedData.helm` for a build, a `read_yaml` over the cache directory for
+    the sync summary. `values.yaml` and `ncats-images-meta.yaml` are fetched
+    for claimed charts only, so both are None for most charts, and the matcher
+    treats a missing document as a rule that cannot fire.
+    """
+    return {key: read_file(chart, name) for key, name in CHART_META_FILES.items()}
 
 
 def chart_dirs(index: Any) -> list[str]:

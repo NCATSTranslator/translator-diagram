@@ -3,7 +3,7 @@
 import click
 
 from .model import Component, index_by_id
-from .naming import _clone_svg_id, _svg_id, external_svg_ids
+from .naming import _clone_svg_id, _svg_id, external_svg_ids, ubiquitous_clones
 
 
 def validate(components: list[Component]) -> bool:
@@ -69,17 +69,11 @@ def validate(components: list[Component]) -> bool:
     for comp in components:
         if not comp.hide:
             claim_node(_svg_id(comp.id), f"component '{comp.id}'")
-    for comp in components:
-        if comp.hide or comp.ubiquitous:
-            # Ubiquitous components never call out from a node of their own.
-            continue
-        for ref in comp.all_refs():
-            match = index.get(ref.lower())
-            if match is not None and match.ubiquitous and not match.hide:
-                claim_node(
-                    _clone_svg_id(comp.id, match.id),
-                    f"the '{match.id}' clone beside '{comp.id}'",
-                )
+    for caller, target in ubiquitous_clones(components, index):
+        claim_node(
+            _clone_svg_id(caller.id, target.id),
+            f"the '{target.id}' clone beside '{caller.id}'",
+        )
     for name, ext_id in external_svg_ids(components).items():
         claim_node(ext_id, f"external '{name}'")
 

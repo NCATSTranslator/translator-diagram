@@ -24,6 +24,7 @@ from .cells import SOURCE_LABELS
 from .charts import unclaimed_charts
 from .colors import load_owner_colors, owner_styles
 from .components import ENVIRONMENTS, ComponentFile
+from .payload_details import mapping, text
 from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
 from .rows import UPDATED_LABELS, build_rows
@@ -224,18 +225,13 @@ def build_unclaimed_charts(
     for name in unclaimed_charts(
         names, {name: synced.chart_meta(name) for name in names}, components
     ):
-        meta = synced.chart_meta(name).get("chart") or {}
-        description = meta.get("description")
+        meta = mapping(synced.chart_meta(name).get("chart"))
         unclaimed.append(
             {
                 "name": name,
                 # Usually `helm create`'s unedited default; still the only
                 # sentence about the chart that exists.
-                "description": (
-                    description.strip() or None
-                    if isinstance(description, str)
-                    else None
-                ),
+                "description": text(meta.get("description")),
             }
         )
     return unclaimed

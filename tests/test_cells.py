@@ -5,8 +5,6 @@ fact extractors directly, and the resolved cell that comes out of `build_rows`.
 `_Probes` builds the recorded-probe shapes `sync` actually writes.
 """
 
-import json
-
 from tests.dashboard_helpers import _cell, _comp, _Probes
 from translator_diagram.cells import (
     CELL_REASONS,
@@ -17,7 +15,6 @@ from translator_diagram.cells import (
 from translator_diagram.components import Deployment
 from translator_diagram.dashboard import build_payload
 from translator_diagram.rows import build_rows
-from translator_diagram.synced_data import SyncedData
 
 
 class TestVersionSourceChain:
@@ -28,30 +25,25 @@ class TestVersionSourceChain:
     def test_it_falls_back_to_the_stored_smartapi_spec(self, tmp_path, component):
         # ars and ploverdb 404 at every environment; their versions are only in
         # the registry's stored copy.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+        synced = _Probes(tmp_path).registry([{
             "_id": "abc", "info": {"version": "7.7.7"},
             "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}],
-        }]}))
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        }]).build()
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert (cell["version"], cell["version_source"]) == ("7.7.7", "smartapi")
 
     def test_status_beats_the_registry_but_not_the_live_spec(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        path = tmp_path / "status" / "svc" / "ci.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({
+        synced = _Probes(tmp_path).body("status", "ci", {
             "status": "ok", "nameres_version": "v1.5.2",
             "babel_version": "2025sep1",
             "biolink_model": {"tag": "master"},
-        }))
+        }).build()
         component = _comp(
             "svc",
             endpoints={"status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert (cell["version"], cell["version_source"]) == ("v1.5.2", "status")
         # babel_version is a *data* release, not the software version.
         assert cell["data_release"] == "babel 2025sep1 · biolink master"
@@ -61,35 +53,27 @@ class TestVersionSourceChain:
         # Taking the first *_version key would badge "4.2.5" as the software
         # this component is running, tint its neighbours for drifting from it,
         # and look for release notes under that tag.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        path = tmp_path / "status" / "svc" / "ci.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({
+        synced = _Probes(tmp_path).body("status", "ci", {
             "biolink_version": "4.2.5",
             "trapi_version": "1.6.0",
             "plover_version": "2.3.1",
-        }))
+        }).build()
         component = _comp(
             "svc",
             endpoints={"status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert (cell["version"], cell["version_source"]) == ("2.3.1", "status")
 
     def test_a_body_with_only_data_releases_reports_no_version(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        path = tmp_path / "status" / "svc" / "ci.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({"babel_version": "2025sep1"}))
+        synced = _Probes(tmp_path).body("status", "ci", {"babel_version": "2025sep1"}).build()
         component = _comp(
             "svc",
             endpoints={"status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert cell["version"] is None
         assert cell["data_release"] == "babel 2025sep1"
 
@@ -97,43 +81,37 @@ class TestVersionSourceChain:
         # Tier four, and the only tier that describes what *should* be
         # deployed rather than what is. jaeger reaches it: no OpenAPI, no
         # /status, no registration.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        chart = tmp_path / "helm" / "my-chart"
-        chart.mkdir(parents=True)
-        (chart / "Chart.yaml").write_text("name: my-chart\nversion: 0.5.2\nappVersion: 1.16.0\n")
+        synced = _Probes(tmp_path).chart(
+            "my-chart", chart="name: my-chart\nversion: 0.5.2\nappVersion: 1.16.0\n"
+        ).build()
         component = _comp(
             "svc",
             identifiers={"helm_chart": "my-chart"},
             endpoints={"openapi": None},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert (cell["version"], cell["version_source"]) == ("1.16.0", "helm")
 
     def test_a_live_version_beats_the_chart(self, tmp_path):
         # The chart says what was meant to ship; the endpoint says what did.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        chart = tmp_path / "helm" / "my-chart"
-        chart.mkdir(parents=True)
-        (chart / "Chart.yaml").write_text("appVersion: 1.16.0\n")
-        live = tmp_path / "openapi" / "svc" / "ci.json"
-        live.parent.mkdir(parents=True)
-        live.write_text(json.dumps({"info": {"version": "1.17.0"}}))
+        synced = (
+            _Probes(tmp_path)
+            .chart("my-chart", chart="appVersion: 1.16.0\n")
+            .body("openapi", "ci", {"info": {"version": "1.17.0"}})
+            .build()
+        )
         component = _comp(
             "svc",
             identifiers={"helm_chart": "my-chart"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert (cell["version"], cell["version_source"]) == ("1.17.0", "openapi")
 
     def test_no_source_at_all_is_recorded_as_such(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
         component = _comp("svc", environments={"ci": Deployment(env="ci", url="https://svc.ci/")})
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], _Probes(tmp_path).build())[0]["environments"]["ci"]
         assert cell["deployed"] and cell["version"] is None
         assert cell["version_source"] is None
 
@@ -152,8 +130,7 @@ class TestRecordsMatchedByInfores:
     """A record found by infores is the same document, found differently."""
 
     def _synced(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+        return _Probes(tmp_path).registry([{
             "_id": "xyz",
             "info": {
                 "title": "Service API",
@@ -166,8 +143,7 @@ class TestRecordsMatchedByInfores:
                 {"url": "https://svc.ci/", "x-maturity": "staging"},
                 {"url": "https://svc/", "x-maturity": "production"},
             ],
-        }]}))
-        return SyncedData(tmp_path)
+        }]).build()
 
     def _row(self, tmp_path, **identifiers):
         return build_rows(
@@ -483,31 +459,27 @@ class TestHelmFacts:
     def test_images_come_from_the_per_chart_manifest(self, tmp_path):
         # Chart.yaml carries no image information at all; ncats-images-meta.yaml
         # is where it lives, and its keys are per-chart rather than a schema.
-        chart = tmp_path / "helm" / "name-lookup"
-        chart.mkdir(parents=True)
-        (chart / "Chart.yaml").write_text("version: 0.5.2\nappVersion: 1.5.2_2025sep1\n")
-        (chart / "ncats-images-meta.yaml").write_text(
-            "nameLookup:\n  image: ghcr.io/ncatstranslator/nameresolution\n"
-            "  version: v1.5.2\nsolr:\n  image: solr\n  version: '9.1'\n"
-        )
-        facts = _helm_facts(SyncedData(tmp_path), "name-lookup")
+        synced = _Probes(tmp_path).chart(
+            "name-lookup",
+            chart="version: 0.5.2\nappVersion: 1.5.2_2025sep1\n",
+            images="nameLookup:\n  image: ghcr.io/ncatstranslator/nameresolution\n"
+                   "  version: v1.5.2\nsolr:\n  image: solr\n  version: '9.1'\n",
+        ).build()
+        facts = _helm_facts(synced, ["name-lookup"])
         assert facts["version"] == "1.5.2_2025sep1"
-        assert facts["chart_version"] == "0.5.2"
         assert facts["images"] == ["nameresolution:v1.5.2", "solr:9.1"]
 
     def test_a_missing_chart_is_empty_not_an_error(self, tmp_path):
-        assert _helm_facts(SyncedData(tmp_path), "no-such-chart") == {
-            "version": None, "chart_version": None, "images": []}
+        assert _helm_facts(_Probes(tmp_path).build(), ["no-such-chart"]) == {
+            "version": None, "images": []}
 
     def test_no_chart_recorded_yields_nothing(self, tmp_path):
-        assert _helm_facts(SyncedData(tmp_path), None) == {}
+        assert _helm_facts(_Probes(tmp_path).build(), []) == {}
 
     def test_malformed_yaml_does_not_raise(self, tmp_path):
         # A 200 that was not really YAML. The page must still render.
-        chart = tmp_path / "helm" / "broken"
-        chart.mkdir(parents=True)
-        (chart / "Chart.yaml").write_text("this: [is: not: valid\n")
-        assert _helm_facts(SyncedData(tmp_path), "broken")["version"] is None
+        synced = _Probes(tmp_path).chart("broken", chart="this: [is: not: valid\n").build()
+        assert _helm_facts(synced, ["broken"])["version"] is None
 
 
 class TestUnregisteredEnvironments:
@@ -515,10 +487,8 @@ class TestUnregisteredEnvironments:
     registry rather than from how the URL was found."""
 
     def _synced(self, tmp_path, servers):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
-            "_id": "abc", "info": {}, "servers": servers}]}))
-        return SyncedData(tmp_path)
+        return _Probes(tmp_path).registry([
+            {"_id": "abc", "info": {}, "servers": servers}]).build()
 
     def test_a_recorded_environment_the_registry_omits_is_flagged(self, tmp_path):
         # answer-appraiser: registers production only, deployed to ci as well.
@@ -545,11 +515,9 @@ class TestUnregisteredEnvironments:
     def test_an_unregistered_component_is_not_flagged(self, tmp_path):
         # Nothing to be missing from. Flagging every environment of every
         # unregistered component would drown the components that are.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
         component = _comp("svc", environments={
             "ci": Deployment(env="ci", url="https://svc.ci/")})
-        cells = build_rows([component], SyncedData(tmp_path))[0]["environments"]
+        cells = build_rows([component], _Probes(tmp_path).build())[0]["environments"]
         assert "unregistered" not in cells["ci"]
 
     def test_the_payload_counts_the_gaps(self, tmp_path):
@@ -579,10 +547,9 @@ class TestLiveOpenapiFacts:
             },
             "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}],
         }
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [record]}))
+        synced = _Probes(tmp_path).registry([record]).build()
         component = _comp("svc", identifiers={"smartapi": "abc"})
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         # The version does come from the registration. Nothing else does.
         assert cell["version_source"] == "smartapi"
         assert cell["trapi_operations"] == []
@@ -604,6 +571,15 @@ class TestLiveOpenapiFacts:
             "paths_count": 3,
             "title": "ARAX",
         }
+
+    def test_operations_are_trimmed_names_from_a_list_only(self):
+        # Read through `strings`: blanks and padding are not operation names,
+        # and a mapping is not a list of them, however its keys read.
+        def operations(value):
+            return _live_openapi_facts(
+                {"info": {"x-trapi": {"operations": value}}})["operations"]
+        assert operations([" lookup ", "", "  ", 3]) == ["lookup"]
+        assert operations({"lookup": {}}) == []
 
     def test_no_document_at_all_is_empty_not_an_error(self):
         assert _live_openapi_facts(None) == {
@@ -646,20 +622,16 @@ class TestStatusFacts:
         assert _status_facts({"message": {"text": "ok"}})["message"] is None
 
     def test_the_cell_carries_both(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        path = tmp_path / "status" / "svc" / "ci.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({
+        synced = _Probes(tmp_path).body("status", "ci", {
             "status": "ok", "message": "Reporting results from primary core.",
             "recent_queries": {"count": 12, "p50_ms": 1.25, "p95_ms": 9.0},
-        }))
+        }).build()
         component = _comp(
             "svc",
             endpoints={"status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         )
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert cell["status_message"] == "Reporting results from primary core."
         assert cell["recent_queries"]["p50_ms"] == 1.2
 

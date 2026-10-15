@@ -15,6 +15,7 @@ from click.testing import CliRunner
 
 from translator_diagram import dashboard_cli
 from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main, sync_main
+from translator_diagram.files import manifest_path
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def workspace(tmp_path):
         )
     sync = tmp_path / "sync"
     sync.mkdir()
-    (sync / "manifest.json").write_text(
+    manifest_path(sync).write_text(
         json.dumps({"finished_at": "2026-09-01T00:00:00+00:00", "counts": {}})
     )
     # owner-colors.csv lives only in catalog/, so a workspace without one
@@ -93,6 +94,14 @@ class TestTheFlagDefaultsToWithholding:
         assert [row["id"] for row in payload["rows"]] == ["keeper"]
         assert payload["redacted"]["components"] == 1
         assert "secret" not in json.dumps(payload)
+
+    def test_the_isolated_line_names_what_the_page_shows(self, workspace):
+        # Neither workspace component records an edge. The line is read off
+        # the published rows, so a withheld component is not listed there.
+        result, _ = _run(workspace)
+        assert "No recorded dependencies for: keeper\n" in result.output
+        result, _ = _run(workspace, "--include-private")
+        assert "No recorded dependencies for: keeper, secret\n" in result.output
 
     def test_include_private_builds_everything(self, workspace):
         result, payload = _run(workspace, "--include-private")
@@ -209,6 +218,20 @@ class TestSyncReadsTheTokenFromDotEnv:
         # env.default's `GITHUB_TOKEN=` copied as it is: an empty value, which
         # _headers treats as no token at all.
         assert not token_seen("GITHUB_TOKEN=\n")
+
+
+def test_a_sync_from_a_subdirectory_refuses_rather_than_writing_there(
+    workspace, monkeypatch
+):
+    # The output directory is relative to the working directory, and only
+    # /data/ at the root is gitignored, so a sync that found the components by
+    # walking up would leave its cache where git can see it.
+    subdirectory = workspace / "catalog"
+    monkeypatch.chdir(subdirectory)
+    result = CliRunner().invoke(sync_main, [])
+    assert result.exit_code != 0
+    assert "No components directory" in result.output
+    assert not (subdirectory / "data").exists()
 
 
 def test_the_default_components_directory_is_the_catalogs():

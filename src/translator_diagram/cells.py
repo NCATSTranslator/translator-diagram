@@ -13,8 +13,11 @@ there" are different answers, and an empty cell gives neither.
 
 from typing import Any
 
+from .charts import CHART_META_FILES
 from .components import ComponentFile, Deployment, endpoint_url_in
 from .deployments import deployments_from_smartapi
+from .files import PROBE_KINDS, endpoint_key
+from .payload_details import mapping, number, strings
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
@@ -100,7 +103,6 @@ def _openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
         "trapi": trapi.get("version"),
         "biolink": translator.get("biolink-version"),
         "component_type": translator.get("component"),
-        "title": info.get("title"),
     }
 
 
@@ -125,9 +127,7 @@ def _live_openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     paths = (document or {}).get("paths")
     asyncquery = trapi.get("asyncquery")
     return {
-        "operations": [
-            name for name in (trapi.get("operations") or []) if isinstance(name, str)
-        ],
+        "operations": strings(trapi.get("operations")),
         "asyncquery": asyncquery if isinstance(asyncquery, bool) else None,
         "paths_count": len(paths) if isinstance(paths, dict) else None,
         "title": info.get("title") if isinstance(info.get("title"), str) else None,
@@ -141,8 +141,7 @@ def _blocks(document: dict[str, Any] | None, key: str) -> dict[str, Any]:
     how a hand-edited document spells "not set", and chaining `.get` through
     one is the usual way a reader raises instead of losing a field.
     """
-    value = (document or {}).get(key) if isinstance(document, dict) else None
-    return value if isinstance(value, dict) else {}
+    return mapping(mapping(document).get(key))
 
 
 def _recent_queries(value: Any) -> dict[str, Any] | None:
@@ -163,8 +162,8 @@ def _recent_queries(value: Any) -> dict[str, Any] | None:
     """
     if not isinstance(value, dict):
         return None
-    count = value.get("count")
-    if not isinstance(count, (int, float)) or isinstance(count, bool):
+    count = number(value.get("count"))
+    if count is None:
         return None
     return {
         "count": count,
@@ -174,9 +173,8 @@ def _recent_queries(value: Any) -> dict[str, Any] | None:
 
 
 def _tenth(value: Any) -> float | None:
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    return round(float(value), 1)
+    quantity = number(value)
+    return None if quantity is None else round(float(quantity), 1)
 
 
 def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
@@ -213,7 +211,6 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
             (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
         ),
         "data_release": " · ".join(release) or None,
-        "reported": document.get("status"),
         # A sentence the service wrote about itself — "Reporting results from
         # primary core." Strings only: a structured `message` is a shape the
         # page has not seen, and rendering a mapping at a reader is worse than
@@ -223,7 +220,7 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _helm_facts(synced: SyncedData, charts: str | list[str] | None) -> dict[str, Any]:
+def _helm_facts(synced: SyncedData, charts: list[str]) -> dict[str, Any]:
     """The version chain's view of a component's charts: one number and a list.
 
     Takes every chart the component records, because a component can be
@@ -236,23 +233,18 @@ def _helm_facts(synced: SyncedData, charts: str | list[str] | None) -> dict[str,
     and the upgrade is a per-chart version in the detail block, which the
     `helm_charts` row field already carries, rather than a longer string here.
     """
-    names = [charts] if isinstance(charts, str) else list(charts or [])
-    if not names:
+    if not charts:
         return {}
     tags: list[str] = []
-    for chart in names:
-        images = synced.helm(chart, "ncats-images-meta.yaml") or {}
+    for chart in charts:
+        images = synced.helm(chart, CHART_META_FILES["images"]) or {}
         tags.extend(
             f"{spec['image'].split('/')[-1]}:{spec['version']}"
             for spec in images.values()
             if isinstance(spec, dict) and spec.get("image") and spec.get("version")
         )
-    first = synced.helm(names[0], "Chart.yaml") or {}
-    return {
-        "version": first.get("appVersion"),
-        "chart_version": first.get("version"),
-        "images": tags,
-    }
+    first = synced.helm(charts[0], CHART_META_FILES["chart"]) or {}
+    return {"version": first.get("appVersion"), "images": tags}
 
 
 # --- Why a cell has no version ---------------------------------------------
@@ -369,8 +361,8 @@ def _probe_statuses(
     """
     return [
         fetch.get("status")
-        for kind in ("root", "openapi", "status")
-        if (fetch := synced.statuses.get(f"{kind}/{component_id}/{env}.json"))
+        for kind in PROBE_KINDS
+        if (fetch := synced.statuses.get(endpoint_key(kind, component_id, env)))
     ]
 
 
@@ -437,8 +429,9 @@ def build_cell(
     )
 
     openapi_url = endpoint_url_in(component, deployment, "openapi")
-    relative = f"openapi/{component.id}/{env}.json"
-    http_status = synced.http_status(relative) if openapi_url else None
+    http_status = (
+        synced.http_status("openapi", component.id, env) if openapi_url else None
+    )
     probe = synced.root_probe(component.id, env) or {}
     reachable = _reachable(_probe_statuses(synced, component.id, env))
     cell = {

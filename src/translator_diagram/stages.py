@@ -6,12 +6,15 @@ because the edges are incomplete — and a component the file does not place
 falls to `UNPLACED_TITLE` rather than being quietly dropped.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
-from .components import ComponentFile, read_yaml
+from .components import ComponentFile, index_by_id
+from .files import find_upward
 from .flow import in_flow_order
 
 STAGES_PATH = Path("catalog/flow-steps.yaml")
@@ -20,17 +23,24 @@ STAGES_PATH = Path("catalog/flow-steps.yaml")
 UNPLACED_TITLE = "Not yet placed"
 
 
-def _find_stages() -> Path | None:
-    """catalog/flow-steps.yaml in the working directory or the nearest parent."""
-    cwd = Path.cwd()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / STAGES_PATH
-        if candidate.exists():
-            return candidate
-    return None
+@dataclass(frozen=True)
+class Stage:
+    """One band of the page: a title, a sentence, and the components in it,
+    in the order they are read in."""
+
+    title: str
+    description: str
+    components: tuple[str, ...]
+    # True on the trailing band only: the components no stage claims.
+    unplaced: bool = False
 
 
-def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
+# What a component carries when there is no stage file at all (the no-config
+# path `in_stage_order` falls back to): one unnamed band, everything in it.
+NO_STAGE = Stage(title="", description="", components=())
+
+
+def load_stages(path: Path | None = None) -> list[Stage]:
     """The platform's stages, in the order the page shows them.
 
     This file is the row order, not a set of labels on a computed one. The
@@ -45,14 +55,16 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     `unplaced` block so a new component cannot quietly sort last.
 
     With no path, the file is looked for in the working directory and every
-    directory above it — the same walk `load_owner_colors` and `load_policy`
-    do, so building from a subdirectory of the checkout behaves the same way.
+    directory above it (`find_upward`, the same walk `load_owner_colors` and
+    `load_policy` do), so building from a subdirectory of the checkout behaves
+    the same way.
     A missing file is an error rather than an empty list: `in_stage_order`
     falls back to data-flow order, which is the ordering this file exists to
     replace, so degrading quietly would publish the wrong page and say
-    nothing. An empty file is still allowed — that one is somebody's decision.
+    nothing. A file that does not parse is refused for the same reason. An
+    empty file is still allowed — that one is somebody's decision.
     """
-    found = path if path is not None else _find_stages()
+    found = path if path is not None else find_upward(STAGES_PATH)
     if found is None:
         raise click.ClickException(
             f"No stage file at {STAGES_PATH}. It sets the row order, "
@@ -61,59 +73,76 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
         )
     if not found.exists():
         raise click.ClickException(f"Stage file not found: {found}")
-    loaded = read_yaml(found)
+    # Not `read_yaml`, which answers None for a file it cannot parse: that is
+    # the quiet fall back to data-flow order the missing file is refused for.
+    try:
+        loaded = yaml.safe_load(found.read_text(encoding="utf-8"))
+    except yaml.YAMLError as error:
+        raise click.ClickException(
+            f"Stage file {found} is not valid YAML: {error}"
+        ) from error
     if not loaded:
         return []
+    if not isinstance(loaded, dict):
+        raise click.ClickException(
+            f"Stage file {found} must be a mapping with `stages` and `unplaced`."
+        )
     stages = [
-        {
-            "title": stage.get("title") or "",
-            "description": stage.get("description") or "",
-            "components": list(stage.get("components") or []),
-        }
+        Stage(
+            title=stage.get("title") or "",
+            description=stage.get("description") or "",
+            components=tuple(stage.get("components") or ()),
+        )
         for stage in (loaded.get("stages") or [])
     ]
     unplaced = loaded.get("unplaced") or {}
     stages.append(
-        {
-            "title": UNPLACED_TITLE,
-            "description": unplaced.get("description") or "",
-            "components": list(unplaced.get("components") or []),
-            "unplaced": True,
-        }
+        Stage(
+            title=UNPLACED_TITLE,
+            description=unplaced.get("description") or "",
+            components=tuple(unplaced.get("components") or ()),
+            unplaced=True,
+        )
     )
     return stages
 
 
 def in_stage_order(
-    components: list[ComponentFile], stages: list[dict[str, Any]]
-) -> list[tuple[ComponentFile, int, dict[str, Any]]]:
+    components: list[ComponentFile],
+    stages: list[Stage],
+    depths: dict[str, int] | None = None,
+) -> list[tuple[ComponentFile, int, Stage]]:
     """Each component with the stage it belongs to and that stage's number.
 
     Components are shown in the order their stage lists them: within a stage
     that order is a judgement too, and alphabetising it would throw the
     judgement away. Anything no stage names falls to the end in data-flow
     order, which is the best guess available for something nobody has placed.
+    `depths` is `flow_depths(components)` where the caller already has it.
     """
     if not stages:
-        return [(component, 1, {}) for component in in_flow_order(components)]
-    by_id = {component.id.lower(): component for component in components}
-    ordered: list[tuple[ComponentFile, int, dict[str, Any]]] = []
+        return [
+            (component, 1, NO_STAGE)
+            for component in in_flow_order(components, depths)
+        ]
+    by_id = index_by_id(components)
+    ordered: list[tuple[ComponentFile, int, Stage]] = []
     seen: set[str] = set()
     for number, stage in enumerate(stages, 1):
-        for cid in stage["components"]:
+        for cid in stage.components:
             component = by_id.get(cid.lower())
             if component and component.id not in seen:
                 seen.add(component.id)
                 ordered.append((component, number, stage))
     trailing = stages[-1]
-    for component in in_flow_order(components):
+    for component in in_flow_order(components, depths):
         if component.id not in seen:
             ordered.append((component, len(stages), trailing))
     return ordered
 
 
 def stage_blocks(
-    stages: list[dict[str, Any]], rows: list[dict[str, Any]]
+    stages: list[Stage], rows: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """The bands the page draws, built from the rows that survived the policy.
 
@@ -142,13 +171,13 @@ def stage_blocks(
         blocks.append(
             {
                 "step": number,
-                "title": stage.get("title") or "",
-                "description": stage.get("description") or "",
+                "title": stage.title,
+                "description": stage.description,
                 "components": members,
                 # Explicit on every block, not only the trailing one: a reader
                 # of the payload should not have to know that a missing key
                 # means False.
-                "unplaced": bool(stage.get("unplaced")),
+                "unplaced": stage.unplaced,
             }
         )
     return blocks

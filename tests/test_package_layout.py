@@ -1,6 +1,6 @@
 """The import direction from AGENTS.md, enforced rather than described.
 
-Nine modules only stay nine modules if imports keep running one way. A wrong
+Two dozen modules only stay two dozen modules if imports keep running one way. A wrong
 turn — legend reaching back into render, say — still works at runtime right up
 until it doesn't, and by then the layering exists only in prose.
 
@@ -20,8 +20,12 @@ PACKAGE = Path(__file__).resolve().parent.parent / "src" / "translator_diagram"
 # is a deliberate act: test_the_layering_is_acyclic below still has to pass, so
 # this cannot be widened into a cycle to make a failure go away.
 ALLOWED = {
+    # The filesystem both stacks share: find_upward for the hand-edited files,
+    # the tolerant JSON/YAML readers, and the sync cache's layout and parsers.
+    # A leaf, so anything may use it.
+    "files": set(),
     "model": set(),
-    "colors": set(),
+    "colors": {"files"},
     "naming": {"model"},
     "loading": {"model"},
     "validation": {"model", "naming"},
@@ -39,37 +43,42 @@ ALLOWED = {
     # Chart matching sits below both sync and dashboard, which each ask it and
     # may not import each other.
     "charts": {"components"},
-    "deployments": {"components"},
+    "deployments": {"components", "payload_details"},
     # The transport under sync: one URL into one file. It knows HTTP and the
     # cache's file shapes, and nothing about what a component is.
-    "fetch": {"components"},
+    "fetch": {"files"},
     "flow": {"components"},
-    "sync": {"charts", "components", "deployments", "fetch"},
-    # privacy is a leaf: it filters plain dictionaries, so it needs to know
-    # nothing about where they came from, and dashboard can apply it without
-    # anything in the graph moving.
-    "privacy": set(),
+    "sync": {"charts", "components", "deployments", "fetch", "files"},
+    # privacy filters plain dictionaries, so it needs to know nothing about
+    # where they came from, and dashboard can apply it without anything in the
+    # graph moving. It reaches files only to find its policy.
+    "privacy": {"files"},
     # payload_details is a leaf for the same reason: dict in, dict out, so the
     # shaping can be tested without a network, a checkout or a rendered page.
+    # Its readers over somebody else's JSON (mapping, items, text, strings,
+    # number) are what the modules above use to read the same documents.
     "payload_details": set(),
     # The dashboard stack, one subject per module and each layer reading only
-    # the one below it. synced_data is the only module that touches the sync
-    # cache; cells resolves one cell from it; rows assembles one component's
-    # row; dashboard assembles the payload and renders the page. Splitting it
-    # this way is what keeps any one of them small enough to hold in a head.
-    "synced_data": {"charts", "components"},
-    "stages": {"components", "flow"},
-    "cells": {"components", "deployments", "synced_data"},
+    # the one below it. synced_data reads the sync cache, whose layout files
+    # holds (cells looks fetches up in it by files.endpoint_key); cells
+    # resolves one cell from it; rows assembles one component's row;
+    # dashboard assembles the payload and renders the page. Splitting it this
+    # way is what keeps any one of them small enough to hold in a head.
+    "synced_data": {"charts", "components", "files", "payload_details"},
+    "stages": {"components", "files", "flow"},
+    "cells": {
+        "charts", "components", "deployments", "files", "payload_details", "synced_data",
+    },
     "rows": {
         "cells", "components", "deployments", "flow", "payload_details", "stages",
         "synced_data",
     },
     "dashboard": {
-        "cells", "charts", "colors", "components", "privacy", "rows", "stages",
-        "synced_data",
+        "cells", "charts", "colors", "components", "payload_details", "privacy",
+        "rows", "stages", "synced_data",
     },
     "dashboard_cli": {
-        "components", "dashboard", "flow", "privacy", "sync", "synced_data",
+        "components", "dashboard", "files", "flow", "privacy", "sync", "synced_data",
     },
 }
 
