@@ -235,6 +235,18 @@ class TestRendering:
         inline = html[start:html.index("</script>", start)].replace("<\\/", "</")
         assert json.loads(inline) == json.loads(json_path.read_text())
 
+    def test_writing_the_page_writes_it_and_its_payload_and_nothing_else(
+        self, component, synced, tmp_path
+    ):
+        """Whatever lands in the output directory is published: Pages and the
+        branch-build artifact upload all of it, and a local preview serves
+        it. In particular the agent notes in web/ (web/AGENTS.md) must never
+        be copied out beside the page."""
+        out = tmp_path / "out"
+        write_dashboard(build_payload([component], synced), out)
+        written = {p.relative_to(out).as_posix() for p in out.rglob("*")}
+        assert written == {"index.html", "overview.json"}
+
     def test_a_closing_script_tag_in_the_data_cannot_escape(self, tmp_path, synced):
         # Notes come from a spreadsheet. An unescaped </script> there would end
         # the block early and break the page for everyone.

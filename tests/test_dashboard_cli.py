@@ -112,10 +112,10 @@ class TestTheFlagDefaultsToWithholding:
 
 class TestTheOutputIsOnlyThePage:
     def test_a_build_writes_the_page_and_its_payload_and_nothing_else(self, workspace):
-        """The Pages workflow uploads the whole output directory, and a
-        local preview serves it, so anything written there is published.
-        In particular the agent notes in web/ (web/AGENTS.md) must never be
-        copied out beside the page."""
+        """What write_dashboard writes is pinned in test_dashboard.py. This
+        pins that the command adds nothing of its own beside it, since the
+        command is what the Pages workflow runs before uploading the whole
+        directory."""
         result, _ = _run(workspace)
         assert result.exit_code == 0, result.output
         written = {p.relative_to(workspace / "out").as_posix()
