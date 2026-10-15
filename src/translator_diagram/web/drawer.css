@@ -21,23 +21,19 @@
      reduced-motion rule stays in one file. */
   --dw-in: calc((var(--dur-layout) + var(--dur-slow)) / 2);
   --dw-stagger: calc(var(--dur-fast) / 3);
-  --dw-w: 440px;
 
   position: fixed;
   top: var(--topbar-h);
   right: 0;
   bottom: 0;
   z-index: 50;
-  width: var(--dw-w);
+  width: var(--drawer-w);
   display: flex;
   flex-direction: column;
   background: var(--page);
   border-left: 1px solid var(--hairline);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.06);
+  box-shadow: -8px 0 24px var(--edge-shadow);
   font-size: var(--fs-table);
-}
-[data-theme="dark"] .drawer {
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.2);
 }
 .drawer[hidden] { display: none; }
 
@@ -49,13 +45,9 @@
   to { opacity: 1; transform: none; }
 }
 
-/* The table reflows into what is left rather than being covered. app.js
-   re-measures its scrollport from a resize event the drawer dispatches.
-
-   The width is written out here rather than read from --dw-w: that variable
-   is declared on .drawer, and <main> is not inside the drawer, so the var()
-   would resolve to nothing and the padding would silently be zero. */
-html[data-drawer="open"] .page { padding-right: 440px; }
+/* The table reflows into what is left rather than being covered; app.js
+   re-measures its scrollport when the drawer says the layout changed. */
+html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 
 /* Padding alone was not enough. base.css drops a column when the *window*
    narrows past 1400 / 1150 / 800, but the drawer does not narrow the window —
@@ -63,9 +55,10 @@ html[data-drawer="open"] .page { padding-right: 440px; }
    1212px left to it, and pushed prod out of sight behind the drawer.
 
    These are the same three rules with each breakpoint moved up by the
-   drawer's width, so "how much room does the table have" is asked about the
-   space the table actually has. Below 1400 the table scrolls sideways as it
-   always did; nothing here changes that. */
+   drawer's width (--drawer-w, 440px; a media query cannot read it), so "how
+   much room does the table have" is asked about the space the table actually
+   has. Below 1400 the table scrolls sideways as it always did; nothing here
+   changes that. tokens.css lists the whole ladder. */
 @media (max-width: 1840px) { html[data-drawer="open"] .drop-md { display: none; } }
 @media (max-width: 1590px) { html[data-drawer="open"] .drop-sm { display: none; } }
 @media (max-width: 1240px) { html[data-drawer="open"] .drop-xs { display: none; } }
@@ -129,11 +122,6 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   color: var(--muted);
   font-size: var(--fs-meta);
   line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
 }
 
 /* The sheet has no drag handle — a handle that does not drag is a lie — so the
@@ -311,7 +299,10 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   color: var(--muted);
   font-size: var(--fs-micro);
 }
-.dw-off { text-decoration: underline dashed 1px; text-underline-offset: 3px; }
+.dw-off {
+  text-decoration: var(--planned-underline);
+  text-underline-offset: var(--planned-underline-offset);
+}
 .dw-sub {
   display: block;
   margin-top: 2px;
@@ -321,12 +312,6 @@ html[data-drawer="open"] .page { padding-right: 440px; }
 }
 .dw-link { color: var(--link); }
 .dw-on { font-weight: 600; }
-.dw-ver {
-  font-family: var(--mono);
-  font-size: var(--fs-table);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
 /* The same tint the table's cells carry; the sentence is one hover away. */
 .dw-drift {
   background: var(--drift);
@@ -363,13 +348,7 @@ html[data-drawer="open"] .page { padding-right: 440px; }
 /* Text on a hairline, never a fill: fifteen filled tags on one record is a
    wall of colour where the content is a list of words. */
 .dw-tag {
-  display: inline-block;
   margin: 0 4px 4px 0;
-  padding: 0 5px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-control);
-  color: var(--muted);
-  font-size: var(--fs-micro);
   line-height: 1.7;
 }
 
@@ -419,22 +398,10 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   font-size: var(--fs-meta);
   font-variant-numeric: tabular-nums;
 }
-/* table.css styles `thead th` and `tbody td` as bare element selectors — a
-   sticky header, a row height, a sticky rounded first column — and those
-   reach any table on the page, this one included. Rather than edit a file
-   this step does not own, the drawer's tables opt out of each of them by
-   name. The selectors carry a class so they outrank the originals.
-
-   Headers wrap here, which is the point: "Requests cpu / mem" on one line
+/* Headers wrap here, which is the point: "Requests cpu / mem" on one line
    costs the fourth column its place in a 392px drawer, and a header nobody
    can read is worse than a header on two lines. */
 .dw-t thead th {
-  position: static;
-  top: auto;
-  z-index: auto;
-  background: none;
-  box-shadow: none;
-  white-space: normal;
   padding: 4px 10px 4px 0;
   border-bottom: 1px solid var(--hairline);
   text-align: left;
@@ -446,19 +413,11 @@ html[data-drawer="open"] .page { padding-right: 440px; }
   color: var(--muted);
   vertical-align: bottom;
 }
+/* No rule between rows: the header underline is the only line these tables
+   get, and seven server rows separated by seven hairlines was six lines
+   more than the reading needed. A server row is two lines — url over
+   description — and the only thing grouping the pair is the gap around it. */
 .dw-t tbody td {
-  position: static;
-  left: auto;
-  z-index: auto;
-  height: auto;
-  background: none;
-  border-radius: 0;
-  /* No rule between rows: the header underline is the only line these tables
-     get, and seven server rows separated by seven hairlines was six lines
-     more than the reading needed. */
-  border-bottom: 0;
-  /* A server row is two lines — url over description — and with the rules
-     gone the only thing grouping the pair is the gap around it. */
   padding: 6px 10px 6px 0;
   vertical-align: top;
 }
@@ -532,8 +491,8 @@ html[data-drawer="open"] .page { padding-right: 440px; }
 /* Recorded as an intention, not as a fact. The dashed underline is the same
    mark the map uses for a planned edge, and the word says it too. */
 .dw-conn.planned .dw-connname {
-  text-decoration: underline dashed 1px;
-  text-underline-offset: 3px;
+  text-decoration: var(--planned-underline);
+  text-underline-offset: var(--planned-underline-offset);
 }
 
 /* --- Bottom sheet --------------------------------------------------------- */
@@ -550,9 +509,8 @@ html[data-drawer="open"] .page { padding-right: 440px; }
     height: 70vh;
     border-left: 0;
     border-top: 1px solid var(--hairline);
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 -8px 24px var(--edge-shadow);
   }
-  [data-theme="dark"] .drawer { box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.2); }
   .drawer.in { animation-name: dw-in-up; }
   @keyframes dw-in-up {
     from { opacity: 0; transform: translateY(24px); }

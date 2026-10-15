@@ -61,10 +61,10 @@ code {
   background: var(--page);
 }
 /* The one place a metallic gradient touches chrome, and only in dark, where a
-   flat bar and a flat page have no edge between them. Both stops moved with
-   the palette: the graphite is the new --raised, the ground the new --page. */
+   flat bar and a flat page have no edge between them: from the raised surface
+   down to the page. */
 [data-theme="dark"] .topbar {
-  background: linear-gradient(180deg, #1f1f22, #161618);
+  background: linear-gradient(180deg, var(--raised), var(--page));
 }
 
 .brandmark {
@@ -234,6 +234,38 @@ code {
   padding: var(--sp-6) 0;
   color: var(--muted);
   font-size: var(--fs-body);
+}
+
+/* --- Shared pieces --------------------------------------------------------- */
+
+/* The hairline chip: text on a hairline, never a fill. An external beside a
+   component name, a release tag, a repository topic. Each adds its own
+   spacing where it is used. */
+.chip, .rel, .dw-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  color: var(--muted);
+  font-size: var(--fs-micro);
+}
+
+/* A version, wherever one is printed: mono, bold, tabular. */
+.version {
+  font-family: var(--mono);
+  font-size: var(--fs-table);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* A sentence cut to two lines: past that it belongs in a tooltip or a
+   panel, not beside the thing it describes. */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 
 /* --- Responsive ----------------------------------------------------------- */

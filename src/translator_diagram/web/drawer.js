@@ -238,7 +238,7 @@
         </button>
       </div>
       <div class="dw-id">${esc(row.id)}</div>
-      ${blurb ? `<div class="dw-blurb">${esc(blurb)}</div>` : ""}
+      ${blurb ? `<div class="dw-blurb clamp-2">${esc(blurb)}</div>` : ""}
       <div class="dw-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
       ${meta ? `<div class="dw-metaline">${meta}</div>` : ""}
       ${headerLinks(row)}`;
@@ -449,7 +449,7 @@
     const driftSays = drift.length
       ? `disagrees with the rest of this row: ${drift.join(", ")}` : "";
     const version = cell.version
-      ? `<span class="dw-ver${drift.length ? " dw-drift" : ""}"${drift.length
+      ? `<span class="version${drift.length ? " dw-drift" : ""}"${drift.length
         ? ` data-tip="say" data-full="${esc(driftSays)}" aria-label="${esc(driftSays)}"` : ""}>${
         esc(cell.version)}</span>`
       : DASH;

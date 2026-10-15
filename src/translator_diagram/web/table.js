@@ -115,7 +115,7 @@
 
     if (!cell.version) {
       const why = cell.reason
-        ? `<span class="why">${esc(cell.reason)}</span>`
+        ? `<span class="why clamp-2">${esc(cell.reason)}</span>`
         : `<span class="version dash">—</span>`;
       const up = cell.reachable === true ? reachDot(cell) : "";
       return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
