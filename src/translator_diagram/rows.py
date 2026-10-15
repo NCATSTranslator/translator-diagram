@@ -28,7 +28,7 @@ from .payload_details import (
     same_version,
     smartapi_detail,
 )
-from .stages import in_stage_order, load_stages
+from .stages import Stage, in_stage_order, load_stages
 from .synced_data import SyncedData
 
 # How many of a repository's newest releases the Repository column shows before
@@ -258,13 +258,99 @@ def _chart_repository(
     return links[0] if chart_count == 1 and links else None
 
 
+def _attach_record(
+    component: ComponentFile, synced: SyncedData
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The registry record a row carries, stamped with how it was found.
+
+    Two ways a component reaches its registry entry, and the row has to carry
+    which one it was: an id somebody recorded, or the one record claiming this
+    component's infores. Everything downstream reads `record` without caring —
+    the deployments it declares, the version the chain falls back to, the
+    uptime — because a record matched by infores is the same document, found
+    by a different pointer.
+
+    Copied rather than annotated in place: `synced.smartapi` is shared by
+    every row and by the next build from the same cache, and stamping how
+    *this* component found a record onto the registry's own dictionary is how
+    two components come to disagree about one document. Returns the record
+    (`{}` when there is none) and the ambiguous candidates, if several records
+    claim the infores.
+    """
+    hit, matched_by, candidates = smartapi_record_for(
+        component, list(synced.smartapi.values())
+    )
+    record = dict(hit) if hit else {}
+    if matched_by:
+        record["_matched_by"] = matched_by
+    return record, candidates
+
+
+def _cells_for(
+    component: ComponentFile,
+    record: dict[str, Any],
+    helm: dict[str, Any],
+    synced: SyncedData,
+) -> dict[str, dict[str, Any]]:
+    """One cell per environment, with the two marks only a row can make.
+
+    `unregistered`: a gap in a registration that exists at all — this
+    component is in SmartAPI, and this environment is not in its record.
+    Computed from the registry rather than from how the URL was found, so it
+    stays true once a discovered URL is written into the component file,
+    which is exactly what happened to answer-appraiser's ci and test. Only
+    where the *file* records an id: "this environment is missing from the
+    registration" is a claim about a registration somebody filed, and a
+    record we attached ourselves by infores is not that. A match we made
+    cannot be the evidence for a gap we then report.
+
+    Drift: each of version, TRAPI and Biolink is compared across the
+    environments, which no single cell can do.
+    """
+    derived = synced.derived.get(component.id, {})
+    registered = deployments_from_smartapi(record)
+    deployments = merge_deployments(component, registered, derived)
+    cells = {
+        env: build_cell(component, env, deployments.get(env), synced, record, helm)
+        for env in ENVIRONMENTS
+    }
+    for env, cell in cells.items():
+        if (
+            cell.get("deployed")
+            and component.smartapi_id
+            and registered
+            and env not in registered
+        ):
+            cell["unregistered"] = True
+    for key in ("version", "trapi", "biolink"):
+        _mark_drift(cells, key)
+    return cells
+
+
+def _releases_for(
+    releases: list[dict[str, Any]], cells: dict[str, dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The release detail and chips for one row, and the cells marked by them.
+
+    Which releases are *running* is decided against the versions the cells
+    resolved, so this has to come after the cells and before the row.
+    """
+    detail = releases_detail(
+        releases,
+        {version for cell in cells.values() if (version := cell.get("version"))},
+    )
+    chips = _release_chips(detail)
+    _mark_running_release(cells, chips)
+    return detail, chips
+
+
 # --- The assembler ---------------------------------------------------------
 
 def build_rows(
     components: list[ComponentFile],
     synced: SyncedData,
     *,
-    stages: list[dict[str, Any]] | None = None,
+    stages: list[Stage] | None = None,
 ) -> list[dict[str, Any]]:
     """One dictionary per component, in the stage order the config file sets.
 
@@ -280,63 +366,13 @@ def build_rows(
     for component, step, stage in in_stage_order(
         components, load_stages() if stages is None else stages, depths
     ):
-        # Two ways a component reaches its registry entry, and the row has to
-        # carry which one it was: an id somebody recorded, or the one record
-        # claiming this component's infores. Everything below reads `record`
-        # without caring — the deployments it declares, the version the chain
-        # falls back to, the uptime — because a record matched by infores is
-        # the same document, found by a different pointer.
-        hit, matched_by, candidates = smartapi_record_for(
-            component, list(synced.smartapi.values())
-        )
-        # Copied rather than annotated in place: `synced.smartapi` is shared by
-        # every row and by the next build from the same cache, and stamping how
-        # *this* component found a record onto the registry's own dictionary is
-        # how two components come to disagree about one document.
-        record = dict(hit) if hit else {}
-        if matched_by:
-            record["_matched_by"] = matched_by
-        derived = synced.derived.get(component.id, {})
-        registered = deployments_from_smartapi(record)
-        deployments = merge_deployments(component, registered, derived)
+        record, candidates = _attach_record(component, synced)
         charts = component.helm_charts
         helm = _helm_facts(synced, charts)
-
-        cells = {
-            env: build_cell(
-                component, env, deployments.get(env), synced, record, helm
-            )
-            for env in ENVIRONMENTS
-        }
-        # A gap in a registration that exists at all: this component is in
-        # SmartAPI, and this environment is not in its record. Computed from
-        # the registry rather than from how the URL was found, so it stays true
-        # once a discovered URL is written into the component file — which is
-        # exactly what happened to answer-appraiser's ci and test.
-        # Only where the *file* records an id: "this environment is missing
-        # from the registration" is a claim about a registration somebody
-        # filed, and a record we attached ourselves by infores is not that. A
-        # match we made cannot be the evidence for a gap we then report.
-        for env, cell in cells.items():
-            if (
-                cell.get("deployed")
-                and component.smartapi_id
-                and registered
-                and env not in registered
-            ):
-                cell["unregistered"] = True
-        for key in ("version", "trapi", "biolink"):
-            _mark_drift(cells, key)
-
+        cells = _cells_for(component, record, helm, synced)
         source_repo = github_repo(component.repository("source"))
         releases = synced.releases(source_repo)
-        detail = releases_detail(
-            releases,
-            {version for cell in cells.values() if (version := cell.get("version"))},
-        )
-        chips = _release_chips(detail)
-        _mark_running_release(cells, chips)
-
+        detail, chips = _releases_for(releases, cells)
         uptime = ((record.get("_status") or {}).get("uptime_status")) or None
         rows.append(
             {
