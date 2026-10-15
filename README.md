@@ -268,6 +268,22 @@ things it reports are the answer:
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
 
+To see a branch's page the way the published build will be — built on a
+GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
+the branch and download what it builds. On any branch but `main` it deploys
+nothing. The run list is narrowed to manual runs and the newest one, because
+older runs on the same branch can still hold a `dashboard` artifact built from
+an earlier commit:
+
+```bash
+gh workflow run pages.yml --ref my-branch
+sleep 5   # the new run takes a moment to be listed
+id=$(gh run list --workflow pages.yml --branch my-branch \
+       --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$id" --exit-status
+gh run download "$id" --name dashboard --dir data/pages-preview
+```
+
 ### What a published build leaves out
 
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
@@ -513,11 +529,12 @@ translator-diagram/
 ## Status and next steps
 
 Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
-runs the tests, lints and a build on every pull request, and
-`.github/workflows/pages.yml` builds the page on every pull request as a
-downloadable artifact while deploying only from `main`, a nightly schedule, or
-an explicit manual run. A published build applies
-[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+runs the tests and lints on every pull request, and
+`.github/workflows/pages.yml` builds and deploys the page from `main` — on a
+push, a nightly schedule, or a manual run — and, run by hand on any other
+branch, builds it as a downloadable artifact without deploying. A published
+build applies [`config/privacy.yaml`](config/privacy.yaml) and carries
+`noindex`.
 
 What is *not* built is the interactive view of the **diagram** — a static page
 over the generated SVG and `components.json`. That is
@@ -560,10 +577,9 @@ uv run ruff check    # Python lint
 uv run rumdl check . # Markdown lint
 ```
 
-All four run in CI on every pull request, along with a dashboard build. The
-source is one module per subject under `src/translator_diagram/`, and `tests/`
-has one file per module — a change to `loading.py` belongs in
-`tests/test_loading.py`.
+All four run in CI on every pull request. The source is one module per subject
+under `src/translator_diagram/`, and `tests/` has one file per module — a
+change to `loading.py` belongs in `tests/test_loading.py`.
 
 Two things are worth reading before a first change.
 [`src/translator_diagram/CLAUDE.md`](src/translator_diagram/CLAUDE.md) has the
