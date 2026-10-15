@@ -5,6 +5,12 @@ How to work in this repository, for people and coding agents alike.
 them. Agents also read [AGENTS.md](AGENTS.md), which adds the few rules only an
 agent needs and maps the per-directory notes.
 
+**If you use Claude Code, use v2.1.281 or later.** There is deliberately no
+`CLAUDE.md` here (AGENTS.md says why), and Claude Code reads `AGENTS.md` only
+from v2.1.277, and in every session type only from v2.1.281. An older version
+loads none of this repository's notes, including the rule not to read `.env`,
+and nothing warns you.
+
 ## Setup, and the checks CI runs
 
 ```bash

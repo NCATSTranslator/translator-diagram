@@ -7,13 +7,14 @@ Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
 documentation and the faster way in.
 
 **These notes are `AGENTS.md` files, and there is no `CLAUDE.md` on
-purpose.** Claude Code reads `AGENTS.md` natively from v2.1.277, but only
-where there is no `CLAUDE.md` or `CLAUDE.local.md`: one in the working
-directory or above it switches it to reading `CLAUDE.md` files alone, and one
-in a subdirectory hides that directory's `AGENTS.md`. Either way these notes
-drop out silently, so put new ones in the nearest `AGENTS.md`.
-`tests/test_agent_files.py` fails on either file anywhere in the
-checkout, a gitignored personal `CLAUDE.local.md` included.
+purpose.** Claude Code reads `AGENTS.md` natively from v2.1.277, and in
+every session type from v2.1.281, the version `CONTRIBUTING.md` asks for,
+but only where there is no `CLAUDE.md` or `CLAUDE.local.md`: one in the
+working directory or above it switches it to reading `CLAUDE.md` files alone,
+and one in a subdirectory hides that directory's `AGENTS.md`. Either way
+these notes drop out silently, so put new ones in the nearest `AGENTS.md`.
+`tests/test_agent_files.py` fails on either file anywhere in the checkout, a
+gitignored personal `CLAUDE.local.md` included.
 
 This file is what applies to every session. The detail that only matters once
 you are in a particular directory lives beside that directory, so it is read
