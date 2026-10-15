@@ -6,6 +6,7 @@ because the edges are incomplete — and a component the file does not place
 falls to `UNPLACED_TITLE` rather than being quietly dropped.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,8 +22,24 @@ STAGES_PATH = Path("catalog/flow-steps.yaml")
 UNPLACED_TITLE = "Not yet placed"
 
 
+@dataclass(frozen=True)
+class Stage:
+    """One band of the page: a title, a sentence, and the components in it,
+    in the order they are read in."""
 
-def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
+    title: str
+    description: str
+    components: tuple[str, ...]
+    # True on the trailing band only: the components no stage claims.
+    unplaced: bool = False
+
+
+# What a component carries when there is no stage file at all (the no-config
+# path `in_stage_order` falls back to): one unnamed band, everything in it.
+NO_STAGE = Stage(title="", description="", components=())
+
+
+def load_stages(path: Path | None = None) -> list[Stage]:
     """The platform's stages, in the order the page shows them.
 
     This file is the row order, not a set of labels on a computed one. The
@@ -58,28 +75,28 @@ def load_stages(path: Path | None = None) -> list[dict[str, Any]]:
     if not loaded:
         return []
     stages = [
-        {
-            "title": stage.get("title") or "",
-            "description": stage.get("description") or "",
-            "components": list(stage.get("components") or []),
-        }
+        Stage(
+            title=stage.get("title") or "",
+            description=stage.get("description") or "",
+            components=tuple(stage.get("components") or ()),
+        )
         for stage in (loaded.get("stages") or [])
     ]
     unplaced = loaded.get("unplaced") or {}
     stages.append(
-        {
-            "title": UNPLACED_TITLE,
-            "description": unplaced.get("description") or "",
-            "components": list(unplaced.get("components") or []),
-            "unplaced": True,
-        }
+        Stage(
+            title=UNPLACED_TITLE,
+            description=unplaced.get("description") or "",
+            components=tuple(unplaced.get("components") or ()),
+            unplaced=True,
+        )
     )
     return stages
 
 
 def in_stage_order(
-    components: list[ComponentFile], stages: list[dict[str, Any]]
-) -> list[tuple[ComponentFile, int, dict[str, Any]]]:
+    components: list[ComponentFile], stages: list[Stage]
+) -> list[tuple[ComponentFile, int, Stage]]:
     """Each component with the stage it belongs to and that stage's number.
 
     Components are shown in the order their stage lists them: within a stage
@@ -88,12 +105,12 @@ def in_stage_order(
     order, which is the best guess available for something nobody has placed.
     """
     if not stages:
-        return [(component, 1, {}) for component in in_flow_order(components)]
+        return [(component, 1, NO_STAGE) for component in in_flow_order(components)]
     by_id = index_by_id(components)
-    ordered: list[tuple[ComponentFile, int, dict[str, Any]]] = []
+    ordered: list[tuple[ComponentFile, int, Stage]] = []
     seen: set[str] = set()
     for number, stage in enumerate(stages, 1):
-        for cid in stage["components"]:
+        for cid in stage.components:
             component = by_id.get(cid.lower())
             if component and component.id not in seen:
                 seen.add(component.id)
@@ -106,7 +123,7 @@ def in_stage_order(
 
 
 def stage_blocks(
-    stages: list[dict[str, Any]], rows: list[dict[str, Any]]
+    stages: list[Stage], rows: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     """The bands the page draws, built from the rows that survived the policy.
 
@@ -135,13 +152,13 @@ def stage_blocks(
         blocks.append(
             {
                 "step": number,
-                "title": stage.get("title") or "",
-                "description": stage.get("description") or "",
+                "title": stage.title,
+                "description": stage.description,
                 "components": members,
                 # Explicit on every block, not only the trailing one: a reader
                 # of the payload should not have to know that a missing key
                 # means False.
-                "unplaced": bool(stage.get("unplaced")),
+                "unplaced": stage.unplaced,
             }
         )
     return blocks

@@ -13,6 +13,7 @@ from translator_diagram.dashboard import build_payload
 from translator_diagram.rows import build_rows
 from translator_diagram.stages import (
     UNPLACED_TITLE,
+    Stage,
     in_stage_order,
     load_stages,
     stage_blocks,
@@ -69,7 +70,7 @@ unplaced:
 
     def test_each_component_carries_its_stage(self, tmp_path):
         ordered = in_stage_order(self._components("a", "c"), self._stages(tmp_path))
-        assert [stage["title"] for _, _, stage in ordered] == ["Ingest", "Serving"]
+        assert [stage.title for _, _, stage in ordered] == ["Ingest", "Serving"]
 
     def test_a_component_no_stage_names_falls_to_the_end(self, tmp_path):
         # The failure this is here for: a new component file nobody has placed
@@ -77,7 +78,7 @@ unplaced:
         ordered = in_stage_order(self._components("a", "z"), self._stages(tmp_path))
         component, number, stage = ordered[-1]
         assert component.id == "z"
-        assert stage["title"] == UNPLACED_TITLE
+        assert stage.title == UNPLACED_TITLE
         assert number == 3
 
     def test_an_id_no_component_file_matches_is_skipped(self, tmp_path):
@@ -108,7 +109,7 @@ stages:
         deep = tmp_path / "a" / "b"
         deep.mkdir(parents=True)
         monkeypatch.chdir(deep)
-        assert [stage["title"] for stage in load_stages()][:2] == ["Ingest", "Serving"]
+        assert [stage.title for stage in load_stages()][:2] == ["Ingest", "Serving"]
 
     def test_an_empty_file_is_not_an_error(self, tmp_path):
         assert self._stages(tmp_path, "") == []
@@ -121,7 +122,7 @@ unplaced:
   description: Nothing is placed.
   components: [a]
 """)
-        assert len(stages) == 1 and stages[0]["unplaced"] is True
+        assert len(stages) == 1 and stages[0].unplaced is True
         ordered = in_stage_order(self._components("a", "b"), stages)
         assert {number for _, number, _ in ordered} == {1}
 
@@ -133,11 +134,9 @@ unplaced:
 class TestStagePayload:
     def _stages(self):
         return [
-            {"title": "Ingest", "description": "Pulls sources in.",
-             "components": ["a"]},
-            {"title": "Serving", "description": "Answers.", "components": ["b"]},
-            {"title": UNPLACED_TITLE, "description": "Nowhere yet.",
-             "components": ["c"], "unplaced": True},
+            Stage("Ingest", "Pulls sources in.", ("a",)),
+            Stage("Serving", "Answers.", ("b",)),
+            Stage(UNPLACED_TITLE, "Nowhere yet.", ("c",), unplaced=True),
         ]
 
     def test_every_stage_carries_its_step(self):

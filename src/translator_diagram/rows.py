@@ -359,13 +359,9 @@ def build_rows(
                 "releases": chips,
                 "last_updated": _last_updated(releases, record),
                 "step": step,
-                "step_label": (
-                    stage.get("title") or ""
-                    if stage.get("unplaced")
-                    else f"Step {step}"
-                ),
-                "step_title": stage.get("title") or "",
-                "step_description": stage.get("description") or "",
+                "step_label": stage.title if stage.unplaced else f"Step {step}",
+                "step_title": stage.title,
+                "step_description": stage.description,
                 "documentation": (component.documentation or [{}])[0].get("url"),
                 # On the row, not in the cells: SmartAPI records one uptime
                 # result per *record*, from its own probe of whichever server it

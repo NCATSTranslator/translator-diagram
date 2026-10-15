@@ -53,7 +53,7 @@ The dashboard is a second, parallel stack over the same components:
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
 | `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version`, and the readers over somebody else's JSON — `mapping`, `items`, `text`, `strings`, `number` — that every module reading an upstream document uses |
 | `synced_data.py` | `SyncedData` — the build's reader of the sync cache (`files.py` holds the layout and the parsers it shares with `sync`), and where the 200 gate lives: a body answers for a cell only when *this* run recorded a hit for it |
-| `stages.py` | `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
+| `stages.py` | `Stage`, `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
 | `rows.py` | `build_rows` — one row per component: the cells, plus drift, dates, release chips and OpenTelemetry findings, all comparisons a single cell cannot make |
 | `dashboard.py` | The top of the stack: the graph builders, `build_payload`, and `render_html`. Returns plain dicts; no CLI, no network |
