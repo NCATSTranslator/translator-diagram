@@ -196,7 +196,6 @@ class TestApply:
         assert kept[0]["releases_detail"][0]["name"] == "… support"
         assert kept[0]["releases_detail"][0]["body_excerpt"] == "Adds …."
         assert report.mentions == 9
-        assert "9 mentions in free text" in report.summary()
 
     def test_every_free_text_field_on_a_row_is_scrubbed(self):
         """Repository topics, chart commit subjects, catalog prose and the

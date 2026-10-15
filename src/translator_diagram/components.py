@@ -236,20 +236,6 @@ class ComponentFile:
                 return repo.get("url")
         return None
 
-    def endpoint_url(self, env: str, kind: str) -> str | None:
-        """Absolute URL of this component's `kind` endpoint in `env`.
-
-        Only sees deployments recorded in the file. Most components have none,
-        deliberately — SmartAPI already knows their URLs, so recording them
-        here would be a second copy. Pass the merged mapping from
-        `deployments.merge_deployments` to `endpoint_url_in` for those.
-        """
-        deployment = self.environments.get(env)
-        if deployment is None:
-            return None
-        return endpoint_url_in(self, deployment, kind)
-
-
 def endpoint_url_in(
     component: ComponentFile, deployment: Deployment, kind: str
 ) -> str | None:

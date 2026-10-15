@@ -490,24 +490,23 @@ class TestHelmFacts:
             "nameLookup:\n  image: ghcr.io/ncatstranslator/nameresolution\n"
             "  version: v1.5.2\nsolr:\n  image: solr\n  version: '9.1'\n"
         )
-        facts = _helm_facts(SyncedData(tmp_path), "name-lookup")
+        facts = _helm_facts(SyncedData(tmp_path), ["name-lookup"])
         assert facts["version"] == "1.5.2_2025sep1"
-        assert facts["chart_version"] == "0.5.2"
         assert facts["images"] == ["nameresolution:v1.5.2", "solr:9.1"]
 
     def test_a_missing_chart_is_empty_not_an_error(self, tmp_path):
-        assert _helm_facts(SyncedData(tmp_path), "no-such-chart") == {
-            "version": None, "chart_version": None, "images": []}
+        assert _helm_facts(SyncedData(tmp_path), ["no-such-chart"]) == {
+            "version": None, "images": []}
 
     def test_no_chart_recorded_yields_nothing(self, tmp_path):
-        assert _helm_facts(SyncedData(tmp_path), None) == {}
+        assert _helm_facts(SyncedData(tmp_path), []) == {}
 
     def test_malformed_yaml_does_not_raise(self, tmp_path):
         # A 200 that was not really YAML. The page must still render.
         chart = tmp_path / "helm" / "broken"
         chart.mkdir(parents=True)
         (chart / "Chart.yaml").write_text("this: [is: not: valid\n")
-        assert _helm_facts(SyncedData(tmp_path), "broken")["version"] is None
+        assert _helm_facts(SyncedData(tmp_path), ["broken"])["version"] is None
 
 
 class TestUnregisteredEnvironments:

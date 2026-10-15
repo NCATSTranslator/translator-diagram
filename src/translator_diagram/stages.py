@@ -11,7 +11,7 @@ from typing import Any
 
 import click
 
-from .components import ComponentFile
+from .components import ComponentFile, index_by_id
 from .files import find_upward, read_yaml
 from .flow import in_flow_order
 
@@ -89,7 +89,7 @@ def in_stage_order(
     """
     if not stages:
         return [(component, 1, {}) for component in in_flow_order(components)]
-    by_id = {component.id.lower(): component for component in components}
+    by_id = index_by_id(components)
     ordered: list[tuple[ComponentFile, int, dict[str, Any]]] = []
     seen: set[str] = set()
     for number, stage in enumerate(stages, 1):

@@ -62,6 +62,10 @@ from .files import (
     smartapi_path,
 )
 
+# Parallel fetches. Enough to hide one slow host behind the rest without
+# reading as a burst to any one of the services asked.
+DEFAULT_WORKERS = 12
+
 SMARTAPI_QUERY = (
     "https://smart-api.info/api/query"
     "?q=tags.name:translator&size=200&meta=1"
@@ -694,12 +698,10 @@ def _echo_matching_summary(
     hits = list(by_smartapi.values())
     suggestions = []
     for component in components:
-        # Only where the file records no id: a component that records one has
-        # already been matched by it, and a fallback firing because the
-        # recorded id is missing from the registry is a different finding —
+        # `smartapi_record_for` matches by infores only where the file records
+        # no id: a component that records one has already been matched by it,
+        # and a recorded id missing from the registry is a different finding —
         # that one belongs in the record, not in a list of pointers to add.
-        if component.smartapi_id:
-            continue
         record, matched_by, _ = smartapi_record_for(component, hits)
         if matched_by == "infores" and record:
             title = (record.get("info") or {}).get("title") or record.get("_id")
@@ -717,7 +719,7 @@ def sync(
     *,
     fetcher: Fetcher = http_fetch,
     max_age: int = DEFAULT_MAX_AGE,
-    workers: int = 12,
+    workers: int = DEFAULT_WORKERS,
     echo: Callable[[str], None] = lambda _: None,
 ) -> SyncReport:
     """Fetch everything the component files point at, into `root`.

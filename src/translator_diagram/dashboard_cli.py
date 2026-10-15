@@ -18,7 +18,7 @@ from .files import manifest_path
 from .flow import isolated
 from .privacy import load_policy
 from .privacy import verify as verify_policy
-from .sync import DEFAULT_MAX_AGE, sync
+from .sync import DEFAULT_MAX_AGE, DEFAULT_WORKERS, sync
 from .synced_data import SyncedData
 
 DEFAULT_COMPONENTS = Path("catalog/components")
@@ -50,7 +50,7 @@ def _load(components_dir: Path):
                    "seconds. 0 fetches everything.")
 @click.option("--force", is_flag=True,
               help="Re-fetch everything, ignoring --max-age.")
-@click.option("--workers", type=int, default=12, show_default=True,
+@click.option("--workers", type=int, default=DEFAULT_WORKERS, show_default=True,
               help="Parallel fetches.")
 def sync_main(components_dir, output_dir, max_age, force, workers):
     """Fetch what the component files point at, into a local cache.

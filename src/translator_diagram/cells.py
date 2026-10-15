@@ -102,7 +102,6 @@ def _openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
         "trapi": trapi.get("version"),
         "biolink": translator.get("biolink-version"),
         "component_type": translator.get("component"),
-        "title": info.get("title"),
     }
 
 
@@ -211,7 +210,6 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
             (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
         ),
         "data_release": " · ".join(release) or None,
-        "reported": document.get("status"),
         # A sentence the service wrote about itself — "Reporting results from
         # primary core." Strings only: a structured `message` is a shape the
         # page has not seen, and rendering a mapping at a reader is worse than
@@ -221,7 +219,7 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _helm_facts(synced: SyncedData, charts: str | list[str] | None) -> dict[str, Any]:
+def _helm_facts(synced: SyncedData, charts: list[str]) -> dict[str, Any]:
     """The version chain's view of a component's charts: one number and a list.
 
     Takes every chart the component records, because a component can be
@@ -234,7 +232,7 @@ def _helm_facts(synced: SyncedData, charts: str | list[str] | None) -> dict[str,
     and the upgrade is a per-chart version in the detail block, which the
     `helm_charts` row field already carries, rather than a longer string here.
     """
-    names = [charts] if isinstance(charts, str) else list(charts or [])
+    names = list(charts)
     if not names:
         return {}
     tags: list[str] = []
@@ -246,11 +244,7 @@ def _helm_facts(synced: SyncedData, charts: str | list[str] | None) -> dict[str,
             if isinstance(spec, dict) and spec.get("image") and spec.get("version")
         )
     first = synced.helm(names[0], "Chart.yaml") or {}
-    return {
-        "version": first.get("appVersion"),
-        "chart_version": first.get("version"),
-        "images": tags,
-    }
+    return {"version": first.get("appVersion"), "images": tags}
 
 
 # --- Why a cell has no version ---------------------------------------------

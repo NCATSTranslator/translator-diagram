@@ -183,10 +183,6 @@ class TestEndpointUrls:
         assert "status" not in DEFAULT_ENDPOINT_PATHS
         assert endpoint_url_in(_parse(), self._deployment(), "status") is None
 
-    def test_the_method_only_sees_recorded_environments(self):
-        component = _parse(endpoints={"openapi": "openapi.json"})
-        assert component.endpoint_url("ci", "openapi") is None
-
 
 class TestGithubRepo:
     def test_a_plain_repository_url(self):

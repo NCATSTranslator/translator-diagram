@@ -126,28 +126,6 @@ class Report:
             or self.mentions
         )
 
-    def summary(self) -> str:
-        """One line for the build log."""
-        parts = []
-        if self.components:
-            parts.append(
-                f"{len(self.components)} components "
-                f"({', '.join(self.components)})"
-            )
-        if self.fields:
-            parts.append(f"{len(self.fields)} fields ({', '.join(self.fields)})")
-        if self.environment_fields:
-            parts.append(
-                f"{len(self.environment_fields)} environment fields "
-                f"({', '.join(self.environment_fields)})"
-            )
-        if self.mentions:
-            parts.append(
-                f"{self.mentions} mention{'' if self.mentions == 1 else 's'} "
-                f"in free text"
-            )
-        return "Withheld " + ", and ".join(parts) + "."
-
     def for_payload(self) -> dict[str, Any]:
         """The block the page reads, so it can say something was withheld.
 
