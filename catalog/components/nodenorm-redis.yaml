@@ -20,7 +20,8 @@ description: |
 
   It has been removed from Translator's CI, Test and Prod environments, and no
   part of Translator calls it any more: NodeNorm ES (`nodenorm-es`) has
-  replaced it. It is still actively maintained outside Translator.
+  replaced it. It is still actively maintained, and its RENCI deployment
+  keeps running after the Translator ones are gone.
 
   It is three charts that are deployed together:
 
@@ -36,6 +37,7 @@ component_type: Utility
 # and `nodenorm-loader`); it has since been removed from ci, test and prod.
 refactor_status: Already removed
 layer: Shared services
+hosted_at: RENCI
 
 identifiers:
   # Commented out for now (2026-10-14). The infores is this component's, but
@@ -79,11 +81,20 @@ repositories:
     role: helm-chart
     visibility: public
 
+# Recorded by hand while the infores above is commented out: until then
+# nothing attaches the SmartAPI record that also lists this server. When the
+# infores comes back, drop this block if that record still lists it
+# (README.md: environments are recorded only where SmartAPI cannot supply them).
+environments:
+  dev:
+    url: https://nodenormalization-sri.renci.org/1.5/
+    location: RENCI
+
 # Nothing in Translator calls it, so it has no place on the Map; it stays in
 # the Overview, under unplaced in flow-steps.yaml.
 diagram:
   hide: true
 
 notes: >-
-  Removed from Translator's ci, test and prod, so no environments are
-  recorded. Replaced by nodenorm-es.
+  Removed from Translator's ci, test and prod, and replaced there by
+  nodenorm-es. Its one remaining deployment is RENCI's dev server.
