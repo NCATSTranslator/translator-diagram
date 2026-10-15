@@ -260,8 +260,8 @@ things it reports are the answer:
   on that row, so the number in the `prod` column has its changelog one click
   away.
 - **Why a cell is empty.** Every cell with no version says what happened
-  instead, in a few words: `no such host`, `up · no API document`,
-  `up · serves HTML, no API document`, `not in registry for prod`,
+  instead, in a few words: `no such host`, `no API document found`,
+  `serves a web page, not an API document`, `SmartAPI lists no prod server`,
   `not a hosted service`. The distinctions matter — a host that does not
   resolve, one that is up and publishes no version, and one nobody has
   recorded a URL for are three different things, and an empty cell said all

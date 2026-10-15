@@ -106,11 +106,12 @@
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload
-     now says *why* we have nothing — no host recorded, no such host, up but
-     no version endpoint, not in the registry for this environment. The reason
-     goes where the version would have been, in the payload's own words, and
-     the green dot stays in front of it when the host itself answered, because
-     "up · no version endpoint" is a claim about a host that is up. */
+     now says *why* we have nothing — no address on file, no such host, no
+     version endpoint to read, no server listed for this environment. The
+     reason goes where the version would have been, in the payload's own
+     words, and the green dot stays in front of it when the host itself
+     answered: "no version endpoint to read" is a claim about a host that is
+     up. */
   function envCell(row, env) {
     const cell = cells(row)[env];
     if (!cell) return `<td class="env absent">${DASH()}</td>`;

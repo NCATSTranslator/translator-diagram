@@ -224,7 +224,7 @@ class TestStaleBodiesKeepTheNewKeys:
         assert cell["version"] is None
         assert cell["document"] is None
         assert cell["trapi_operations"] == []
-        assert cell["reason"] == "up · no API document"
+        assert cell["reason"] == "no API document found"
 
 
 class TestUnexpectedShapes:

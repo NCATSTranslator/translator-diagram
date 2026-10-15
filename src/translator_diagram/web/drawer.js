@@ -448,7 +448,7 @@
   function envBlock(row, env) {
     const cell = (row.environments || {})[env];
     // `reason` is the payload's own sentence for why there is no version —
-    // "no such host", "up · no version endpoint", "not in registry for ci".
+    // "no such host", "no version endpoint to read", "SmartAPI lists no ci server".
     // It is a better first line than "Not deployed", which says less and is
     // sometimes wrong: a service can be up and still report no version.
     const reason = cell && cell.reason ? muted(cell.reason) : "";

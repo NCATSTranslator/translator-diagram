@@ -28,7 +28,7 @@ const ROWS = [
   { id: "arax", name: "ARAX", owner: "CATRAX", step: 2, step_label: "Step 2", step_title: "ARAs",
     environments: { ci: cell("2.1", { drift: ["version"] }), prod: cell("2.0", { trapi: "1.5" }) } },
   { id: "ui", name: "UI", owner: "UI", step: 3, step_label: "Step 3", step_title: "Front end",
-    environments: { prod: { deployed: true, reachable: true, reason: "up · no version endpoint" } } },
+    environments: { prod: { deployed: true, reachable: true, reason: "no version endpoint to read", reason_key: "no-endpoint" } } },
 ];
 
 function reset(patch) {
@@ -102,7 +102,7 @@ test("an expanded row shows only the fields some environment answered", () => {
 
 test("an environment cell says why it has no version, and marks drift", () => {
   reset();
-  assert.match(table.envCell(ROWS[2], "prod"), /up · no version endpoint/);
+  assert.match(table.envCell(ROWS[2], "prod"), /no version endpoint to read/);
   assert.match(table.envCell(ROWS[2], "prod"), /dot up/);
   assert.match(table.envCell(ROWS[2], "ci"), /class="env absent"/);
   const drifting = table.envCell(ROWS[1], "ci");
