@@ -30,13 +30,11 @@ $CHROME --headless --disable-gpu --hide-scrollbars \
 Each run needs its **own `--user-data-dir`**, or concurrent shots collide.
 `?view=map` selects the Map view.
 
-**`--force-prefers-reduced-motion` is not optional.** The stat tiles count up
-on load, and a screenshot without it catches them mid-animation: the page
-reads `3 components · 6 deployments` when there are 24 and 51. That is
-indistinguishable from a real tile-counting bug — the page once shipped one
-that counted 74 things where there were 41 — so a naive shot invents a bug
-that is not there. Freeze the animation, then check the tiles against what
-`build-dashboard` printed.
+**`--force-prefers-reduced-motion` is not optional.** The map's nodes
+stagger in and a view switch crossfades, and a screenshot without it catches
+either mid-animation, which is indistinguishable from a rendering bug. (The
+stat tiles that used to count up on load, and once invented a tile-counting
+bug in exactly this way, are gone.)
 
 **Forcing the theme needs a `matchMedia` stub, not a flag.** Chromium's
 `--force-dark-mode` does not move the page's `prefers-color-scheme`, and the
@@ -49,13 +47,13 @@ stubbing trick as the JS note below. Insert it straight after
 a script that looks for `<head>` to insert after finds nothing.
 
 **The stub must answer the reduced-motion query too.** `core.js` asks
-`matchMedia("(prefers-reduced-motion: reduce)")` to decide whether the tiles
-count up, and a stub that returns `matches: false` for every query but the
-colour scheme switches the animation back on: four shots taken with the flag
-above still showed tiles mid-count (`40`, `41`, `42`, `43` fetches of the
-same 219). This one answers the colour scheme itself and hands every other
-query to the real `matchMedia`, so the flag keeps working. Run it in the
-build directory; it writes `light.html` and `dark.html` beside `index.html`:
+`matchMedia("(prefers-reduced-motion: reduce)")` through `TD.motion.enabled`,
+and a stub that returns `matches: false` for every query but the colour
+scheme switches every animation back on (four shots taken with the flag above
+once showed the then-tiles mid-count). This one answers the colour scheme
+itself and hands every other query to the real `matchMedia`, so the flag
+keeps working. Run it in the build directory; it writes `light.html` and
+`dark.html` beside `index.html`:
 
 ```bash
 for theme in light dark; do python3 - "$theme" <<'PY'
@@ -78,8 +76,7 @@ PY
 done
 ```
 
-Checked on 8b5d40d: both themes render, and the tiles read the final counts
-in both.
+Checked on 8b5d40d: both themes render.
 
 **Firefox** needs two environment variables on macOS 27, and nothing else.
 Without them every launch dies with `Could not find profile folder`, whatever
@@ -121,7 +118,7 @@ The Playwright version has to match a Firefox build in
 `~/Library/Caches/ms-playwright/`: 1.64.0 wants `firefox-1555`, and
 `uv run --with playwright==1.64.0 playwright install firefox` fetches it.
 Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
-render, and the tiles read the final counts.
+render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
@@ -158,19 +155,18 @@ saw and let them look.
 ## Testing JS with judgement in it
 
 There is no JS harness here, and that has not stopped anything being tested.
-The rule is that judgement is a pure function and the DOM is a thin layer
-over it: the filter, the band grouping, the detail-field pruning and the
-cell rendering in `table.js`, the edge kind, node version, reachability and
-tooltip buckets in `map.js`, the catalog edge direction and probe evidence
-in `drawer.js`, and the theme cycle, the finding sentence and the clock
-formatting in `core.js` are all exported and driven under `node --test` from
-`tests/web/`, which `tests/test_web_assets.py` runs. Anything that needs a
-clock or the system preference takes it as an argument (`relativeAge(iso,
-now)`, `TD.theme.next(choice, systemDark)`), so "a future timestamp says
-today" is a test rather than a stub. What is still untested is the DOM
-itself — the drawer's focus return, the row expansion animation — which
-issue #22 tracks. `TD.row` is where a fact about a row is said once for
-every view.
+The rule is that judgement is a pure function and the DOM is a thin layer over
+it: the filter, the band grouping, the detail-field pruning and the cell
+rendering in `table.js`, the edge kind, node version, reachability and tooltip
+buckets in `map.js`, the catalog edge direction and probe evidence in
+`drawer.js`, and the theme cycle and the clock formatting in `core.js` are all
+exported and driven under `node --test` from `tests/web/`, which
+`tests/test_web_assets.py` runs. Anything that needs a clock or the system
+preference takes it as an argument (`relativeAge(iso, now)`,
+`TD.theme.next(choice, systemDark)`), so "a future timestamp says today" is a
+test rather than a stub. What is still untested is the DOM itself — the
+drawer's focus return, the row expansion animation — which issue #22 tracks.
+`TD.row` is where a fact about a row is said once for every view.
 
 ## Things that look wrong but aren't
 
@@ -208,11 +204,6 @@ version string: comparing `2.10.2` against `1.0` across two different
 components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
-
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`

@@ -339,16 +339,10 @@
      rightmost one still on screen. A colspan cannot do this: it is a fixed
      number, the columns it covers come and go, and the first mismatch shifts
      every value one column left. */
-  /* Every cell of a detail row wraps its content twice: `.dg` is a one-row
-     grid that goes 0fr → 1fr, `.dw` clips. That is the only way a <tr> can
-     change height on a curve, and it is why opening a row no longer shoves
-     everything under it down in a single step. */
-  const fold = (html) => `<div class="dg"><div class="dw">${html}</div></div>`;
-
   function detailLabelCells(label) {
     return COLUMNS
       .filter((column) => !column.env)
-      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}">${fold(`<span class="dkl">${esc(label)}</span>`)}</td>`)
+      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${esc(label)}</span></td>`)
       .join("");
   }
 
@@ -357,10 +351,6 @@
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
-      // Rendered straight into the table — a shared link that already names
-      // this component in `expand` — so it opens unfolded rather than
-      // animating on first paint. The chevron path adds `on` a frame later.
-      flags.on ? ["on"] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
@@ -372,7 +362,7 @@
      field of blanks. */
   function detailFieldRow(row, field, values, group, flags) {
     const kind = `dv${field.mono ? " mono" : ""}`;
-    const cells_ = values.map((value) => `<td class="${kind}">${fold(value)}</td>`).join("");
+    const cells_ = values.map((value) => `<td class="${kind}">${value}</td>`).join("");
     return `<tr ${detailAttrs(row, group, flags)}>${
       detailLabelCells(field.label)}${cells_}</tr>`;
   }
@@ -385,13 +375,13 @@
 
   function detailReleasesRow(row, chips, group, flags) {
     return `<tr ${detailAttrs(row, group, flags)}>${detailLabelCells("Releases")}<td
-      class="dv rels" colspan="${TD.ENVS.length}">${fold(chips)}</td></tr>`;
+      class="dv rels" colspan="${TD.ENVS.length}">${chips}</td></tr>`;
   }
 
   /* Only the fields somebody answered. Nine rows of which six were empty is
      the shape the owner sent back; this builds the rows first and drops the
      ones no environment filled in. */
-  function detailRowsHtml(row, group, unfolded) {
+  function detailRowsHtml(row, group) {
     const deployed = TD.ENVS.map((env) => {
       const cell = cells(row)[env];
       return cell && cell.deployed ? cell : null;
@@ -406,15 +396,10 @@
     if (chips) make.push((flags) => detailReleasesRow(row, chips, group, flags));
     if (!make.length) {
       make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${
-        detailLabelCells("")}<td class="dv rels" colspan="${TD.ENVS.length}">${fold('<span class="dash">Nothing else is recorded for this component.</span>')
-        }</td></tr>`);
+        detailLabelCells("")}<td class="dv rels" colspan="${TD.ENVS.length}"><span class="dash">Nothing else is recorded for this component.</span></td></tr>`);
     }
     return make
-      .map((build, index) => build({
-        first: index === 0,
-        last: index === make.length - 1,
-        on: unfolded !== false,
-      }))
+      .map((build, index) => build({ first: index === 0, last: index === make.length - 1 }))
       .join("");
   }
 
@@ -446,7 +431,7 @@
     const step = group == null ? "" : ` data-step="${esc(group)}"`;
     const body = `<tr class="${classes.join(" ")}" id="c-${esc(row.id)}" data-id="${esc(row.id)}"${
       step}>${COLUMNS.map((column) => column.cell(row)).join("")}</tr>`;
-    return open ? body + detailRowsHtml(row, group, true) : body;
+    return open ? body + detailRowsHtml(row, group) : body;
   }
 
   function bodyHtml(rows) {
@@ -570,101 +555,14 @@
     return "";
   }
 
-  /* --- Motion ---------------------------------------------------------------- */
-
-  /* FLIP: measure every row before the re-render, measure again after, apply
-     the inverse transform and let it transition to none. Capped, because past
-     sixty rows the glide is a screenful of movement nobody reads. */
-  function positions(body) {
-    const map = new Map();
-    for (const row of body.querySelectorAll("tr.row")) {
-      map.set(row.dataset.id, row.getBoundingClientRect().top);
-    }
-    return map;
-  }
-
-  function flip(body, before) {
-    if (!TD.motion.enabled || !before) return;
-    const rows = [...body.querySelectorAll("tr.row")];
-    if (rows.length > 60) return;
-    const moved = [];
-    for (const row of rows) {
-      const from = before.get(row.dataset.id);
-      if (from == null) continue;
-      const delta = from - row.getBoundingClientRect().top;
-      if (!delta) continue;
-      row.style.transform = `translateY(${delta}px)`;
-      moved.push(row);
-    }
-    if (!moved.length) return;
-    void body.offsetHeight;   // one forced reflow, so the inverse is painted
-    for (const row of moved) {
-      row.classList.add("flip");
-      row.style.transform = "";
-      row.addEventListener("transitionend", () => {
-        row.classList.remove("flip");
-      }, { once: true });
-    }
-  }
-
-  function fadeIn(body) {
-    if (!TD.motion.enabled) return;
-    let index = 0;
-    for (const row of body.querySelectorAll("tr.row")) {
-      row.style.animationDelay = `calc(${Math.min(index, 20)} * var(--stagger))`;
-      row.classList.add("fade");
-      index += 1;
-    }
-  }
-
-  /* --- Expansion, animated --------------------------------------------------- */
+  /* --- Expansion ------------------------------------------------------------- */
 
   function findRow(body, id) {
     return [...body.querySelectorAll("tr.row")].find((row) => row.dataset.id === id);
   }
 
-  /* The gutter between rows, in pixels: the open item's measured height has to
-     stop at the last detail row's surface rather than at the six transparent
-     pixels under it, or the shadow sits six pixels low. */
-  let gap = null;
-  function rowGap() {
-    if (gap === null) {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
-      gap = parseFloat(raw) || 0;
-    }
-    return gap;
-  }
-
-  /* The item's outer box, for the one shadow drawn round it. Width comes from
-     the cells rather than from the row: `offsetWidth` on a <tr> is not worth
-     trusting across engines, and the two cells share an offset parent. */
-  function sizeOpen(tr, rows) {
-    const first = tr.firstElementChild;
-    const last = tr.lastElementChild;
-    if (first && last) {
-      tr.style.setProperty(
-        "--open-w", `${Math.round(last.offsetLeft + last.offsetWidth - first.offsetLeft)}px`);
-    }
-    if (!rows.length) return tr.offsetHeight;
-    const tail = rows[rows.length - 1];
-    return Math.round(tail.offsetTop + tail.offsetHeight - tr.offsetTop - rowGap());
-  }
-
-  /* A row that arrived open — `?expand=` in a shared link, or a re-render
-     while one was open — has no measurements yet, and the shadow is sized
-     from them. Run after every render, not just after a click. */
-  function settleOpen(container) {
-    for (const tr of container.querySelectorAll("tr.row.open")) {
-      const rows = detailRowsAfter(tr);
-      tr.style.setProperty("--open-h", `${sizeOpen(tr, rows)}px`);
-    }
-  }
-
-  /* Opening does not re-render the table. It inserts this component's detail
-     rows and nothing else, then unfolds them: measure their natural height in
-     one frame with transitions off, collapse, and let the grid rows go
-     0fr → 1fr on the next. Two forced layouts on a click, and every row below
-     moves on the same curve instead of jumping once when the rows appear. */
+  /* Opening does not re-render the table: it inserts this component's detail
+     rows after its own and nothing else, so the chevron keeps focus. */
   function openExpansion(body, id) {
     const tr = findRow(body, id);
     const row = rowById(id);
@@ -672,58 +570,14 @@
     // The band this row is under, read back off the row rather than passed in:
     // the click handler knows the id, not the grouping.
     const group = tr.classList.contains("grp") ? tr.dataset.step ?? "" : null;
-    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group, false));
-    const rows = detailRowsAfter(tr);
-    const folds = rows.flatMap((detail) => [...detail.querySelectorAll(".dg")]);
-
-    // `open` is what squares the row's bottom corners and draws the lift: the
-    // detail rows are not a second item, they are this one, taller.
-    tr.style.setProperty("--open-h", `${sizeOpen(tr, [])}px`);
+    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group));
     tr.classList.add("open");
-
-    if (!TD.motion.enabled) {
-      for (const detail of rows) detail.classList.add("on");
-      tr.style.setProperty("--open-h", `${sizeOpen(tr, rows)}px`);
-      return;
-    }
-
-    // Unfolded, measured, folded again — all before the browser paints, and
-    // with transitions off so none of it is animated.
-    for (const fold of folds) fold.classList.add("still");
-    for (const detail of rows) detail.classList.add("on");
-    const full = sizeOpen(tr, rows);
-    for (const detail of rows) detail.classList.remove("on");
-    void body.offsetHeight;
-    for (const fold of folds) fold.classList.remove("still");
-    requestAnimationFrame(() => {
-      for (const detail of rows) detail.classList.add("on");
-      tr.style.setProperty("--open-h", `${full}px`);
-    });
   }
 
-  /* Symmetrical: fold to nothing on the same curve, and only then take the
-     rows out. Removing them first is what made the page jump. */
   function closeExpansion(body, id) {
     const tr = findRow(body, id);
-    const rows = detailRowsAfter(tr);
-    if (!rows.length) return;
-    const finish = () => {
-      for (const detail of rows) detail.remove();
-      tr.classList.remove("open", "closing");
-      tr.style.removeProperty("--open-h");
-      tr.style.removeProperty("--open-w");
-    };
-    if (!TD.motion.enabled) { finish(); return; }
-    tr.classList.add("closing");
-    tr.style.setProperty("--open-h", `${sizeOpen(tr, [])}px`);
-    for (const detail of rows) detail.classList.remove("on");
-    let done = false;
-    const once = () => { if (done) return; done = true; finish(); };
-    // transitionend on the first fold, and a timer in case the row is scrolled
-    // out of view and the transition never fires.
-    const first = rows[0].querySelector(".dg");
-    if (first) first.addEventListener("transitionend", once, { once: true });
-    setTimeout(once, 600);
+    for (const detail of detailRowsAfter(tr)) detail.remove();
+    if (tr) tr.classList.remove("open");
   }
 
   /* --- Render ----------------------------------------------------------------- */
@@ -731,7 +585,6 @@
   let wrap = null;
   let head = null;
   let body = null;
-  let last = null;
 
   function build(container) {
     container.innerHTML = `<div class="tablewrap"><table class="grid">
@@ -767,29 +620,12 @@
 
   table.render = function render(container) {
     table.ensureColumns();
-    if (!wrap || !container.contains(wrap)) { last = null; build(container); }
+    if (!wrap || !container.contains(wrap)) build(container);
 
-    const s = state();
-    const signature = {
-      q: (s.q || "").trim(), owner: (s.owner || []).join(","), versions: s.versions,
-      sort: s.sort, dir: s.dir,
-    };
-    const filtered = last && (last.q !== signature.q || last.owner !== signature.owner
-      || last.versions !== signature.versions);
-    const sorted = last && (last.sort !== signature.sort || last.dir !== signature.dir);
-
-    const before = sorted ? positions(body) : null;
-    const rows = TD.sort.rows(visibleRows(), sortColumn(), s.dir);
-
+    const rows = TD.sort.rows(visibleRows(), sortColumn(), state().dir);
     TD.ui.tooltip.hide();
     head.innerHTML = headHtml();
     body.innerHTML = bodyHtml(rows);
-
-    settleOpen(body);
-    if (sorted) flip(body, before);
-    else if (filtered) fadeIn(body);
-
-    last = signature;
     return { shown: rows.length, total: (TD.DATA.rows || []).length };
   };
 

@@ -13,11 +13,9 @@
 
   const TD = (globalThis.TD = globalThis.TD || {});
   const esc = (value) => TD.fmt.esc(value);
-  const $ = (selector) => document.querySelector(selector);
 
   TD.boot(JSON.parse(document.getElementById("payload").textContent));
   const DATA = TD.DATA;
-  const ENVS = TD.ENVS;
 
   /* --- State and URL -------------------------------------------------------- */
 
@@ -102,32 +100,6 @@
     xmlns="http://www.w3.org/2000/svg"><rect class="tile" width="32" height="32"
     rx="6"/><text class="glyph" x="16" y="22.6" text-anchor="middle">Tr</text></svg>`;
 
-  /* --- Prose ----------------------------------------------------------------- */
-
-  function driftSentence() {
-    const drifting = (DATA.rows || []).filter(TD.table.hasDrift);
-    if (!drifting.length) return "Every component reports the same version in every environment.";
-    const names = drifting.map((row) => `<a href="#c-${esc(row.id)}">${esc(row.id)}</a>`);
-    return `${drifting.length} disagree across environments: ${names.join(", ")}.`;
-  }
-
-  function statsHtml() {
-    const counts = DATA.sync_counts || {};
-    const deployments = TD.summary.deployments(DATA.rows, ENVS);
-    const perEnv = Object.entries(DATA.otel_service_counts || {})
-      .map(([env, n]) => `${esc(env)} ${n}`).join(", ");
-    const stat = (n, key) =>
-      `<div class="stat"><span class="n" data-n="${n}">${n}</span><span class="k">${key}</span></div>`;
-    return [
-      stat(DATA.rows.length, "components"),
-      stat(deployments, "deployments"),
-      stat(counts.succeeded ?? 0,
-        `of ${counts.attempted ?? 0} fetches<span class="qual"> · ${counts.failed ?? 0} failed</span>`),
-      stat(DATA.otel_service_total ?? 0,
-        `otel services${perEnv ? `<span class="qual"> · ${perEnv}</span>` : ""}`),
-    ].join("");
-  }
-
   /* --- Shell ------------------------------------------------------------------ */
 
   function shell() {
@@ -141,11 +113,6 @@
           >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
       </div>
       <main class="page">
-        <div class="finding">
-          <p>${TD.summary.finding(DATA)}</p>
-          <p>${driftSentence()}</p>
-        </div>
-        <div class="stats">${statsHtml()}</div>
         <div class="filters">
           <input type="search" id="q" placeholder="Search components, versions, ids…"
                  aria-label="Search components">
@@ -244,32 +211,13 @@
     document.getElementById("order").addEventListener("click", (event) => {
       if (event.target.closest("#unsort")) TD.commit({ sort: "", dir: "asc" });
     });
-
-    // A component named in the drift sentence scrolls the table to its row,
-    // which now has its own scrollport and so is not reachable by the
-    // browser's own fragment handling.
-    document.addEventListener("click", (event) => {
-      const link = event.target.closest('a[href^="#c-"]');
-      if (!link) return;
-      event.preventDefault();
-      const id = link.getAttribute("href").slice(3);
-      history.replaceState(null, "", `${location.pathname}${location.search}#c-${id}`);
-      TD.table.scrollTo(id);
-    });
   }
 
   /* --- Measurement ------------------------------------------------------------ */
 
-  /* The filter strip is not a constant height: it wraps at the widths where the
-     controls and the order label no longer fit on one line. Measured rather
-     than guessed, because a wrong offset hides the first row under the bar. */
+  /* The view switch's sliding indicator is placed from measured widths, so it
+     is re-measured whenever the layout can have changed. */
   function measure() {
-    const root = document.documentElement;
-    const bar = $(".filters");
-    if (bar) {
-      root.style.setProperty("--filters-height",
-        `${Math.round(bar.getBoundingClientRect().height)}px`);
-    }
     if (viewSwitch) viewSwitch.measure();
   }
 
@@ -307,40 +255,6 @@
       `${shown} of ${total} component${total === 1 ? "" : "s"}`;
   }
 
-  /* --- Stat count-up ------------------------------------------------------------ */
-
-  /* Once, on first paint, and never again: a number that re-counts every time a
-     filter changes is a distraction, and these four do not depend on the
-     filters anyway. */
-  function countUp() {
-    const nodes = [...document.querySelectorAll(".stat .n[data-n]")];
-    const targets = nodes.map((node) => Math.max(0, Number(node.dataset.n) || 0));
-    const write = (values) => {
-      nodes.forEach((node, index) => { node.textContent = String(values[index]); });
-    };
-    // A hidden document does not animate: rAF is throttled in a background
-    // tab, and a screenshot or a print of a tab that was never shown would
-    // otherwise catch the counters part-way to their own values.
-    if (!TD.motion.enabled || document.hidden) { write(targets); return; }
-    const duration = 600;
-    const start = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      // Clamped at zero and, on the last frame, written exactly: an eased
-      // value is never allowed to render as a number the payload does not
-      // contain.
-      if (t < 1) {
-        write(targets.map((value) => Math.max(0, Math.round(value * eased))));
-        requestAnimationFrame(step);
-      } else {
-        write(targets);
-      }
-    };
-    write(targets.map(() => 0));
-    requestAnimationFrame(step);
-  }
-
   /* --- Boot --------------------------------------------------------------------- */
 
   TD.table.ensureColumns();
@@ -349,7 +263,6 @@
   renderTheme();
   showView(false);
   measure();
-  countUp();
 
   addEventListener("resize", measure);
 

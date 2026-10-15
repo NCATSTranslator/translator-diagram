@@ -1,5 +1,5 @@
 /*
-  The shell: reset, top bar, finding, stats line, filter strip, focus.
+  The shell: reset, top bar, filter strip, focus.
 
   There is not a card on this page. Every group is a hairline and some
   whitespace, which is why nothing here sets a border-radius on a region or a
@@ -131,50 +131,6 @@ code {
   padding: var(--sp-5) var(--sp-5) 0;
 }
 
-/* The finding is prose, not a panel: one accent rule on the left, the same
-   3px the map nodes use for an owner rail, and no box. */
-.finding {
-  margin: 0 0 var(--sp-4);
-  padding-left: var(--sp-3);
-  border-left: 3px solid var(--accent);
-  max-width: 92ch;
-  font-size: var(--fs-body);
-}
-.finding p { margin: 0; }
-.finding p + p { margin-top: var(--sp-1); }
-.finding strong { font-variant-numeric: tabular-nums; font-weight: 600; }
-
-/* One typographic line. Four tiles said the same thing and needed four boxes
-   to do it; four hairlines between the four numbers then said it again. The
-   separator is 32px of air. */
-.stats {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-2) var(--sp-6);
-  margin: var(--sp-5) 0 0;
-  padding: var(--sp-2) 0 var(--sp-4);
-}
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-.stat .n {
-  font-size: var(--fs-num);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-}
-.stat .k {
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--muted);
-}
-.stat .k .qual { opacity: 0.85; text-transform: none; letter-spacing: 0; }
-
 /* --- Filter strip --------------------------------------------------------- */
 
 .filters {
@@ -278,7 +234,4 @@ code {
   .drop-xs { display: none; }
   .topbar { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .page { padding: var(--sp-4) var(--sp-3) 0; }
-  .synced { display: none; }
-  .stat { padding: 0 var(--sp-3); }
-  .stat:first-child { padding-left: 0; }
 }

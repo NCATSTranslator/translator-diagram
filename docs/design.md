@@ -113,7 +113,7 @@ A build is one pass, top to bottom. Steps 1–3 are `build_payload` in
    cell, and `rows` assembles one row per component, in the stage order from
    `catalog/flow-steps.yaml` (hand-written, not computed).
 2. **Redaction.** `privacy.apply` drops what `config/privacy.yaml` withholds.
-3. **Everything counted or drawn from the rows.** The tiles, the stages, and
+3. **Everything counted or drawn from the rows.** The counts, the stages, and
    the map's edges are built from the rows that survived, so none of them can
    mention a withheld component.
 4. **Verification.** `build-dashboard` reads the finished payload back with
@@ -123,7 +123,7 @@ A build is one pass, top to bottom. Steps 1–3 are `build_payload` in
 
 The position of step 2 is the design. Rows are built from every component, so
 a published build is the local build *minus rows*: the same order and the same
-depths, with nothing renumbered or moved. The counts come after it, so a tile
+depths, with nothing renumbered or moved. The counts come after it, so the page
 can never count more than the table shows.
 
 ## Publishing

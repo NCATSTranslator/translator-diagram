@@ -127,14 +127,6 @@ thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
 }
 tbody tr.row:hover td { background-color: var(--row-bg-hover); }
 
-/* FLIP: the transform is applied by table.js, this only says how it settles. */
-tbody tr.flip { transition: transform var(--dur-layout) var(--ease); }
-tbody tr.fade { animation: row-in var(--dur-layout) var(--ease) both; }
-@keyframes row-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
-}
-
 /* --- Groups: spine, indent, rail ------------------------------------------ */
 
 /* The spine. One 2px accent rule down the far-left edge of a group, drawn per
@@ -390,37 +382,7 @@ td.env .src { margin-left: 5px; }
    owner was reading past.
 
    An open row and its detail are ONE item: same surface, no rule between
-   them, the row's bottom corners handed to the last detail row, and one soft
-   lift around the whole thing. The lift is the only shadow on this page
-   besides the tooltip and the drawer, and it means "this one is open". */
-
-/* Not a shadow per row: eleven of those stacked into a dark band down both
-   sides, because a row's shadow escapes at the table's edges and the rows
-   overlap there. One box instead, sized to the whole item from --open-w and
-   --open-h (measured by table.js, and --open-h transitions, so it grows with
-   the rows rather than snapping to full size while they unfold). Anchored to
-   the last cell, which is the one cell that does not move under a sideways
-   scroll. The negative offsets undo the cell's own padding, so the box lands
-   on the item's outer edge. */
-tbody tr.row { transition: --open-h var(--dur-layout) var(--ease); }
-tbody tr.row.open > td:last-child { position: relative; }
-tbody tr.row.open > td:last-child::before {
-  content: "";
-  position: absolute;
-  top: calc(0px - var(--cell-pad-y));
-  right: calc(0px - var(--cell-pad-x));
-  width: var(--open-w, 100%);
-  height: var(--open-h, 100%);
-  border-radius: var(--row-radius);
-  box-shadow: var(--lift);
-  pointer-events: none;
-  animation: lift-in var(--dur-layout) var(--ease) both;
-}
-tbody tr.row.open.closing > td:last-child::before {
-  animation: lift-out var(--dur-layout) var(--ease) both;
-}
-@keyframes lift-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes lift-out { from { opacity: 1; } to { opacity: 0; } }
+   them, the row's bottom corners handed to the last detail row. */
 
 /* The item has no gutters inside it: an open row and every detail row but the
    last simply drop their bottom border. */
@@ -457,30 +419,9 @@ tbody tr.detail.detail-last > td:last-child {
   border-bottom-right-radius: var(--row-radius) calc(var(--row-radius) + var(--row-gap));
 }
 
-/* A <tr> has no height a transition can interpolate, so the height lives one
-   level down: each cell holds a grid whose single row goes 0fr → 1fr. The
-   wrapper clips, the row's height follows its cells, and the whole item
-   unfolds and folds on the same curve instead of appearing at full size and
-   shoving everything below it down in one step. */
-.dg {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows var(--dur-layout) var(--ease),
-              opacity var(--dur-layout) var(--ease);
-}
-tbody tr.detail.on .dg { grid-template-rows: 1fr; opacity: 1; }
-/* min-height: 0 is what lets a grid item shrink below its content. */
-.dw {
-  overflow: hidden;
-  min-height: 0;
-  line-height: var(--detail-h);
-}
-/* Inside the wrapper, so it folds away with everything else. */
-tbody tr.detail.detail-first .dw { padding-top: var(--sp-1); }
-tbody tr.detail.detail-last .dw { padding-bottom: var(--sp-1); }
-/* Used for one frame while the natural height is measured. */
-.dg.still { transition: none; }
+tbody tr.detail.detail-first > td { padding-top: var(--sp-1); }
+tbody tr.detail.detail-last > td { padding-bottom: var(--sp-1); }
+tbody tr.detail > td { line-height: var(--detail-h); }
 
 /* The label is written into every non-environment cell and shown in exactly
    one of them: the rightmost that is still on screen, so it always sits

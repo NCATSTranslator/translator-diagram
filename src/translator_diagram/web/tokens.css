@@ -52,13 +52,10 @@
   --ok: #669f38;
   --bad: #cc2e46;
 
-  /* The tooltip, the drawer edge, and an open row are the only shadows on the
-     page. --lift is the third: it is not decoration, it is the one signal
-     that says an item is open and that the panel under it belongs to it.
+  /* The tooltip and the drawer edge are the only shadows on the page.
      --edge-shadow is the colour of the drawer's, cast sideways or upwards
      depending on which edge it enters from. */
   --shadow-pop: 0 6px 24px rgba(32, 33, 36, 0.14), 0 1px 2px rgba(32, 33, 36, 0.1);
-  --lift: 0 4px 16px rgb(0 0 0 / 6%);
   --edge-shadow: rgba(0, 0, 0, 0.06);
 
   /* A plan rather than a fact: the planned edge on the map, the environment
@@ -72,7 +69,6 @@
           Inter, Roboto, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --fs-num: 20px;      /* the stats line's numerals */
   --fs-body: 14px;
   --fs-table: 13px;
   --fs-meta: 12px;
@@ -126,7 +122,6 @@
   --dur-layout: 240ms;
   --dur-slow: 320ms;
   --dur-camera: 360ms;
-  --dur-count: 600ms;
   --stagger: 12ms;
 }
 
@@ -167,7 +162,6 @@
   --drift-ink: #9795b3;
 
   --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --lift: 0 4px 20px rgb(0 0 0 / 40%);
   --edge-shadow: rgba(0, 0, 0, 0.2);
 }
 
@@ -186,20 +180,6 @@
   - 1500px and up: the environment columns get room (table.css).
 */
 
-/*
-  The height of an open row plus its detail rows, in pixels, measured by
-  table.js. Registered rather than left as a plain custom property because a
-  registered one can be transitioned: that is what lets the single shadow
-  around an open item grow with the item instead of snapping to full size
-  while the rows are still unfolding. Inherited, because the element that sets
-  it is the row and the element that draws with it is a cell's pseudo-element.
-*/
-@property --open-h {
-  syntax: "<length>";
-  inherits: true;
-  initial-value: 0px;
-}
-
 /* One switch for every animation on the page. JS reads the same preference
    through TD.motion.enabled and skips its rAF work, so a zeroed duration is
    never the only thing standing between a reader and a moving page. */
@@ -211,7 +191,6 @@
     --dur-layout: 0ms;
     --dur-slow: 0ms;
     --dur-camera: 0ms;
-    --dur-count: 0ms;
     --stagger: 0ms;
   }
 }
