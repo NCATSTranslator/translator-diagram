@@ -576,6 +576,11 @@ test suite while visibly broken more than once, and
 carries the headless-Chromium recipe for checking it at several widths and in
 both themes.
 
+Changes reach `main` only through a pull request approved by a code owner.
+[`.github/CODEOWNERS`](.github/CODEOWNERS) lists them: gaurav maintains the
+whole repository, and anyone who wants responsibility for part of the code is
+welcome to add themselves for that path.
+
 ## Licence
 
 [MIT](LICENSE).
