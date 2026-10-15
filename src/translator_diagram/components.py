@@ -213,11 +213,13 @@ class ComponentFile:
         ordering that is the same relationship. The diagram draws them
         differently because *how* they are called differs, which is a
         rendering concern, not a flow one.
+
+        Built from `connection_ids`, so the two cannot disagree about what a
+        reference is. That puts planned references after implemented ones,
+        which no reader notices: `flow._upstream_within` makes a set of these
+        and `flow_depths` walks it sorted.
         """
-        edges = (self.connections.get("gets_results_from") or []) + (
-            self.connections.get("calls") or []
-        )
-        return [ref.lstrip("~") for ref in edges]
+        return [cid for ids in self.connection_ids().values() for cid in ids]
 
     @property
     def externals(self) -> list[tuple[str, str]]:

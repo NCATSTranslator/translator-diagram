@@ -89,6 +89,13 @@ class TestEdges:
         component = _parse(connections={"calls": ["~a"]})
         assert component.upstream == ["a"]
 
+    def test_upstream_reads_references_the_way_connection_ids_does(self):
+        # Padding around a planned reference used to keep its tilde, so it
+        # matched no component; a blank or non-string entry is no reference.
+        component = _parse(
+            connections={"calls": [" ~a ", "", 3], "gets_results_from": ["b"]})
+        assert set(component.upstream) == {"a", "b"}
+
     def test_externals_are_direction_and_name(self):
         component = _parse(connections={"externals": [
             {"direction": "in", "name": "Sources"}]})
