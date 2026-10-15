@@ -83,13 +83,17 @@ class _Probes:
 
     Methods that take `cid` default it to the component this builder was made
     for; pass one to put several components in one directory.
+
+    Nothing is written until a method asks for it, so a builder over a
+    directory something else already reads -- the `synced` fixture's, or one
+    `sync()` is about to run in -- adds files beside what is there. `build()`
+    writes the manifest and, where no registry has been written, an empty one.
     """
 
     def __init__(self, tmp_path, component_id="svc"):
         self.root = tmp_path
         self.id = component_id
         self.fetches = []
-        self.registry([])
 
     # -- the per-deployment files -------------------------------------------
 
@@ -199,6 +203,8 @@ class _Probes:
         Extra keys (`started_at`, `finished_at`, `counts`) land on the manifest
         beside `fetches`, for the tests of what the page says about the run.
         """
+        if not smartapi_path(self.root).exists():
+            self.registry([])
         self._write(manifest_path(self.root), {"fetches": self.fetches, **manifest})
         return SyncedData(self.root)
 

@@ -4,9 +4,7 @@ Drift, the "last updated" date and the release a cell is running are all
 comparisons a single cell cannot make, which is why they are decided here.
 """
 
-import json
-
-from tests.dashboard_helpers import _comp
+from tests.dashboard_helpers import _comp, _Probes
 from translator_diagram.payload_details import releases_detail
 from translator_diagram.rows import (
     _instant,
@@ -16,7 +14,6 @@ from translator_diagram.rows import (
     build_rows,
     otel_presence,
 )
-from translator_diagram.synced_data import SyncedData
 
 
 class TestDrift:
@@ -95,43 +92,37 @@ class TestDerivedDeployments:
     """Environments found by convention rather than registered anywhere."""
 
     def test_a_derived_environment_is_used_and_marked(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
-            "svc": {"ci": {"url": "https://svc.ci.transltr.io/", "location": "ITRB"}}}}))
-        path = tmp_path / "openapi" / "svc" / "ci.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps({"info": {"version": "0.8.2"}}))
-
-        cell = build_rows([_comp("svc")], SyncedData(tmp_path))[0]["environments"]["ci"]
+        synced = (
+            _Probes(tmp_path)
+            .confirmed("ci", "https://svc.ci.transltr.io/", location="ITRB")
+            .body("openapi", "ci", {"info": {"version": "0.8.2"}})
+            .build()
+        )
+        cell = build_rows([_comp("svc")], synced)[0]["environments"]["ci"]
         assert cell["deployed"] and cell["version"] == "0.8.2"
 
     def test_a_registered_environment_wins_over_a_derived_one(self, tmp_path):
         # Precedence is recorded, then registered, then derived. A derived URL
         # is a discovery; anything stated explicitly outranks it.
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+        synced = _Probes(tmp_path).registry([{
             "_id": "abc", "info": {},
             "servers": [{"url": "https://registered.ci/", "x-maturity": "staging"}],
-        }]}))
-        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
-            "svc": {"ci": {"url": "https://derived.ci/", "location": "ITRB"}}}}))
+        }]).confirmed("ci", "https://derived.ci/", location="ITRB").build()
         component = _comp("svc", identifiers={"smartapi": "abc"})
-        cell = build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert cell["url"] == "https://registered.ci/"
 
     def test_no_derived_file_is_not_an_error(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        assert SyncedData(tmp_path).derived == {}
+        assert _Probes(tmp_path).build().derived == {}
 
     def test_the_derived_urls_are_loaded(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
-            "svc": {"ci": {"url": "https://svc.ci.transltr.io/"},
-                    "test": {"url": "https://svc.test.transltr.io/"}}}}))
-        assert set(SyncedData(tmp_path).derived["svc"]) == {"ci", "test"}
+        synced = (
+            _Probes(tmp_path)
+            .confirmed("ci", "https://svc.ci.transltr.io/")
+            .confirmed("test", "https://svc.test.transltr.io/")
+            .build()
+        )
+        assert set(synced.derived["svc"]) == {"ci", "test"}
 
 
 def _release(tag, **kwargs):
@@ -225,9 +216,7 @@ class TestReleaseChips:
 
 class TestReleasesOnRows:
     def _with_releases(self, synced, entries):
-        path = synced.root / "releases" / "a" / "b.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(entries))
+        _Probes(synced.root).releases("a/b", entries)
         return synced
 
     def test_the_row_carries_the_repository_releases(self, synced, component):
@@ -246,9 +235,7 @@ class TestReleasesOnRows:
 
     def test_a_rate_limited_body_is_not_a_release_list(self, synced, component):
         # GitHub answers a throttled request with an object, not an array.
-        path = synced.root / "releases" / "a" / "b.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"message": "API rate limit exceeded"}))
+        self._with_releases(synced, {"message": "API rate limit exceeded"})
         component.repositories = [
             {"url": "https://github.com/a/b", "role": "source"}
         ]
@@ -336,9 +323,7 @@ class TestInstant:
 
 class TestRunningRelease:
     def _synced_with(self, synced, entries):
-        path = synced.root / "releases" / "a" / "b.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(entries))
+        _Probes(synced.root).releases("a/b", entries)
         return synced
 
     def test_each_environment_is_dated_by_what_it_runs(self, synced, component):
@@ -390,33 +375,21 @@ class TestOtelPresence:
             {"service": "ARAX", "seen_in": ["prod"]}]
 
     def test_it_reaches_the_row_in_ladder_order(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "otel").mkdir()
+        probes = _Probes(tmp_path)
         for env, names in (("ci", ["a"]), ("test", []), ("prod", ["a"])):
-            (tmp_path / "otel" / f"{env}.json").write_text(
-                json.dumps({"data": names}))
+            probes.otel(env, names)
         component = _comp("svc", identifiers={"otel_services": ["a"]})
-        row = build_rows([component], SyncedData(tmp_path))[0]
+        row = build_rows([component], probes.build())[0]
         assert row["otel_presence"] == [{"service": "a", "seen_in": ["ci", "prod"]}]
 
 
 class TestDerivedRejected:
     """Hosts the convention predicted and the probe did not confirm."""
 
-    def _synced(self, tmp_path, rejected):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        (tmp_path / "derived.json").write_text(
-            json.dumps({"confirmed": {}, "rejected": rejected})
-        )
-        return SyncedData(tmp_path)
-
     def test_the_rejections_reach_the_row(self, tmp_path):
         # "We looked here and this is not it", which is a different claim from
         # "this deployment is down" — there is no evidence one exists.
-        synced = self._synced(tmp_path, {"svc": {"prod": {
-            "url": "https://svc.transltr.io/", "checked_at": "2026-09-02T15:29:22+00:00"}}})
+        synced = _Probes(tmp_path).rejected("prod", "https://svc.transltr.io/").build()
         row = build_rows([_comp("svc")], synced)[0]
         assert row["derived_rejected"] == [
             {"env": "prod", "url": "https://svc.transltr.io/"}]
@@ -424,17 +397,17 @@ class TestDerivedRejected:
     def test_they_come_out_in_ladder_order(self, tmp_path):
         # dev, ci, test, prod — the order every other row of environments on
         # the page reads in, whatever order the JSON happened to be written.
-        synced = self._synced(tmp_path, {"svc": {
-            "prod": {"url": "https://svc.transltr.io/"},
-            "test": {"url": "https://svc.test.transltr.io/"},
-        }})
+        synced = (
+            _Probes(tmp_path)
+            .rejected("prod", "https://svc.transltr.io/")
+            .rejected("test", "https://svc.test.transltr.io/")
+            .build()
+        )
         row = build_rows([_comp("svc")], synced)[0]
         assert [entry["env"] for entry in row["derived_rejected"]] == ["test", "prod"]
 
     def test_no_derived_file_is_not_an_error(self, tmp_path):
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text('{"hits": []}')
-        synced = SyncedData(tmp_path)
+        synced = _Probes(tmp_path).build()
         assert synced.rejected == {}
         assert build_rows([_comp("svc")], synced)[0]["derived_rejected"] == []
 
@@ -493,25 +466,22 @@ class TestTheMetadataBlock:
         # `type` answers the same question with the registry standing in;
         # `component_type` is the file's own claim, so a reader can tell "nobody
         # wrote this down" from "the registry says KP".
-        (tmp_path / "manifest.json").write_text('{"fetches": []}')
-        (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+        synced = _Probes(tmp_path).registry([{
             "_id": "abc",
             "info": {"x-translator": {"component": "KP"}},
             "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}],
-        }]}))
+        }]).build()
         component = _comp("svc", identifiers={"smartapi": "abc"})
-        row = build_rows([component], SyncedData(tmp_path))[0]
+        row = build_rows([component], synced)[0]
         assert row["type"] == "KP"
         assert row["component_type"] is None
 
     def test_the_helm_block_and_the_releases_reach_the_row(self, synced, component):
-        chart = synced.root / "helm" / "my-chart"
-        chart.mkdir(parents=True)
-        (chart / "Chart.yaml").write_text("name: my-chart\nversion: 0.5.2\nappVersion: 1.16.0\n")
-        (chart / "values.yaml").write_text("resources:\n  requests:\n    cpu: 800m\n")
-        path = synced.root / "releases" / "a" / "b.json"
-        path.parent.mkdir(parents=True)
-        path.write_text(json.dumps([_release("v2.0.0", body="Notes <b>here</b>")]))
+        _Probes(synced.root).chart(
+            "my-chart",
+            chart="name: my-chart\nversion: 0.5.2\nappVersion: 1.16.0\n",
+            values="resources:\n  requests:\n    cpu: 800m\n",
+        ).releases("a/b", [_release("v2.0.0", body="Notes <b>here</b>")])
         component.identifiers = {"smartapi": "abc", "helm_chart": "my-chart"}
         component.repositories = [{"url": "https://github.com/a/b", "role": "source"}]
         row = build_rows([component], synced)[0]
@@ -526,8 +496,7 @@ class TestTheMetadataBlock:
         # used to get the first one.
         base = "https://github.com/helxplatform/translator-devops/tree/develop/helm"
         for chart in ("web", "loader"):
-            (synced.root / "helm" / chart).mkdir(parents=True)
-            (synced.root / "helm" / chart / "Chart.yaml").write_text(f"name: {chart}\n")
+            _Probes(synced.root).chart(chart, chart=f"name: {chart}\n")
         component.identifiers = {"helm_chart": ["web", "loader"]}
         component.repositories = [
             {"url": f"{base}/web", "role": "helm-chart"},
@@ -538,8 +507,7 @@ class TestTheMetadataBlock:
             "web": f"{base}/web", "loader": f"{base}/loader/"}
 
     def test_one_chart_keeps_its_one_link_whatever_it_ends_in(self, synced, component):
-        (synced.root / "helm" / "shepherd").mkdir(parents=True)
-        (synced.root / "helm" / "shepherd" / "Chart.yaml").write_text("name: shepherd\n")
+        _Probes(synced.root).chart("shepherd", chart="name: shepherd\n")
         component.identifiers = {"helm_chart": "shepherd"}
         component.repositories = [
             {"url": "https://github.com/a/deploy/tree/main/charts", "role": "helm-chart"}]
