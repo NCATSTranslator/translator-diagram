@@ -98,10 +98,15 @@ test("the dot sits on the row that is the actual evidence", () => {
   assert.deepEqual(probeEvidence({}), { row: null, status: null });
 });
 
-test("the last-updated note escapes its label and tag once", () => {
+test("the last-updated note escapes its date, label and tag once", (t) => {
   // Escaped twice, an `&` showed as `&amp;` on the page (#87).
+  const saved = DRAWER_TD.DATA;
+  t.after(() => { DRAWER_TD.DATA = saved; });
   DRAWER_TD.DATA = { updated_labels: { release: "Release & tag" } };
-  const html = updatedHtml({ last_updated: { source: "release", tag: "v1<2", date: "2026-01-02" } });
-  assert.match(html, /<span class="dw-note">Release &amp; tag · v1&lt;2<\/span>/);
-  assert.doesNotMatch(html, /&amp;(amp|lt);/);
+  const html = updatedHtml({ last_updated: { source: "release", tag: "v1<2", date: "2026<01" } });
+  assert.match(html, /^2026&lt;01 <span class="dw-note">Release &amp; tag · v1&lt;2<\/span>$/);
+  // A source with no label falls back to itself, and is escaped the same way.
+  const fallback = updatedHtml({ last_updated: { source: "a&b" } });
+  assert.match(fallback, /<span class="dw-note">a&amp;b<\/span>/);
+  assert.doesNotMatch(html + fallback, /&amp;(amp|lt);/);
 });
