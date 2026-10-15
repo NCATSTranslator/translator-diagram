@@ -48,13 +48,6 @@
     return node;
   }
 
-  function html(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const esc = (value) => TD.fmt.esc(value);
 
@@ -106,7 +99,6 @@
   const nodeEls = new Map();
   const extEls = new Map();
   const edgeEls = [];
-  const rowById = new Map();
   const nodeById = new Map();
   const neighbours = new Map();
   const edgesOf = new Map();
@@ -189,7 +181,7 @@
     return bad ? "bad" : ok ? "ok" : "";
   }
 
-  const displayName = (id) => ((rowById.get(id) || {}).name || id);
+  const displayName = (id) => ((TD.row.byId(id) || {}).name || id);
 
   /* --- Defs ----------------------------------------------------------------- */
 
@@ -235,7 +227,7 @@
   /* --- Node ----------------------------------------------------------------- */
 
   function buildNode(node, gradientId) {
-    const row = rowById.get(node.id) || { id: node.id, name: node.id };
+    const row = TD.row.byId(node.id) || { id: node.id, name: node.id };
     const group = svg("g", {
       class: node.kind === "rail" ? "mp-node mp-rail-node" : "mp-node",
       transform: `translate(${node.x} ${node.y})`,
@@ -343,13 +335,11 @@
     nodeEls.clear();
     extEls.clear();
     edgeEls.length = 0;
-    rowById.clear();
     nodeById.clear();
     neighbours.clear();
     edgesOf.clear();
 
     const data = TD.DATA || {};
-    (data.rows || []).forEach((row) => rowById.set(row.id, row));
 
     scene = TD.layout.compute({
       stages: data.stages || [],
@@ -368,16 +358,16 @@
       console.warn(`TD.map: ${scene.violations.length} edge(s) cross a node: ${names}`);
     }
 
-    const pills = html("div", "mp-pills");
+    const pills = TD.ui.el("div", "mp-pills");
     scene.lanes.forEach((lane) => {
       if (!lane.count) return;
-      const pill = html("span", "mp-pill");
+      const pill = TD.ui.el("span", "mp-pill");
       pill.innerHTML = `<b>${esc(lane.step)}</b> ${esc(lane.title)}`;
       pills.append(pill);
     });
     container.append(pills);
 
-    box = html("div", "mp");
+    box = TD.ui.el("div", "mp");
     container.append(box);
 
     root = svg("svg", {
@@ -494,7 +484,7 @@
     box.append(buildLegend());
     box.append(buildToolbar());
     box.append(buildMinimap());
-    toast = html("div", "mp-toast");
+    toast = TD.ui.el("div", "mp-toast");
     toast.hidden = true;
     box.append(toast);
 
@@ -564,9 +554,9 @@
   };
 
   function buildToolbar() {
-    const bar = html("div", "mp-toolbar");
+    const bar = TD.ui.el("div", "mp-toolbar");
     const button = (label, title, action, wide) => {
-      const el = html("button", `mp-tool${wide ? " wide" : ""}`);
+      const el = TD.ui.el("button", `mp-tool${wide ? " wide" : ""}`);
       el.type = "button";
       el.title = title;
       el.setAttribute("aria-label", title);
@@ -578,21 +568,21 @@
     button("−", "Zoom out (−)", () => zoomBy(1 / 1.3));
     button("+", "Zoom in (+)", () => zoomBy(1.3));
     button(ICON.fit, "Fit to view (f)", () => fit(true));
-    bar.append(html("span", "mp-toolsep"));
+    bar.append(TD.ui.el("span", "mp-toolsep"));
     const toggle = button(ICON.legend, "Legend", () => {
       legend.hidden = !legend.hidden;
       toggle.classList.toggle("on", !legend.hidden);
     });
     toggle.classList.add("on");
-    bar.append(html("span", "mp-toolsep"));
+    bar.append(TD.ui.el("span", "mp-toolsep"));
     button("SVG", "Download the map as SVG", exportSvg, true);
     button("PNG", "Download the map as PNG at 2×", exportPng, true);
     return bar;
   }
 
   function buildLegend() {
-    legend = html("div", "mp-legend");
-    legend.append(html("h3", null, "Edges"));
+    legend = TD.ui.el("div", "mp-legend");
+    legend.append(TD.ui.el("h3", null, "Edges"));
     const active = activeKinds();
     KINDS.forEach((kind) => {
       if (!available(kind.key)) return;
@@ -608,7 +598,7 @@
       g.append(svg("path", { class: "mp-line", d: "M1 4 H 21" }));
       swatch.append(g);
       label.append(swatch);
-      label.append(html("span", null, kind.label));
+      label.append(TD.ui.el("span", null, kind.label));
       legend.append(label);
     });
     return legend;
@@ -1014,8 +1004,8 @@
     edgeEls.forEach(({ el, edge, kind }) => {
       const on = kinds.has(kind);
       el.style.display = on ? "" : "none";
-      const dim = (rowById.has(edge.from) && !visible.has(edge.from))
-        || (rowById.has(edge.to) && !visible.has(edge.to));
+      const dim = (TD.row.byId(edge.from) && !visible.has(edge.from))
+        || (TD.row.byId(edge.to) && !visible.has(edge.to));
       el.classList.toggle("out", dim);
     });
     extEls.forEach((el, name) => {
@@ -1100,8 +1090,8 @@
     line("Called by", buckets.calledBy);
     if (buckets.extIn.length || buckets.extOut.length) {
       const parts = [];
-      if (buckets.extIn.length) parts.push(`◀ ${nameList(buckets.extIn)}`);
-      if (buckets.extOut.length) parts.push(`▶ ${nameList(buckets.extOut)}`);
+      if (buckets.extIn.length) parts.push(`${TD.row.arrow("in")} ${nameList(buckets.extIn)}`);
+      if (buckets.extOut.length) parts.push(`${TD.row.arrow("out")} ${nameList(buckets.extOut)}`);
       lines.push(`<div class="mp-tip-line"><span class="k">Externals</span> ${
         parts.join(" · ")}</div>`);
     }
@@ -1112,16 +1102,16 @@
   }
 
   function nodeTip(id) {
-    const row = rowById.get(id);
+    const row = TD.row.byId(id);
     if (!row) return "";
     const version = versionOf(row);
     const head = [
       `<span class="title">${esc(row.name || id)}</span>`,
       "<dl>",
-      `<dt>Owner</dt><dd>${esc(row.owner || "—")}</dd>`,
+      `<dt>Owner</dt><dd>${row.owner ? esc(row.owner) : TD.fmt.DASH}</dd>`,
     ];
     if (row.type) head.push(`<dt>Type</dt><dd>${esc(row.type)}</dd>`);
-    head.push(`<dt>Version</dt><dd>${version ? esc(version) : "—"}${
+    head.push(`<dt>Version</dt><dd>${version ? esc(version) : TD.fmt.DASH}${
       TD.table.hasDrift(row) ? ' <span class="mp-neq-tip">≠</span>' : ""}</dd>`);
     head.push("</dl>");
     return head.join("") + connectionLines(id);

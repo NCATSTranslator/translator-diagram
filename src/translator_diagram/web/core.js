@@ -28,6 +28,7 @@
      cache — where half the keys below are simply absent — still boots. */
   TD.boot = function boot(payload) {
     TD.DATA = payload || {};
+    rowIndex = null;
     TD.ENVS = Array.isArray(TD.DATA.environments) && TD.DATA.environments.length
       ? TD.DATA.environments
       : DEFAULT_ENVS;
@@ -185,6 +186,46 @@
   }
 
   TD.owner = { style: ownerStyle, metal: ownerMetal, coin: ownerCoin };
+
+  /* --- Rows --------------------------------------------------------------- */
+
+  /* What every view says about a row the same way. The table, the drawer and
+     the map each used to carry their own copy of these, and a label that
+     drifts between two views reads as two different facts. */
+
+  let rowIndex = null;
+
+  /* The row with this id, or null. Indexed once per payload rather than
+     searched: the tooltips, the drawer and the map all look rows up by id,
+     some of them on every hover. */
+  function rowById(id) {
+    if (!rowIndex) {
+      rowIndex = new Map();
+      for (const row of (TD.DATA || {}).rows || []) rowIndex.set(row.id, row);
+    }
+    return rowIndex.get(id) || null;
+  }
+
+  /* The owner's coin and name, as a chip. */
+  const ownerLabel = (name) =>
+    `<span class="ownercell">${ownerCoin(name)}<span>${esc(name)}</span></span>`;
+
+  /* `owner/name` for a GitHub repository URL; anything else as it is. */
+  const repoLabel = (url) => String(url ?? "").replace("https://github.com/", "");
+
+  /* The payload's word for where a `last_updated` date came from. */
+  const updatedLabel = (updated) =>
+    ((TD.DATA || {}).updated_labels || {})[updated.source] || updated.source;
+
+  /* An external's direction as the glyph every view draws it with. */
+  const arrow = (direction) => (direction === "in" ? "◀" : "▶");
+
+  /* "up", "down", or "" for a cell nothing probed: three states, because a
+     host that was never contacted is not a host that failed. */
+  const reach = (cell) =>
+    (typeof (cell || {}).reachable === "boolean" ? (cell.reachable ? "up" : "down") : "");
+
+  TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach };
 
   /* --- Sorting ----------------------------------------------------------- */
 

@@ -87,6 +87,14 @@
      goes where the version would have been, in the payload's own words, and
      the green dot stays in front of it when the host itself answered, because
      "up · no version endpoint" is a claim about a host that is up. */
+  /* The dot, with its word for a reader who is not looking at it. */
+  function reachDot(cell) {
+    const state = TD.row.reach(cell);
+    if (!state) return "";
+    return `<span class="dot ${state}" aria-label="${
+      state === "up" ? "reachable" : "not reachable"}"></span>`;
+  }
+
   function envCell(row, env) {
     const cell = cells(row)[env];
     if (!cell) return `<td class="env absent">${DASH()}</td>`;
@@ -97,10 +105,7 @@
     // who is not looking at one. A child span would extend the document: abs
     // positioning inside a table cell does not stay inside the scrollport.
     const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
-    const dot = typeof cell.reachable === "boolean"
-      ? `<span class="dot ${cell.reachable ? "up" : "down"}" aria-label="${
-          cell.reachable ? "reachable" : "not reachable"}"></span>`
-      : "";
+    const dot = reachDot(cell);
     // Weaker than the rest of the row and it says so: this environment was
     // read off a server description in the registry, not recorded anywhere.
     const inferred = cell.inferred
@@ -112,9 +117,7 @@
       const why = cell.reason
         ? `<span class="why">${esc(cell.reason)}</span>`
         : `<span class="version dash">—</span>`;
-      const up = cell.reachable === true
-        ? '<span class="dot up" aria-label="reachable"></span>'
-        : "";
+      const up = cell.reachable === true ? reachDot(cell) : "";
       return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
         up}${why}</span>${inferred}</td>`;
     }
@@ -149,7 +152,7 @@
 
   function repoCell(row) {
     if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
-    const label = row.repository.replace("https://github.com/", "");
+    const label = TD.row.repoLabel(row.repository);
     const chips = releaseChips(row);
     return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${esc(label)}</a>${
       chips ? `<span class="releases">${chips}</span>` : ""}</td>`;
@@ -160,7 +163,7 @@
     // Null for half the components — no releases, and in no registry. A dash
     // is the honest reading, not a failure.
     if (!updated) return `<td class="updated meta drop-sm">${DASH()}</td>`;
-    const label = (TD.DATA.updated_labels || {})[updated.source] || updated.source;
+    const label = TD.row.updatedLabel(updated);
     return `<td class="updated meta drop-sm" data-tip="upd" data-id="${esc(row.id)}"
       ><span class="age">${esc(TD.fmt.relativeAge(updated.at))}</span>
       <span class="src" data-src="${esc(updated.source)}">${esc(label)}</span></td>`;
@@ -169,7 +172,7 @@
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
-        `<span class="chip">${external.direction === "in" ? "◀" : "▶"} ${esc(external.name)}</span>`)
+        `<span class="chip">${TD.row.arrow(external.direction)} ${esc(external.name)}</span>`)
       .join("");
     const open = (state().expand || []).indexOf(row.id) >= 0;
     return `<td><span class="cnamewrap"><button type="button" class="chev"
@@ -181,8 +184,7 @@
   }
 
   function ownerCell(row) {
-    return `<td class="drop-xs"><span class="ownercell">${TD.owner.coin(row.owner)}<span>${
-      esc(row.owner)}</span></span></td>`;
+    return `<td class="drop-xs">${TD.row.ownerLabel(row.owner)}</td>`;
   }
 
   /* --- Columns -------------------------------------------------------------- */
@@ -195,7 +197,7 @@
     },
     {
       key: "repo", label: "Repository", drop: "drop-md", cell: repoCell,
-      value: (row) => (row.repository || "").replace("https://github.com/", ""),
+      value: (row) => TD.row.repoLabel(row.repository),
     },
     {
       key: "updated", label: "Last updated", drop: "drop-sm", cell: updatedCell,
@@ -480,7 +482,7 @@
 
   /* --- Tooltips -------------------------------------------------------------- */
 
-  const rowById = (id) => (TD.DATA.rows || []).find((row) => row.id === id);
+  const rowById = (id) => TD.row.byId(id);
 
   const SOURCE_NOTES = {
     openapi: "Read live from the deployment's own OpenAPI document.",

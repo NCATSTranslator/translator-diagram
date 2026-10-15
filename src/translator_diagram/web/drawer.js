@@ -52,7 +52,7 @@
   const data = () => TD.DATA || {};
   const envs = () => (Array.isArray(TD.ENVS) && TD.ENVS.length ? TD.ENVS : []);
   const rows = () => data().rows || [];
-  const rowById = (id) => rows().find((row) => row.id === id) || null;
+  const rowById = (id) => TD.row.byId(id);
 
   const list = (value) => (Array.isArray(value) ? value.filter((v) => v != null) : []);
   const filled = (value) => value !== null && value !== undefined && value !== "";
@@ -251,7 +251,7 @@
     const repos = list(row.repositories);
     if (!repos.length) return row.repository ? stack([ext(row.repository)]) : "";
     return stack(repos.map((repo) => {
-      const label = String(repo.url || "").replace("https://github.com/", "");
+      const label = TD.row.repoLabel(repo.url);
       const bits = [repo.role, repo.visibility && repo.visibility !== "public" ? repo.visibility : ""]
         .filter(filled).join(" · ");
       return `${ext(repo.url, label)} ${bits ? note(bits) : ""}`;
@@ -290,7 +290,7 @@
   function updatedHtml(row) {
     const updated = row.last_updated;
     if (!updated) return "";
-    const label = (data().updated_labels || {})[updated.source] || updated.source;
+    const label = TD.row.updatedLabel(updated);
     const bits = [label, updated.tag].filter(filled).map(esc).join(" · ");
     return `${esc(TD.fmt.relativeAge(updated.at) || updated.date || "")} ${
       bits ? note(bits) : ""}`;
@@ -366,8 +366,7 @@
       drow("Layer", row.layer ? esc(row.layer) : "", true),
       drow("Stage", stage ? `${stage}${row.step_description
         ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
-      drow("Owner", row.owner
-        ? `<span class="ownercell">${TD.owner.coin(row.owner)}<span>${esc(row.owner)}</span></span>` : "", true),
+      drow("Owner", row.owner ? TD.row.ownerLabel(row.owner) : "", true),
       drow("Part of", row.part_of ? esc(row.part_of) : ""),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
         ? `${itrb.app ? mono(itrb.app) : DASH}${itrb.group ? ` ${note(`group ${itrb.group}`)}` : ""}` : ""),
@@ -789,7 +788,7 @@
     const externals = list(row.externals);
     const externalsHtml = externals.length
       ? `<div class="dw-conns">${externals.map((entry) =>
-        `<span class="dw-conn static">${entry.direction === "in" ? "◀" : "▶"}
+        `<span class="dw-conn static">${TD.row.arrow(entry.direction)}
           <span class="dw-connname">${esc(entry.name)}</span></span>`).join("")}</div>`
       : muted("None recorded.");
 

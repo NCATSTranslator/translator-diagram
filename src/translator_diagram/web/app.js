@@ -219,8 +219,7 @@
       options: [{ value: "", label: "All owners" }, { separator: true }].concat(
         uniqueOwners().map((owner) => ({
           value: owner, label: owner,
-          render: () => `<span class="ownercell">${TD.owner.coin(owner)}<span>${
-            esc(owner)}</span></span>`,
+          render: () => TD.row.ownerLabel(owner),
         }))),
       onChange: (value) => TD.commit({ owner: value }),
     });
