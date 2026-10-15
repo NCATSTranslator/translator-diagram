@@ -144,6 +144,21 @@ code {
 .finding p + p { margin-top: var(--sp-1); }
 .finding strong { font-variant-numeric: tabular-nums; font-weight: 600; }
 
+/* Only on a full build. Shaped like the finding below it so it reads as part
+   of the page rather than an error, and edged in --bad, the one warm colour the
+   page keeps, so it is not mistaken for the finding. */
+.fullbuild {
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--bad);
+  background: var(--raised);
+  max-width: 92ch;
+  font-size: var(--fs-body);
+}
+/* `build-dashboard` breaks at its hyphen otherwise, and a command split
+   across two lines reads as two words. */
+.fullbuild code { white-space: nowrap; }
+
 /* One typographic line. Four tiles said the same thing and needed four boxes
    to do it; four hairlines between the four numbers then said it again. The
    separator is 32px of air. */

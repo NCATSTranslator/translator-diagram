@@ -144,6 +144,13 @@ triggers or retries should state what it adds per run.
   names on stderr any file in its output directory that it did not write, since
   a preview serves it beside the page. Who the full build is for is still
   [#34](https://github.com/NCATSTranslator/translator-diagram/issues/34).
+- **A full build says so on the page.** Its payload carries
+  `full_build: true`, and the page then opens with a notice that nothing was
+  withheld and prefixes its tab title with "Full build", so a copy that is
+  passed on announces itself. The key is explicit rather than read off the
+  missing `redacted` block, which an empty policy also leaves out. A full
+  build made before the key existed shows nothing, and is replaced only by
+  the next plain build into the same directory.
 - **The agent notes stay off the page.** `src/translator_diagram/web/` holds
   `AGENTS.md`, with screenshot recipes and internal decisions, beside the files
   the page inlines. Tests in `tests/test_dashboard.py` and

@@ -160,6 +160,18 @@
 
   /* --- Shell ------------------------------------------------------------------ */
 
+  /* A full build (--include-private) looks exactly like the published page, so
+     it says what it is: here, and in the tab title, which is what is left to
+     read when the file has been passed on. Strictly `true`, so a payload from
+     before the key existed shows nothing rather than guessing. */
+  function fullBuildNote() {
+    if (DATA.full_build !== true) return "";
+    document.title = `Full build · ${document.title}`;
+    return `<p class="fullbuild" role="note"><strong>Full build: nothing withheld.</strong>
+      This page skipped <code>config/privacy.yaml</code>. Do not publish or pass it
+      on; a plain <code>build-dashboard</code> makes the page to share.</p>`;
+  }
+
   function shell() {
     const synced = DATA.synced_at
       ? `synced ${esc(TD.fmt.since(DATA.synced_at))}` : "never synced";
@@ -171,6 +183,7 @@
           >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
       </div>
       <main class="page">
+        ${fullBuildNote()}
         <div class="finding">
           <p>${findingSentence()}</p>
           <p>${driftSentence()}</p>

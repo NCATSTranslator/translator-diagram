@@ -291,7 +291,8 @@ gh run download "$id" --name dashboard --dir data/pages-preview
 names — today the tracing console, the internal test rig, and the container
 image tags that would turn the version grid into a CVE-matching inventory.
 `--include-private` builds the full picture for local use, into
-`data/dashboard-private/` rather than over the publishable build. Helm chart
+`data/dashboard-private/` rather than over the publishable build, and the page
+it makes says it is a full build at the top and in its tab title. Helm chart
 `appVersion` and other chart metadata stay in the published build; only image
 tags are redacted.
 
