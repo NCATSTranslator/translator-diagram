@@ -1,8 +1,10 @@
 """Assembling the payload and rendering the page, from a fixture directory."""
 
 import base64
+import inspect
 import json
 import re
+from html import unescape
 from importlib import resources
 from pathlib import Path
 
@@ -204,6 +206,22 @@ class TestOtelTile:
         assert payload["otel_service_total"] == 1
 
 
+def _squash(text):
+    """Runs of whitespace as one space, as a browser shows them."""
+    return " ".join(text.split())
+
+
+def _plain(markdown_line):
+    """A line of Markdown as the text it renders to, near enough to find it
+    on a page: no list, heading or quote marker, no code ticks or bold, and a
+    link reduced to its text. Single-star emphasis is left alone, since
+    `web/*.css` is as common in these notes as *emphasis*; a line it trips
+    up is one line, and a whole file leaking has plenty of others."""
+    line = re.sub(r"^(?:[-*+>]|#+|\d+\.)\s+", "", markdown_line)
+    line = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", line)
+    return _squash(line.replace("`", "").replace("**", ""))
+
+
 class TestRendering:
     def test_every_component_appears(self, component, synced):
         html = render_html(build_payload([component], synced))
@@ -268,7 +286,11 @@ class TestRendering:
         someone switches to globbing the directory.
 
         It checks every reasonably long line of each unshipped file, not the
-        file name, because a page that inlined the file would not name it."""
+        file name, because a page that inlined the file would not name it:
+        raw, and as the text it would render to, so escaping it or rendering
+        it from Markdown does not slip past. A line that also appears in the
+        code the page ships is skipped, since quoting code is what the notes
+        are for."""
         # The same lookup the page's own loader uses, so this lists the files
         # a build reads even when the package is installed rather than checked
         # out.
@@ -288,15 +310,31 @@ class TestRendering:
             "web/AGENTS.md is gone or is now inlined: this test checks nothing"
         )
         html = render_html(build_payload([component], synced))
+        # Notes rendered from Markdown, or escaped, would not match their own
+        # source, so each line is also looked for as the text a reader sees.
+        page_text = _squash(unescape(re.sub(r"<[^>]*>", "", html)))
+        # The notes may quote the code they describe, and a line of that code
+        # reaching the page is no leak.
+        source = "\n".join(
+            [inspect.getsource(dashboard)]
+            + [(web / name).read_text(encoding="utf-8")
+               for name in (*dashboard.CSS_FILES, *dashboard.JS_FILES)]
+        )
+        source_text = _squash(source)
         compared = 0
         for path in unshipped:
             # Bytes, not text: an unshipped binary must not crash the check.
             text = path.read_bytes().decode("utf-8", errors="replace")
             for line in text.splitlines():
                 line = line.strip()
-                if len(line) >= 40:
-                    compared += 1
-                    assert line not in html, f"{path.name} reached the page: {line!r}"
+                plain = _plain(line)
+                if len(plain) < 40 or line in source or plain in source_text:
+                    continue
+                compared += 1
+                assert line not in html, f"{path.name} reached the page: {line!r}"
+                assert plain not in page_text, (
+                    f"{path.name} reached the page as text: {plain!r}"
+                )
         # AGENTS.md being listed is not enough: cut to a stub, or rewrapped
         # into short lines, it would leave the loop above nothing to compare.
         assert compared, "no line of web/AGENTS.md is long enough to check"
