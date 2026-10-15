@@ -10,24 +10,22 @@ Only the fixtures live here. The plain builders are in `dashboard_helpers.py`
 and imported explicitly, the way `helpers.py` already is.
 """
 
-import json
-
 import pytest
 
-from tests.dashboard_helpers import _comp
-from translator_diagram.synced_data import SyncedData
+from tests.dashboard_helpers import _comp, _Probes
 
 
 @pytest.fixture
 def synced(tmp_path):
     """A minimal sync directory: one component, four environments."""
-    (tmp_path / "manifest.json").write_text(json.dumps({
-        "started_at": "2026-08-31T00:00:00+00:00",
-        "finished_at": "2026-08-31T00:01:00+00:00",
-        "counts": {"attempted": 5, "succeeded": 4, "cached": 0, "failed": 1},
-        "fetches": [{"path": "openapi/svc/ci.json", "status": 200, "url": "https://svc.ci/"}],
-    }))
-    (tmp_path / "smartapi.json").write_text(json.dumps({"hits": [{
+    def openapi(version):
+        return {"info": {
+            "version": version,
+            "x-trapi": {"version": "1.6.0"},
+            "x-translator": {"component": "KP", "biolink-version": "4.2.5"},
+        }}
+
+    probes = _Probes(tmp_path).registry([{
         "_id": "abc",
         "info": {"version": "9.9.9", "x-trapi": {"version": "1.4.0"}},
         "_status": {"uptime_status": "pass"},
@@ -36,16 +34,17 @@ def synced(tmp_path):
             {"url": "https://svc.test/", "x-maturity": "testing"},
             {"url": "https://svc/", "x-maturity": "production"},
         ],
-    }]}))
-    for env, version in (("ci", "2.0.0"), ("test", "2.0.0"), ("prod", "1.0.0")):
-        path = tmp_path / "openapi" / "svc" / f"{env}.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"info": {
-            "version": version,
-            "x-trapi": {"version": "1.6.0"},
-            "x-translator": {"component": "KP", "biolink-version": "4.2.5"},
-        }}))
-    return SyncedData(tmp_path)
+    }])
+    # ci was fetched this run; test and prod are bodies an earlier run left,
+    # with no manifest entry, which `SyncedData._endpoint_body` still reads.
+    probes.document("openapi", "ci", 200, openapi("2.0.0"), url="https://svc.ci/")
+    probes.body("openapi", "test", openapi("2.0.0"))
+    probes.body("openapi", "prod", openapi("1.0.0"))
+    return probes.build(
+        started_at="2026-08-31T00:00:00+00:00",
+        finished_at="2026-08-31T00:01:00+00:00",
+        counts={"attempted": 5, "succeeded": 4, "cached": 0, "failed": 1},
+    )
 
 
 @pytest.fixture
