@@ -77,6 +77,41 @@ class TestVersionSourceChain:
         assert cell["version"] is None
         assert cell["data_release"] == "babel 2025sep1"
 
+    def test_a_plain_version_key_is_the_software_version(self, tmp_path):
+        # NodeNorm ES's body, as served: `version` spelled plainly, and the
+        # Biolink Model Toolkit it loads reported under a `*_version` key.
+        # Without the plain key the toolkit would be badged as the software.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "status": "running",
+            "version": "1.0.0",
+            "babel_version": "2025sep1",
+            "biolink_model_toolkit_version": "v4.4.3",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.0.0", "status")
+        assert cell["data_release"] == "babel 2025sep1"
+
+    def test_the_toolkit_version_is_not_the_software_version(self, tmp_path):
+        # NameRes ES's body has no `version` at all, and a Babel of null.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "status": "ok",
+            "babel_version": None,
+            "biolink_model_toolkit_version": "v4.2.6-rc5",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert cell["version"] is None
+        assert cell["data_release"] is None
+
     def test_the_helm_chart_is_the_last_resort(self, tmp_path):
         # Tier four, and the only tier that describes what *should* be
         # deployed rather than what is. jaeger reaches it: no OpenAPI, no

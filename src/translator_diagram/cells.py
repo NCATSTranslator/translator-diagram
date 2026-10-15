@@ -84,9 +84,15 @@ DOCUMENT_ERROR_STATUSES = frozenset({403}) | frozenset(range(500, 600))
 # version — at which point the first `*_version` key would become the
 # component's version, badged `status`, tinted for drift against its
 # neighbours, and matched against the repository's releases.
-NOT_SOFTWARE_VERSIONS = frozenset(
-    {"babel_version", "biolink_version", "biolink_model_version", "trapi_version"}
-)
+NOT_SOFTWARE_VERSIONS = frozenset({
+    "babel_version",
+    "biolink_version",
+    "biolink_model_version",
+    # NodeNorm ES and NameRes ES report the Biolink Model Toolkit they load,
+    # a library pinned to a model release, not the service's own version.
+    "biolink_model_toolkit_version",
+    "trapi_version",
+})
 
 
 # --- What one fetched document says ----------------------------------------
@@ -188,12 +194,15 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     separate axis from the software version and which nothing else exposes at
     runtime.
 
-    Key order is the tie-break when a body reports several, which is why the
-    exclusions matter: a document that lists its Biolink version before its
-    own would otherwise have that reported as the software it is running.
+    A plain `version` key wins outright: it is the most literal spelling,
+    and NodeNorm's bodies use it. Among the `*_version` keys, order is the
+    tie-break when a body reports several, which is why the exclusions
+    matter: a document that lists its Biolink version before its own would
+    otherwise have that reported as the software it is running.
     """
     if not document:
         return {}
+    plain = document.get("version")
     versions = {
         key: value
         for key, value in document.items()
@@ -207,7 +216,7 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
         release.append(f"biolink {biolink['tag']}")
     message = document.get("message")
     return {
-        "version": next(
+        "version": plain if isinstance(plain, str) else next(
             (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
         ),
         "data_release": " · ".join(release) or None,
