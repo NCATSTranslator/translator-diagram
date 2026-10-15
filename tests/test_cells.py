@@ -572,6 +572,15 @@ class TestLiveOpenapiFacts:
             "title": "ARAX",
         }
 
+    def test_operations_are_trimmed_names_from_a_list_only(self):
+        # Read through `strings`: blanks and padding are not operation names,
+        # and a mapping is not a list of them, however its keys read.
+        def operations(value):
+            return _live_openapi_facts(
+                {"info": {"x-trapi": {"operations": value}}})["operations"]
+        assert operations([" lookup ", "", "  ", 3]) == ["lookup"]
+        assert operations({"lookup": {}}) == []
+
     def test_no_document_at_all_is_empty_not_an_error(self):
         assert _live_openapi_facts(None) == {
             "operations": [], "asyncquery": None, "paths_count": None, "title": None}

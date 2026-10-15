@@ -110,6 +110,17 @@ class TestChartCommit:
         )
         assert synced.chart_commit("shepherd")["subject"] == "bump chart"
 
+    def test_blank_fields_are_no_fact(self, tmp_path):
+        # Read through `text`, so blank is absent: a message opening on a blank
+        # line still has a subject, and an empty url is no link rather than "".
+        synced = self._synced(tmp_path, [self._commit(
+            message="\n  Fix the probe  \nbody", html_url="", sha="  ",
+        )])
+        facts = synced.chart_commit("shepherd")
+        assert facts["subject"] == "Fix the probe"
+        assert facts["url"] is None
+        assert facts["sha"] is None
+
     def test_an_empty_array_is_no_commit(self, tmp_path):
         assert self._synced(tmp_path, []).chart_commit("shepherd") is None
 
