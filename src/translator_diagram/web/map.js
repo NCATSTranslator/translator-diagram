@@ -1053,41 +1053,48 @@
     return shown.join(", ") + (more > 0 ? `, +${more} more` : "");
   }
 
-  function connectionLines(id) {
-    const buckets = {
+  /* One component's edges sorted into the four recorded directions plus the
+     externals, each entry `{name, planned}` and each bucket in name order.
+     `nameOf` turns an id into the name shown. */
+  function buckets(id, edges, nameOf) {
+    const found = {
       from: [], to: [], calls: [], calledBy: [], extIn: [], extOut: [],
     };
-    (edgesOf.get(id) || []).forEach(({ edge }) => {
+    edges.forEach((edge) => {
       const planned = !!edge.planned;
       if (edge.kind === "results") {
-        if (edge.to === id) buckets.from.push({ name: displayName(edge.from), planned });
-        else buckets.to.push({ name: displayName(edge.to), planned });
+        if (edge.to === id) found.from.push({ name: nameOf(edge.from), planned });
+        else found.to.push({ name: nameOf(edge.to), planned });
       } else if (edge.kind === "calls") {
-        if (edge.from === id) buckets.calls.push({ name: displayName(edge.to), planned });
-        else buckets.calledBy.push({ name: displayName(edge.from), planned });
+        if (edge.from === id) found.calls.push({ name: nameOf(edge.to), planned });
+        else found.calledBy.push({ name: nameOf(edge.from), planned });
       } else if (edge.kind === "external_in" && edge.to === id) {
-        buckets.extIn.push({ name: edge.from, planned });
+        found.extIn.push({ name: edge.from, planned });
       } else if (edge.kind === "external_out" && edge.from === id) {
-        buckets.extOut.push({ name: edge.to, planned });
+        found.extOut.push({ name: edge.to, planned });
       }
     });
     const byName = (a, b) => a.name.localeCompare(b.name);
-    Object.keys(buckets).forEach((key) => buckets[key].sort(byName));
+    Object.keys(found).forEach((key) => found[key].sort(byName));
+    return found;
+  }
 
+  function connectionLines(id) {
+    const found = buckets(id, (edgesOf.get(id) || []).map((record) => record.edge), displayName);
     const lines = [];
     const line = (label, entries) => {
       if (!entries.length) return;
       lines.push(`<div class="mp-tip-line"><span class="k">${label}</span> ${
         nameList(entries)}</div>`);
     };
-    line("Gets results from", buckets.from);
-    line("Provides results to", buckets.to);
-    line("Calls", buckets.calls);
-    line("Called by", buckets.calledBy);
-    if (buckets.extIn.length || buckets.extOut.length) {
+    line("Gets results from", found.from);
+    line("Provides results to", found.to);
+    line("Calls", found.calls);
+    line("Called by", found.calledBy);
+    if (found.extIn.length || found.extOut.length) {
       const parts = [];
-      if (buckets.extIn.length) parts.push(`${TD.row.arrow("in")} ${nameList(buckets.extIn)}`);
-      if (buckets.extOut.length) parts.push(`${TD.row.arrow("out")} ${nameList(buckets.extOut)}`);
+      if (found.extIn.length) parts.push(`${TD.row.arrow("in")} ${nameList(found.extIn)}`);
+      if (found.extOut.length) parts.push(`${TD.row.arrow("out")} ${nameList(found.extOut)}`);
       lines.push(`<div class="mp-tip-line"><span class="k">Externals</span> ${
         parts.join(" · ")}</div>`);
     }
@@ -1305,4 +1312,9 @@
   };
 
   map.nodeNameLimit = nodeNameLimit;
+  // Pure, for tests/web/map.test.js.
+  map.kindOf = kindOf;
+  map.versionOf = versionOf;
+  map.reachability = reachability;
+  map.buckets = buckets;
 })();

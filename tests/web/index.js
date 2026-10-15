@@ -24,6 +24,8 @@
 require("./urlstate.test.js");
 require("./sort.test.js");
 require("./row.test.js");
+require("./fmt.test.js");
+require("./table.test.js");
 require("./layout.test.js");
 require("./map.test.js");
 require("./prose.test.js");

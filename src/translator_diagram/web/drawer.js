@@ -431,6 +431,17 @@
     version: "carries a version",
   };
 
+  /* Which probe is the evidence for a deployment, and what it said: the
+     document's status when there is one; the root probe's when there is not,
+     under its own label so a 200 from "/" is never read as a 200 from the
+     document; and bare reachability when nothing recorded a status at all. */
+  function probeEvidence(cell) {
+    if (filled(cell.http_status)) return { row: "http", status: cell.http_status };
+    if (filled(cell.root_status)) return { row: "root", status: cell.root_status };
+    if (typeof cell.reachable === "boolean") return { row: "reachable", status: null };
+    return { row: null, status: null };
+  }
+
   function envBlock(row, env) {
     const cell = (row.environments || {})[env];
     // `reason` is the payload's own sentence for why there is no version —
@@ -467,18 +478,14 @@
     const dotHtml = typeof cell.reachable === "boolean" ? dot(cell.reachable) : "";
     const reach = typeof cell.reachable === "boolean"
       ? note(cell.reachable ? "reachable" : "not reachable") : "";
-    // When the OpenAPI document did not answer there is no http_status, and
-    // the root probe is the only thing that did. Shown under its own label so
-    // a 200 from "/" is never read as a 200 from the document.
-    const noHttp = !filled(cell.http_status);
-    const httpRow = noHttp ? "" : `${dotHtml}${esc(cell.http_status)} ${reach}`;
     // The dot travels to whichever row is the actual evidence, so a service
     // whose document never answered still says whether anything answered.
-    const rootRow = noHttp && filled(cell.root_status)
-      ? `${dotHtml}${esc(cell.root_status)} ${note("the service's root path, not its document")}`
+    const evidence = probeEvidence(cell);
+    const httpRow = evidence.row === "http" ? `${dotHtml}${esc(evidence.status)} ${reach}` : "";
+    const rootRow = evidence.row === "root"
+      ? `${dotHtml}${esc(evidence.status)} ${note("the service's root path, not its document")}`
       : "";
-    const reachRow = noHttp && !filled(cell.root_status) && dotHtml
-      ? `${dotHtml}${reach}` : "";
+    const reachRow = evidence.row === "reachable" ? `${dotHtml}${reach}` : "";
 
     const queries = cell.recent_queries
       ? [
@@ -788,6 +795,21 @@
     return heading(title) + (conns(items) || muted("None recorded."));
   }
 
+  /* Catalog edges follow the data (`build_catalog_edges`): what this
+     component consumes is an edge *into* it, and its consumers are edges out.
+     Getting the direction backwards once showed each list the other's
+     components. */
+  function catalogNeighbours(edges, id) {
+    const consumes = [];
+    const consumedBy = [];
+    for (const edge of edges) {
+      if (!edge) continue;
+      if (edge.to === id) consumes.push(edge.from);
+      if (edge.from === id) consumedBy.push(edge.to);
+    }
+    return { consumes, consumedBy };
+  }
+
   function panelConnections(row) {
     const connections = row.connections || {};
     const all = rows();
@@ -816,12 +838,7 @@
     const catalogEdges = list(data().catalog_edges);
     const catalog = row.catalog;
     if (catalogEdges.length || catalog) {
-      // Catalog edges follow the data (`build_catalog_edges`): what this row
-      // consumes is an edge *into* it, and its consumers are edges out.
-      const consumes = catalogEdges
-        .filter((edge) => edge && edge.to === row.id).map((edge) => edge.from);
-      const consumedBy = catalogEdges
-        .filter((edge) => edge && edge.from === row.id).map((edge) => edge.to);
+      const { consumes, consumedBy } = catalogNeighbours(catalogEdges, row.id);
       const facts = catalog ? dl([
         drow("Status", val(catalog.status)),
         drow("Knowledge level", val(catalog.knowledge_level)),
@@ -1150,7 +1167,11 @@
   drawer.isOpen = () => !!root && !root.hidden;
   // Open or close to match TD.state.sel; app.js calls it on popstate.
   drawer.sync = sync;
-  // For tests/web/drawer.test.js; nothing on the page calls it from outside.
+  // For tests/web/drawer.test.js; nothing on the page calls these from outside.
   drawer.blurbFor = blurbFor;
   drawer.thirdPartyText = thirdPartyText;
+  drawer.catalogNeighbours = catalogNeighbours;
+  drawer.deployedIn = deployedIn;
+  drawer.docLabel = docLabel;
+  drawer.probeEvidence = probeEvidence;
 })();

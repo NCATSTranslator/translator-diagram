@@ -50,8 +50,8 @@
     return ageFormat;
   };
 
-  function relativeAge(iso) {
-    const ms = Date.now() - Date.parse(iso);
+  function relativeAge(iso, now = Date.now()) {
+    const ms = now - Date.parse(iso);
     if (!Number.isFinite(ms)) return "";
     const days = ms / 86400000;
     // Clamped, so a clock slightly ahead of GitHub's says "today" rather than
@@ -67,14 +67,14 @@
      a finer bottom end than a release date does. Kept separate rather than
      given to relativeAge: "the release running in prod is 3 hours old" is a
      claim this page cannot make, and blurring the two would let it. */
-  function since(iso) {
-    const ms = Date.now() - Date.parse(iso);
+  function since(iso, now = Date.now()) {
+    const ms = now - Date.parse(iso);
     if (!Number.isFinite(ms)) return "";
     const minutes = ms / 60000;
     if (minutes < 2) return "just now";
     if (minutes < 90) return relative().format(-Math.round(minutes), "minute");
     if (minutes < 1440) return relative().format(-Math.round(minutes / 60), "hour");
-    return relativeAge(iso);
+    return relativeAge(iso, now);
   }
 
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many ?? `${one}s`}`;
@@ -226,6 +226,57 @@
     (typeof (cell || {}).reachable === "boolean" ? (cell.reachable ? "up" : "down") : "");
 
   TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach };
+
+  /* --- Theme ------------------------------------------------------------- */
+
+  /* The cycle starts by moving *away* from what the system says, because the
+     page opens following the system: ordering it auto → light → dark would
+     spend the first click repainting a light machine light, which reads as a
+     broken button rather than as a default worth keeping. */
+  function nextTheme(choice, systemDark) {
+    const differs = systemDark ? "light" : "dark";
+    if (choice === "auto") return differs;
+    return choice === differs ? (systemDark ? "dark" : "light") : "auto";
+  }
+
+  TD.theme = { next: nextTheme };
+
+  /* --- The page's own summary of the payload ------------------------------ */
+
+  /* Deployed cells, across every row and environment. The second stat tile;
+     a count that once said 74 where there were 41, which is why it is here
+     where a test can reach it rather than inline in the shell. */
+  function deploymentCount(rows, envs) {
+    return (rows || []).reduce(
+      (n, row) => n + (envs || []).filter((env) => ((row.environments || {})[env] || {}).deployed).length,
+      0,
+    );
+  }
+
+  /* The first sentence on the page: how many deployments, and from which
+     source each version was read. */
+  function findingSentence(data) {
+    const tally = data.source_tally || {};
+    const labels = data.source_labels || {};
+    const total = Object.values(tally).reduce((a, b) => a + b, 0);
+    const named = ["openapi", "status", "smartapi", "helm"]
+      .filter((key) => tally[key])
+      .map((key) => `<strong>${tally[key]}</strong> from ${esc(labels[key] || key)}`);
+    const none = tally.none
+      ? `, and <strong>${tally.none}</strong> from nothing at all`
+      : "";
+    if (!total) return "No deployments were found — has <code>sync-components</code> run?";
+    // The count is computed from the registry rather than from how the URL was
+    // found, so it covers deployments recorded by hand and deployments
+    // registered without an x-maturity as well as the ones a probe discovered.
+    const gaps = data.unregistered_count
+      ? ` <strong>${data.unregistered_count}</strong> of them are absent from their
+         component's SmartAPI record, which does list other environments.`
+      : "";
+    return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
+  }
+
+  TD.summary = { deployments: deploymentCount, finding: findingSentence };
 
   /* --- Sorting ----------------------------------------------------------- */
 

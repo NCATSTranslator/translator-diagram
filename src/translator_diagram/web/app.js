@@ -67,15 +67,7 @@
     return choice in THEME_NAMES ? choice : "auto";
   }
 
-  /* The cycle starts by moving *away* from what the system says, because the
-     page opens following the system: ordering it auto → light → dark would
-     spend the first click repainting a light machine light, which reads as a
-     broken button rather than as a default worth keeping. */
-  function nextTheme(choice) {
-    const differs = systemPrefersDark() ? "light" : "dark";
-    if (choice === "auto") return differs;
-    return choice === differs ? (systemPrefersDark() ? "dark" : "light") : "auto";
-  }
+  const nextTheme = (choice) => TD.theme.next(choice, systemPrefersDark());
 
   function applyTheme(choice) {
     const root = document.documentElement;
@@ -112,27 +104,6 @@
 
   /* --- Prose ----------------------------------------------------------------- */
 
-  function findingSentence() {
-    const tally = DATA.source_tally || {};
-    const total = Object.values(tally).reduce((a, b) => a + b, 0);
-    const named = ["openapi", "status", "smartapi", "helm"]
-      .filter((key) => tally[key])
-      .map((key) => `<strong>${tally[key]}</strong> from ${
-        esc(TD.fmt.sourceLabel(key))}`);
-    const none = tally.none
-      ? `, and <strong>${tally.none}</strong> from nothing at all`
-      : "";
-    if (!total) return "No deployments were found — has <code>sync-components</code> run?";
-    // The count is computed from the registry rather than from how the URL was
-    // found, so it covers deployments recorded by hand and deployments
-    // registered without an x-maturity as well as the ones a probe discovered.
-    const gaps = DATA.unregistered_count
-      ? ` <strong>${DATA.unregistered_count}</strong> of them are absent from their
-         component's SmartAPI record, which does list other environments.`
-      : "";
-    return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
-  }
-
   function driftSentence() {
     const drifting = (DATA.rows || []).filter(TD.table.hasDrift);
     if (!drifting.length) return "Every component reports the same version in every environment.";
@@ -142,8 +113,7 @@
 
   function statsHtml() {
     const counts = DATA.sync_counts || {};
-    const deployments = (DATA.rows || []).reduce(
-      (n, row) => n + ENVS.filter((env) => (row.environments || {})[env]?.deployed).length, 0);
+    const deployments = TD.summary.deployments(DATA.rows, ENVS);
     const perEnv = Object.entries(DATA.otel_service_counts || {})
       .map(([env, n]) => `${esc(env)} ${n}`).join(", ");
     const stat = (n, key) =>
@@ -172,7 +142,7 @@
       </div>
       <main class="page">
         <div class="finding">
-          <p>${findingSentence()}</p>
+          <p>${TD.summary.finding(DATA)}</p>
           <p>${driftSentence()}</p>
         </div>
         <div class="stats">${statsHtml()}</div>

@@ -213,6 +213,17 @@
 
   const sortColumn = () => COLUMNS.find((column) => column.key === state().sort);
 
+  /* What a click on a column header does to the sort: the column's preferred
+     direction first, then the other, then home. The third click goes home
+     because without it stage order — the order the page is built to argue
+     for — would be unreachable once you left it. */
+  function nextSort(s, column) {
+    const preferred = column.prefer || "asc";
+    if (s.sort !== column.key) return { sort: column.key, dir: preferred };
+    if (s.dir === preferred) return { dir: preferred === "asc" ? "desc" : "asc" };
+    return { sort: "", dir: "asc" };
+  }
+
   /* --- Bands ---------------------------------------------------------------- */
 
   /* What the rows are grouped under, or null for an order that has no groups.
@@ -712,17 +723,7 @@
     head.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-col]");
       if (!button) return;
-      const column = COLUMNS.find((entry) => entry.key === button.dataset.col);
-      const preferred = column.prefer || "asc";
-      const s = state();
-      if (s.sort !== column.key) TD.commit({ sort: column.key, dir: preferred });
-      else if (s.dir === preferred) {
-        TD.commit({ dir: preferred === "asc" ? "desc" : "asc" });
-      } else {
-        // Third click goes home. Without it, stage order — the order the page
-        // is built to argue for — would be unreachable once you left it.
-        TD.commit({ sort: "", dir: "asc" });
-      }
+      TD.commit(nextSort(state(), COLUMNS.find((entry) => entry.key === button.dataset.col)));
     });
 
     body.addEventListener("click", (event) => {
@@ -781,6 +782,11 @@
   table.orderHtml = orderHtml;
   table.visibleRows = visibleRows;
   table.hasDrift = hasDrift;
+  // Pure given TD.state and TD.DATA, for tests/web/table.test.js.
+  table.nextSort = nextSort;
+  table.envCell = envCell;
+  table.bodyHtml = bodyHtml;
+  table.detailRowsHtml = detailRowsHtml;
   table.scrollTo = function scrollTo(id) {
     if (!body) return;
     const tr = findRow(body, id);
