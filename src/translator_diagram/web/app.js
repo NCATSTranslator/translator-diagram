@@ -394,6 +394,22 @@
 
   addEventListener("resize", measure);
 
+  /* Something other than the window changed how much room the views have —
+     the drawer opening or closing. The same two measurements a window resize
+     triggers, without dispatching a fake event to get them. */
+  TD.layoutChanged = function layoutChanged() {
+    measure();
+    TD.map.resized();
+  };
+
+  // Back and forward: the URL is the state, so re-read it, re-render, and let
+  // the drawer open or close to match.
+  addEventListener("popstate", () => {
+    Object.assign(TD.state, TD.url.parse(location.search));
+    renderView();
+    TD.drawer.sync();
+  });
+
   // A deep link arrives before the table exists, so the browser's own fragment
   // scroll finds nothing; this is the second attempt, once there are rows.
   const deep = /^#c-(.+)$/.exec(location.hash || "");

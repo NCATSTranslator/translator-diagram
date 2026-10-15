@@ -43,6 +43,9 @@
   const TAB_IDS = TABS.map((tab) => tab.id);
   const DEFAULT_TAB = "overview";
   const LIST_LIMIT = 8;
+  // Below this the drawer is a sheet over the bottom of the page rather than
+  // a column beside the table: the same 900px as drawer.css's media query.
+  const SHEET_MAX_WIDTH = 900;
 
   /* --- Small helpers ------------------------------------------------------- */
 
@@ -969,17 +972,11 @@
     }
   }
 
-  /* The table paints its selected row from TD.state at render time, and the
-     commits below are silent (a full table re-render for a drawer tab change
-     is a lot of work for nothing). So the highlight is moved by hand — the
-     same two lines table.js runs on its own click. */
   function syncSelection(id) {
-    for (const tr of document.querySelectorAll("table.grid tr.row")) {
-      tr.classList.toggle("sel", tr.dataset.id === id);
-    }
+    TD.table.markSelected(id);
     // The commits here are silent, so the map never repaints on its own and
     // would keep ringing a node the drawer has let go of.
-    if (TD.map && TD.map.ring) TD.map.ring(id);
+    TD.map.ring(id);
   }
 
   function renderPanel() {
@@ -1020,41 +1017,21 @@
 
   let reflowTimer = 0;
 
-  /* Not TD.table.scrollTo: that calls scrollIntoView, which scrolls *every*
-     ancestor scroller including the document — and with the sheet's
-     padding-bottom the document is now scrollable, so it slid the whole page
-     down and put the table behind the sheet, which is the bug this was meant
-     to fix. Moving the table's own scrollport is the smallest thing that
-     works. */
-  function revealRow(id) {
-    if (!id) return;
-    const wrap = document.querySelector(".tablewrap");
-    if (!wrap) return;
-    let tr = null;
-    try { tr = wrap.querySelector(`tr.row[data-id="${CSS.escape(id)}"]`); } catch { tr = null; }
-    if (!tr) return;
-    // The table's own <thead> is sticky inside this scrollport, so scrolling
-    // the row to the top puts it under the header rather than beside it.
-    const thead = wrap.querySelector("thead");
-    const cover = thead ? thead.getBoundingClientRect().height : 0;
-    const delta = tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
-    wrap.scrollTop += delta - cover - 8;
-  }
-
-  /* app.js measures the table's scrollport against the window, and its sticky
-     header measures itself; the drawer has just taken 440px of the row and
-     only a resize tells either of them. Sent twice: once now, so the reflow
-     happens with the slide rather than after it, and once when the entrance
-     has finished, because the first measurement is taken mid-animation. */
+  /* app.js measures the table's scrollport against the window, and the map
+     keeps its camera; the drawer has just taken 440px of the row and only
+     TD.layoutChanged tells either of them. Sent twice: once now, so the
+     reflow happens with the slide rather than after it, and once when the
+     entrance has finished, because the first measurement is taken
+     mid-animation. */
   function reflow() {
     const fire = () => {
-      try { dispatchEvent(new Event("resize")); } catch { /* older browsers */ }
+      TD.layoutChanged();
       measureTabs();
       // Sheet mode only. The 30vh cap on the table lands the moment
       // data-drawer is set, which is after app.js has already scrolled to the
       // selected row against the full-height scrollport — so without this the
       // row the reader just tapped sits behind the sheet.
-      if (innerWidth <= 900) revealRow(currentId);
+      if (innerWidth <= SHEET_MAX_WIDTH) TD.table.revealRow(currentId);
     };
     fire();
     clearTimeout(reflowTimer);
@@ -1173,17 +1150,12 @@
 
   addEventListener("resize", () => { if (drawer.isOpen()) measureTabs(); });
 
-  addEventListener("popstate", () => {
-    if (!TD.state) return;
-    Object.assign(TD.state, TD.url.parse(location.search));
-    TD.commit({});
-    sync();
-  });
-
   /* --- Public API ---------------------------------------------------------- */
 
   drawer.open = open;
   drawer.isOpen = () => !!root && !root.hidden;
+  // Open or close to match TD.state.sel; app.js calls it on popstate.
+  drawer.sync = sync;
   // For tests/web/drawer.test.js; nothing on the page calls it from outside.
   drawer.blurbFor = blurbFor;
   drawer.thirdPartyText = thirdPartyText;

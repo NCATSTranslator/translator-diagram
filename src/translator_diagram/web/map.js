@@ -1033,11 +1033,13 @@
     nodeEls.forEach((el, key) => el.classList.toggle("sel", key === id));
   }
 
+  /* The drawer records the selection (one silent commit, and it marks the
+     table and rings the node); the map then flies to it, which is what a
+     full refresh used to do by way of paint(). */
   function select(id) {
     if (!id || !nodeById.has(id)) return;
-    const el = nodeEls.get(id);
-    TD.commit({ sel: id });
-    if (TD.drawer && TD.drawer.open) TD.drawer.open(id, undefined, { opener: el });
+    TD.drawer.open(id, undefined, { opener: nodeEls.get(id) });
+    map.focus(id);
   }
 
   /* --- Tooltips ------------------------------------------------------------- */
@@ -1298,6 +1300,9 @@
   };
 
   map.ring = ring;
+  // The drawer taking or giving back its 440px is a resize the window never
+  // reports; app.js's TD.layoutChanged calls this.
+  map.resized = onResize;
 
   map.focus = function focus(id) {
     if (!nodeById.has(id)) return;

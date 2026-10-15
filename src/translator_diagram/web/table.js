@@ -748,16 +748,7 @@
         return;
       }
       const name = event.target.closest("button[data-open]");
-      if (name) {
-        const id = name.dataset.open;
-        TD.commit({ sel: id }, { silent: true });
-        for (const row of body.querySelectorAll("tr.row")) {
-          row.classList.toggle("sel", row.dataset.id === id);
-        }
-        // The drawer lands in a later step; until it does, selecting a
-        // component records itself in the URL and does nothing else.
-        if (TD.drawer && TD.drawer.open) TD.drawer.open(id);
-      }
+      if (name) TD.drawer.open(name.dataset.open);
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
@@ -804,5 +795,29 @@
     if (!body) return;
     const tr = findRow(body, id);
     if (tr) tr.scrollIntoView({ block: "center", behavior: TD.motion.enabled ? "smooth" : "auto" });
+  };
+
+  /* The selected row's highlight, moved by hand: the drawer's commits are
+     silent (a full re-render for a tab change is a lot of work for nothing),
+     and the table paints `.sel` from TD.state only at render time. */
+  table.markSelected = function markSelected(id) {
+    if (!body) return;
+    for (const row of body.querySelectorAll("tr.row")) {
+      row.classList.toggle("sel", row.dataset.id === id);
+    }
+  };
+
+  /* Scroll the table's own scrollport so the row sits just under the sticky
+     header. Not scrollTo: scrollIntoView scrolls *every* ancestor scroller,
+     the document included, and with the drawer open as a sheet that slid the
+     whole page down and put the table behind the sheet. */
+  table.revealRow = function revealRow(id) {
+    if (!body || !wrap) return;
+    const tr = findRow(body, id);
+    if (!tr) return;
+    const thead = wrap.querySelector("thead");
+    const cover = thead ? thead.getBoundingClientRect().height : 0;
+    const delta = tr.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
+    wrap.scrollTop += delta - cover - 8;
   };
 })();
