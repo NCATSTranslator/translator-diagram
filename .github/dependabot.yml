@@ -2,9 +2,17 @@
 # code with Pages deploy permission. Dependabot is what keeps those pins from
 # going stale: it proposes the new SHA, with the version in the comment beside
 # it, as a pull request someone reviews.
+#
+# uv.lock gets the same treatment. CI installs it with --locked, so nothing
+# moves until someone merges one of these, and the Pages build runs those
+# packages with GITHUB_TOKEN in its environment.
 version: 2
 updates:
   - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly

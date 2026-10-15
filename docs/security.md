@@ -250,6 +250,9 @@ repository topics belong to other teams. Treat every field as hostile markup.
   exposed through it. `upload-pages-artifact` is the one composite here, and is
   at v4.0.0 or later because v3 ran `actions/upload-artifact@v4` by tag; the
   others are plain Node actions that run nothing else.
+- **Python dependencies move only by review.** CI and the Pages build install
+  `uv.lock` with `--locked`, and `.github/dependabot.yml` proposes updates to
+  it weekly, as pull requests, alongside the action pins.
 - **Deploys are narrow.** The Pages workflow runs with `contents: read`. Only
   the deploy job gets more: `pages: write`, and `id-token: write`, which lets
   it mint an OIDC token. `deploy-pages` needs it to prove to Pages which
@@ -284,6 +287,10 @@ repository topics belong to other teams. Treat every field as hostile markup.
   style. A `<meta http-equiv="Content-Security-Policy">` with hashes, or
   `script-src 'self'` once assets are split out, would limit the damage of an
   escaping mistake.
+- **Dependabot security updates and secret scanning are off.** Vulnerability
+  alerts are on, so a known-vulnerable package in `uv.lock` is flagged, but
+  nothing opens the fix as a pull request ahead of the weekly update, and
+  nothing scans pushes for committed credentials.
 - **`main` accepts force pushes, and CI is not a required check.** The ruleset
   blocks deleting `main` and requires an approved pull request, but has no
   *Block force pushes* rule and no required status checks, so a reviewed pull
@@ -332,5 +339,3 @@ These have not been looked at closely. Add to this list freely.
   by hand.
 - Whether the connection graph plus Helm capacity identifies a single point of
   failure that the platform would rather not advertise.
-- Dependency supply chain: `uv.lock` is enforced with `--locked`, but nothing
-  audits it.
