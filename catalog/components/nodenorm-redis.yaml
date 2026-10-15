@@ -38,14 +38,17 @@ refactor_status: Already removed
 layer: Shared services
 
 identifiers:
-  infores: infores:sri-node-normalizer
+  # Commented out for now (2026-10-14). The infores is this component's, but
+  # exactly one SmartAPI record (1c2eb8d02b4796c6a657c3363c0657dc) claims it,
+  # and that record still lists nodenorm.transltr.io, so the dashboard
+  # attaches it by infores and reports a prod deployment this component no
+  # longer has. nodenorm.transltr.io is due to be removed in October 2026.
+  # Restore the line once that registration no longer lists it.
+  # infores: infores:sri-node-normalizer
+  #
   # The Redis chart is folded in rather than given its own `third_party` file
   # (README.md, Conventions) because the maintainer counts all three as one
   # component: the databases exist only for this web server and loader.
-  #
-  # Its SmartAPI record (1c2eb8d02b4796c6a657c3363c0657dc) is deliberately not
-  # recorded: it still lists nodenorm.transltr.io, and a fetcher would turn
-  # that into a prod environment this component no longer has.
   helm_chart:
     - node-normalization-web-server
     - redis-r3-external
