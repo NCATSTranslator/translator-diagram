@@ -168,6 +168,7 @@
   let viewSwitch = null;
   let ownerBox = null;
   let versionBox = null;
+  let search = null;
 
   function uniqueOwners() {
     return [...new Set((DATA.rows || []).map((row) => row.owner).filter(Boolean))]
@@ -204,7 +205,7 @@
     });
     document.getElementById("f-view").append(versionBox.el);
 
-    const search = document.getElementById("q");
+    search = document.getElementById("q");
     search.value = TD.state.q;
     search.addEventListener("input", () => TD.commit({ q: search.value }));
 
@@ -360,11 +361,16 @@
     TD.map.resized();
   };
 
-  // Back and forward: the URL is the state, so re-read it, re-render, and let
-  // the drawer open or close to match.
+  // Back and forward: the URL is the state, so re-read it, set the controls
+  // and the shown view from it, and let the drawer open or close to match.
+  // renderView alone drew into whichever view was already showing.
   addEventListener("popstate", () => {
     Object.assign(TD.state, TD.url.parse(location.search));
-    renderView();
+    viewSwitch.set(TD.state.view);
+    ownerBox.set(TD.state.owner);
+    versionBox.set(TD.state.versions);
+    search.value = TD.state.q;
+    showView(false);
     TD.drawer.sync();
   });
 
