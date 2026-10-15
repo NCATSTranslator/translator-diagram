@@ -87,6 +87,13 @@ about the ci and test it is also deployed to. `answer-appraiser` is the live
 example — its record lists production only — so its `environments:` block
 carries the two SmartAPI does not cover and leaves prod to the fetcher.
 
+**An infores can bring a SmartAPI record with it.** Where a file records no
+`identifiers.smartapi`, the one registry record that claims its `infores` is
+attached as though it had been recorded, deployments and all; where several
+claim it, none is. That is usually what you want, and it is why a stale
+registration matters: `nodenorm-redis` has its infores commented out until its
+record stops listing a host it no longer runs on.
+
 **`summary`, `description` and `notes` answer different questions.**
 
 - `summary` — *what is this?* One line, plain text, that makes sense on its
@@ -130,8 +137,15 @@ is listed in `flow-steps.yaml` right after that service, and takes `part_of`
 only where the service has one; the service lists it under `connections.calls`.
 Its `summary` says what the software does for us — "third-party" is the
 field's job now, not the summary's. [`components/jaeger.yaml`](components/jaeger.yaml)
-is the live example; `redis-r3-external` in `unknown.yaml` is the kind of
+is the live example; `omnicorp-redis` in `unknown.yaml` is the kind of
 thing the rule decides.
+
+A maintainer can still count a separately deployed datastore as part of its
+service, when it exists only for that service and they ship together. Its
+chart then goes on the service's `identifiers.helm_chart` with the others, and
+a comment there says why. `nodenorm-redis` is the example: its seven Redis
+databases are their own chart, `redis-r3-external`, recorded beside the web
+server and the loader.
 
 **Examples are for trying a component, not testing it.** `examples` holds
 up to three GET requests someone could make to see what a component does,

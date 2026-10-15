@@ -92,9 +92,9 @@ def _openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     """The fields worth a column, out of an OpenAPI `info` block."""
     if not document:
         return {}
-    info = document.get("info") or {}
-    translator = info.get("x-translator") or {}
-    trapi = info.get("x-trapi") or {}
+    info = _blocks(document, "info")
+    translator = _blocks(info, "x-translator")
+    trapi = _blocks(info, "x-trapi")
     return {
         "version": info.get("version"),
         "trapi": trapi.get("version"),

@@ -140,6 +140,10 @@ otel_services:
     first_seen: "2026-08-31"
     environments: [test, prod]
     component: automat
+    note: >-
+      Serves the data the retired components/cam-pipeline.yaml built. Stays
+      here with the other Automat KPs until automat.transltr.io (prod) and
+      automat.renci.org (dev) are removed.
   - name: automat-hgnc
     status: not-recorded
     first_seen: "2026-08-31"
@@ -202,7 +206,8 @@ otel_services:
 #   NodeNorm -> components/nodenorm-es.yaml (2026-08-31). Its spans carry
 #   http.host=nodenorm-es.{ci,test}.transltr.io and a Tornado handler from
 #   the nodenorm package, backed by elasticsearch.es-core-components — so
-#   it is the ES rewrite, not the nodenorm it replaced.
+#   it is the ES rewrite, not the nodenorm it replaced
+#   (components/nodenorm-redis.yaml).
 
 helm_charts:
 
@@ -324,38 +329,6 @@ helm_charts:
     note: >-
       Sheet row `biolink-lookup` (ITRB app biolink-lookup, Removed after
       Refactor).
-
-  - name: node-normalization-web-server
-    status: not-recorded
-    first_seen: "2026-09-02"
-    component: nodenorm
-    evidence: >-
-      Chart.yaml's internal name is `node-normalization-web`, description
-      "Webserver for node normalization.", appVersion "2.4.1_2025sep1"
-      (image tag + Babel release date, the same convention documented for
-      name-lookup). Its values name image ghcr.io/ncatstranslator/nodenormalization*
-      and web.serverName infores:sri-node-normalizer — the current
-      Redis-backed NodeNorm, a different codebase from
-      components/nodenorm-es.yaml, which records the Elasticsearch rewrite
-      of biothings/NodeNormalizationAPI and carries no infores.
-    note: >-
-      Sheet row `nodenorm` (ITRB app node-normalization-web-server, Removed
-      after Refactor). The sheet keeps it separate from nodenorm-es, which
-      answers the question this entry used to wait on.
-
-  - name: node-normalization-loader
-    status: not-recorded
-    first_seen: "2026-09-02"
-    component: nodenorm-loader
-    evidence: >-
-      Chart.yaml's internal name is `nodenorm-loader`, description "Data
-      loader for node normalization.", appVersion "2.3.26_2025sep1". Same
-      Redis-backed NodeNorm generation as node-normalization-web-server
-      above (image ghcr.io/ncatstranslator/nodenormalization*).
-    note: >-
-      Sheet row `nodenorm-loader` (ITRB app node-normalization-loader, Removed
-      after Refactor). Its own component in the sheet, not a second chart for
-      nodenorm.
 
   - name: omnicorp-redis
     status: not-recorded
@@ -493,7 +466,7 @@ helm_charts:
       No sheet row. Whether it becomes a component, as `information-radiator`,
       is a maintainer's call. Tracked in #52.
 
-  # --- Needs a decision: NodeNorm charts with no row of their own -------------
+  # --- Needs a decision: a NodeNorm chart with no row of its own --------------
 
   - name: r3
     status: needs-decision
@@ -502,48 +475,18 @@ helm_charts:
     evidence: >-
       Chart.yaml's description is "A Helm chart for r3" and gives no other
       detail. Its values name image ghcr.io/ncatstranslator/nodenormalization*
-      and web.serverName infores:sri-node-normalizer — the same current,
-      Redis-backed NodeNorm as the two charts above, paired with
-      redis-r3-external below.
+      and web.serverName infores:sri-node-normalizer — the Redis-backed
+      NodeNorm recorded in components/nodenorm-redis.yaml, and paired with
+      that component's redis-r3-external chart.
     note: >-
       No sheet row. It runs the same image and infores as
       node-normalization-web-server, so the decision is whether it is a
-      second chart for `nodenorm` or a component of its own. Tracked in #52.
+      fourth chart for `nodenorm-redis` or a component of its own. Tracked in
+      #52.
 
-  - name: redis-r3-external
-    status: needs-decision
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml's description is "Redis Chart wrapper", declaring seven
-      bitnami/redis 23.1.1 dependencies aliased id-id, id-eq-id,
-      id-categories, conflation-db, semantic-count, info-content and
-      chemical-drug-db — the conflation/equivalent-id/category Redis
-      databases NodeNorm uses, external to the r3 chart above.
-    note: >-
-      No sheet row, and it goes wherever r3 goes: if r3 becomes a component,
-      this is one too, deployed on its own and marked
-      `third_party: {software: Redis}` under README.md's rule. Tracked in #52.
-
-  # --- Out of scope: legacy ROBOKOP / Plater / CAM / TranQL stack -------------
+  # --- Out of scope: legacy ROBOKOP / Plater / TranQL stack -------------------
   #
   # Known, not in the sheet, and not expected to get component files.
-
-  - name: cam-pipeline-builder
-    status: out-of-scope
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml's description is "Build the cam-pipeline" — the CAM
-      pipeline's build step, part of the same CAM stack as cam-kp-api.
-
-  - name: cam-pipeline-web-server
-    status: out-of-scope
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; by name
-      this is the CAM pipeline's web server, part of the same CAM stack.
 
   - name: graph-registry
     status: out-of-scope
@@ -658,22 +601,6 @@ helm_charts:
       manifests (covidkop, robokop-graphs and scentkop redirects) and has
       no Chart.yaml, unlike the other 49 directories in the index.
 
-  # --- Retired: the sheet marks it removed ------------------------------------
-
-  - name: cam-kp-api
-    status: retired
-    first_seen: "2026-09-02"
-    component: cam-kp-api
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; version
-      "0.2-trapi-1.3" ties it to TRAPI 1.3. By name this is the CAM (Causal
-      Activity Model) Knowledge Provider API, part of the CAM pipeline with
-      the cam-pipeline-builder and cam-pipeline-web-server charts.
-    note: >-
-      Sheet row `cam-kp-api` (ITRB app DEPRECATED - cam-kp-api, Already
-      removed). The chart directory is still in the index; the deployment is
-      not.
-
   # --- Unattributed: little more than the name is observable ------------------
   #
   # Guesses from the name are in `evidence`; nothing firmer yet.
@@ -713,13 +640,3 @@ helm_charts:
       Chart.yaml carries the unedited `helm create` description. By name a
       Redis-backed cache for a Triple Pattern Fragments (TPF) server, likely
       supporting Automat's or ROBOKOP's TPF endpoints.
-
-  - name: toss
-    status: unattributed
-    first_seen: "2026-09-02"
-    component: null
-    evidence: >-
-      Chart.yaml carries the unedited `helm create` description; name,
-      version and appVersion are the only fields present. The chart deploys
-      containers.renci.org/translator/toss, whose purpose is not
-      determinable from the chart alone.

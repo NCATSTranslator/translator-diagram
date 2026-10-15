@@ -57,7 +57,11 @@ JS_FILES = (
 
 
 FAVICON_FILE = "favicon.ico"
-"""The real NCATS icon, 1150 bytes, inlined as a data URI.
+"""A "Tr" tile in the Translator purple, inlined as a data URI.
+
+Not an NIH or NCATS logo, deliberately: this page is not an official NIH page.
+`tools/make_favicon.py` renders it, from the design `BRAND_MARK` in web/app.js
+draws in the top bar.
 
 Not a `<link href="favicon.ico">`: the page is one file that has to open from
 file://, out of a mail attachment, from anywhere — and a relative href there

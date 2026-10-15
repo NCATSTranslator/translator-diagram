@@ -351,7 +351,14 @@ rendering, and says something that is not true.
   unverifiable guess is worth less than a gap. A host that answers 200 with
   something else has its body deleted rather than cached. A rejection this run
   also outranks an older confirmation — otherwise one success published a
-  deployment for good.
+  deployment for good. And a cached document is evidence only if the previous
+  run fetched it from the same URL (`sync`'s `age_for`), or a hostname that
+  moved would be judged on what its old one served.
+- **A deployment it shows but never asked about.** `sync`'s planners find a
+  component's SmartAPI record with `smartapi_record_for`, the lookup
+  `build_rows` makes: by recorded id, or by infores where exactly one record
+  claims it. Planning by recorded id alone left the infores-matched
+  components' registered hosts on the page and never fetched or probed.
 - **A hostname chosen by the alphabet.** Where a component's known URLs span two
   `transltr.io` stems, the derived host uses the commonest stem, earliest on the
   ladder among equals.
@@ -405,7 +412,8 @@ rendering, and says something that is not true.
 Two more of the same family live in the code because they are local: a
 malformed OpenTelemetry answer costs its tile rather than the run, and a
 registry or guessed host answering unexpected JSON is caught rather than
-raising through `sync`.
+raising, through `sync` and through the build alike: `SyncedData` hands out
+an endpoint body only when it is a JSON object.
 
 ## Things that look wrong but aren't
 

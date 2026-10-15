@@ -247,3 +247,57 @@ class TestStaleBodiesKeepTheNewKeys:
         assert cell["document"] is None
         assert cell["trapi_operations"] == []
         assert cell["reason"] == "up · no API document"
+
+
+class TestUnexpectedShapes:
+    """Somebody else's JSON in an unexpected shape costs a fact, not the build."""
+
+    def _cell(self, tmp_path, kind, body, smartapi='{"hits": []}'):
+        (tmp_path / "manifest.json").write_text('{"fetches": []}')
+        (tmp_path / "smartapi.json").write_text(smartapi)
+        path = tmp_path / kind / "svc" / "ci.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps(body))
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        return build_rows([component], SyncedData(tmp_path))[0]["environments"]["ci"]
+
+    def test_an_openapi_body_that_is_not_an_object(self, tmp_path):
+        # A 200 can carry any JSON at all, and every reader indexes it.
+        assert self._cell(tmp_path, "openapi", ["not", "a", "document"])["version"] is None
+
+    def test_an_info_block_that_is_not_an_object(self, tmp_path):
+        cell = self._cell(tmp_path, "openapi", {"info": "1.2.3"})
+        assert cell["version"] is None
+
+    def test_extension_blocks_that_are_not_objects(self, tmp_path):
+        cell = self._cell(tmp_path, "openapi", {
+            "info": {"version": "1.2.3", "x-translator": ["KP"], "x-trapi": "1.5"},
+        })
+        assert cell["version"] == "1.2.3"
+        assert cell["trapi"] is None
+
+    def test_a_status_body_that_is_not_an_object(self, tmp_path):
+        assert self._cell(tmp_path, "status", "ok")["version"] is None
+
+    def test_a_registry_answer_that_is_not_an_object(self, tmp_path):
+        (tmp_path / "smartapi.json").write_text('[{"_id": "abc"}]')
+        assert SyncedData(tmp_path).smartapi == {}
+
+    def test_hits_that_are_not_a_list_of_objects(self, tmp_path):
+        (tmp_path / "smartapi.json").write_text('{"hits": {"_id": "abc"}}')
+        assert SyncedData(tmp_path).smartapi == {}
+        (tmp_path / "smartapi.json").write_text('{"hits": ["abc", {"_id": "def"}]}')
+        assert list(SyncedData(tmp_path).smartapi) == ["def"]
+
+    def test_a_derived_file_in_an_older_or_broken_shape(self, tmp_path):
+        (tmp_path / "derived.json").write_text(json.dumps({
+            "confirmed": {"svc": {"ci": {"location": "ITRB"}}, "other": ["ci"]},
+            "rejected": {"svc": "ci"},
+        }))
+        synced = SyncedData(tmp_path)
+        assert synced.derived == {"svc": {}}
+        assert synced.rejected == {}

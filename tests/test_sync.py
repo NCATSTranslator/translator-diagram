@@ -98,6 +98,29 @@ class TestSync:
              tmp_path, fetcher=fetcher, max_age=0)
         assert any("helm/my-chart/Chart.yaml" in url for url in fetcher.urls)
 
+    def test_a_record_found_by_infores_is_fetched_too(self, tmp_path):
+        # The page attaches a record by infores when exactly one claims it,
+        # so sync has to fetch what that record points at. It used to look
+        # records up by recorded id only, and dogpark-tier-0's registered
+        # deployments were shown without ever being asked for anything.
+        hits = [{"_id": "abc",
+                 "info": {"x-translator": {"infores": "infores:svc"}},
+                 "servers": [{"url": "https://svc.ci/", "x-maturity": "staging"}]}]
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        sync([_comp("svc", identifiers={"infores": "infores:svc"})],
+             tmp_path, fetcher=fetcher, max_age=0)
+        assert "https://svc.ci/openapi.json" in fetcher.urls
+        assert "https://svc.ci/" in fetcher.urls
+
+    def test_records_sharing_an_infores_attach_nothing_here_either(self, tmp_path):
+        hits = [{"_id": n, "info": {"x-translator": {"infores": "infores:svc"}},
+                 "servers": [{"url": f"https://{n}.ci/", "x-maturity": "staging"}]}
+                for n in ("one", "two")]
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, self._smartapi_body(hits))})
+        sync([_comp("svc", identifiers={"infores": "infores:svc"})],
+             tmp_path, fetcher=fetcher, max_age=0)
+        assert not [u for u in fetcher.urls if u.startswith(("https://one", "https://two"))]
+
     def test_a_component_being_down_does_not_fail_the_run(self, tmp_path):
         # The whole point: "was this endpoint reachable" is the question, so an
         # unreachable one is an answer.
@@ -229,7 +252,7 @@ class TestChartFetches:
         assert {destination.name for _, destination in jobs} == set(HELM_FILES)
 
     def test_a_component_deployed_by_two_charts_gets_both(self, tmp_path):
-        # nodenorm-es is a web server chart and a loader chart. Planning only
+        # nodenorm-redis is a web server chart, a loader chart and more. Planning only
         # the first would cache half the component and look complete doing it.
         jobs = _plan_chart_fetches(
             [_comp("svc", identifiers={"helm_chart": ["web-server", "loader"]})],
@@ -701,6 +724,57 @@ class TestConfirmDerived:
                 "https://svc.ci.transltr.io/openapi.json": (200, body)})
             assert _confirm_derived(
                 component, candidate, fetcher, tmp_path, 0)[1] is False
+
+
+class TestConfirmedDerivedHosts:
+    """A host an earlier run confirmed, on the run after."""
+
+    def _openapi(self, infores):
+        return json.dumps({"info": {"version": "1.0", "x-translator": {
+            "infores": infores}}}).encode()
+
+    def _component(self):
+        return _comp(
+            "svc",
+            identifiers={"infores": "infores:svc"},
+            endpoints={"status": "status"},
+            environments={
+                "ci": Deployment(env="ci", url="https://svc.ci.transltr.io/")},
+        )
+
+    def test_its_status_is_fetched_and_its_openapi_only_once(self, tmp_path):
+        # The confirmation re-fetches the OpenAPI document; nothing fetched
+        # /status, so a confirmed host never showed a status-sourced version.
+        (tmp_path / "derived.json").write_text(json.dumps({"confirmed": {
+            "svc": {"prod": {"url": "https://svc.transltr.io/", "location": "ITRB"}}}}))
+        fetcher = FakeFetcher({
+            SMARTAPI_QUERY: (200, b'{"hits": []}'),
+            "https://svc.transltr.io/openapi.json": (200, self._openapi("infores:svc")),
+            "https://svc.transltr.io/status": (200, b'{"svc_version": "2.0"}'),
+        })
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=0)
+        assert fetcher.urls.count("https://svc.transltr.io/status") == 1
+        assert fetcher.urls.count("https://svc.transltr.io/openapi.json") == 1
+        manifest = json.loads((tmp_path / "manifest.json").read_text())
+        assert any(f["path"] == "status/svc/prod.json" and f["status"] == 200
+                   for f in manifest["fetches"])
+
+    def test_a_cached_document_from_another_url_is_not_evidence(self, tmp_path):
+        # The previous run fetched this file from an older candidate URL. Fresh
+        # by its mtime, it still answers a different question, and confirming
+        # the new hostname from it would accept a host nobody contacted.
+        cached = tmp_path / "openapi" / "svc" / "prod.json"
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(self._openapi("infores:svc"))
+        (tmp_path / "manifest.json").write_text(json.dumps({"fetches": [{
+            "path": "openapi/svc/prod.json",
+            "url": "https://old-svc.transltr.io/openapi.json", "status": 200}]}))
+        fetcher = FakeFetcher({SMARTAPI_QUERY: (200, b'{"hits": []}')})
+        sync([self._component()], tmp_path, fetcher=fetcher, max_age=9999)
+        assert "https://svc.transltr.io/openapi.json" in fetcher.urls
+        derived = json.loads((tmp_path / "derived.json").read_text())
+        assert "prod" not in derived["confirmed"].get("svc", {})
+        assert derived["rejected"]["svc"]["prod"]["url"] == "https://svc.transltr.io/"
 
 
 class TestAMalformedRegistry:

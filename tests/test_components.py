@@ -49,7 +49,7 @@ class TestParsing:
         assert component.infores is None and component.otel_services == []
 
     def test_helm_charts_normalises_a_string_a_list_and_nothing(self):
-        # nodenorm-es is two charts, most components are one, and most files
+        # nodenorm-redis is three charts, most components are one, and most files
         # record nothing. `helm_chart` keeps returning a string either way,
         # because it is a payload key with consumers.
         one = _parse(identifiers={"helm_chart": "shepherd"})

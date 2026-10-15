@@ -383,7 +383,10 @@
     root = svg("svg", {
       class: "mp-svg",
       xmlns: NS,
-      role: "img",
+      // `group`, not `img`: an image's subtree is presentational, which would
+      // hide the focusable `role="button"` nodes from assistive technology.
+      // The exported file is a picture, and `exportText` sets `img` there.
+      role: "group",
       "aria-label": "Component map: which component connects to which, in pipeline order",
     });
     const built = buildDefs();
@@ -1186,6 +1189,8 @@
     if (cameraG) cameraG.removeAttribute("transform");
     clone.querySelectorAll(".mp-hit, .mp-lane-hit, use, foreignObject").forEach((el) => el.remove());
     clone.querySelectorAll("[tabindex]").forEach((el) => el.removeAttribute("tabindex"));
+    clone.querySelectorAll('[role="button"]').forEach((el) => el.removeAttribute("role"));
+    clone.setAttribute("role", "img");
     // The lanes carry `animation-delay: calc(n * var(--stagger))` for the
     // first-paint fade; a custom property with nothing to resolve it against
     // is the one thing that would still say `var(` in the finished file.

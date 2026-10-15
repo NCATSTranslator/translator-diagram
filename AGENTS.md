@@ -7,13 +7,14 @@ Google Sheet CSV, and `build-dashboard` renders a self-contained HTML page from
 documentation and the faster way in.
 
 **These notes are `AGENTS.md` files, and there is no `CLAUDE.md` on
-purpose.** Claude Code reads `AGENTS.md` natively from v2.1.277, but only
-where there is no `CLAUDE.md` or `CLAUDE.local.md`: one in the working
-directory or above it switches it to reading `CLAUDE.md` files alone, and one
-in a subdirectory hides that directory's `AGENTS.md`. Either way these notes
-drop out silently, so put new ones in the nearest `AGENTS.md`.
-`tests/test_agent_files.py` fails on either file anywhere in the
-repository, a personal `CLAUDE.local.md` included.
+purpose.** Claude Code reads `AGENTS.md` natively from v2.1.277, and in
+every session type from v2.1.281, the version `CONTRIBUTING.md` asks for,
+but only where there is no `CLAUDE.md` or `CLAUDE.local.md`: one in the
+working directory or above it switches it to reading `CLAUDE.md` files alone,
+and one in a subdirectory hides that directory's `AGENTS.md`. Either way
+these notes drop out silently, so put new ones in the nearest `AGENTS.md`.
+`tests/test_agent_files.py` fails on either file anywhere in the checkout, a
+gitignored personal `CLAUDE.local.md` included.
 
 This file is what applies to every session. The detail that only matters once
 you are in a particular directory lives beside that directory, so it is read
@@ -47,12 +48,9 @@ entries are there because someone already tried the obvious thing.
   work against another local checkout of a Translator repo, `git clone` it into
   `data/` rather than reading the working copy, so you can't pick up its
   secrets.
-- **Whether a picture or a page *reads* well is the operator's call.** Render
-  the diagram, render the dashboard and look, as `CONTRIBUTING.md` says, and
-  then report what changed and what you saw rather than declaring the result
-  good: crossing edges, cramped clusters and a legend in an awkward place are
-  judgements, not test results.
-- **Run the commands yourself when it helps.** `generate-diagram`,
-  `sync-components` and `build-dashboard` must all stay easy for a human to
-  run, and running them is often the right check. Write what they produce
-  under `data/`.
+- **Report what you saw; don't call a picture or a page good.** Render and
+  look as *Checking your work* in `CONTRIBUTING.md` says, then say what
+  changed and what you saw: whether it *reads* well is the operator's call.
+- **The commands are a person's tools first.** You will run
+  `generate-diagram`, `sync-components` and `build-dashboard` as checks, but
+  they must stay easy to run by hand.

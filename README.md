@@ -268,6 +268,22 @@ things it reports are the answer:
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
 
+To see a branch's page the way the published build will be — built on a
+GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
+the branch and download what it builds. On any branch but `main` it deploys
+nothing. The run list is narrowed to manual runs and the newest one, because
+older runs on the same branch can still hold a `dashboard` artifact built from
+an earlier commit:
+
+```bash
+gh workflow run pages.yml --ref my-branch
+sleep 5   # the new run takes a moment to be listed
+id=$(gh run list --workflow pages.yml --branch my-branch \
+       --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$id" --exit-status
+gh run download "$id" --name dashboard --dir data/pages-preview
+```
+
 ### What a published build leaves out
 
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
@@ -290,11 +306,14 @@ someone who looks — it keeps a few things off an indexed page. See
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
 the public/private split this anticipates.
 
-Release lists come from the GitHub API, which allows 60 calls an hour to an
-unauthenticated address. That covers a sync of this repository twice over, but
-if you are re-syncing with `--force` set `GITHUB_TOKEN` in the environment for
-a higher limit. It is sent to `api.github.com` and to nothing else, and a
-throttled fetch costs some release tags, not the run.
+Release lists and repository metadata come from the GitHub API, which allows
+60 calls an hour to an unauthenticated address. A full sync spends about 46,
+so a second `--force` sync within the hour runs short. Set `GITHUB_TOKEN` in
+`.env` (see [`env.default`](env.default)) or in the environment for a limit of
+5000; with `gh` logged in, `GITHUB_TOKEN=$(gh auth token) uv run
+sync-components` does it without a file. The token is sent to `api.github.com`
+and to nothing else, and a throttled fetch costs some release tags, not the
+run.
 
 **Every column sorts.** Click a header to sort by it, click again to reverse,
 and a third click returns to stage order — which is also what the ✕ beside
@@ -492,11 +511,12 @@ translator-diagram/
 │   └── privacy.yaml        # What a published build leaves out
 ├── docs/                   # The design, the metadata case and its research
 ├── tests/                  # One test file per module
-├── tools/                  # replay_sync.py: sync() offline, from a recorded cache
+├── tools/                  # replay_sync.py: sync() offline, from a recorded cache;
+│                           # make_favicon.py: renders web/favicon.ico
 ├── .github/workflows/      # ci.yml (tests and lints), pages.yml (build + deploy)
 ├── pyproject.toml          # uv/hatchling project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions
-├── env.default             # Template for .env (diagram only)
+├── env.default             # Template for .env: the sheet ID, a GitHub token
 ├── FUTURE.md               # Ideas with their costs worked out
 ├── CONTRIBUTING.md         # How to work here: checks, conventions
 ├── AGENTS.md               # What only an agent needs, and where the rest is
@@ -510,11 +530,12 @@ translator-diagram/
 ## Status and next steps
 
 Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
-runs the tests, lints and a build on every pull request, and
-`.github/workflows/pages.yml` builds the page on every pull request as a
-downloadable artifact while deploying only from `main`, a nightly schedule, or
-an explicit manual run. A published build applies
-[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+runs the tests and lints on every pull request, and
+`.github/workflows/pages.yml` builds and deploys the page from `main` — on a
+push, a nightly schedule, or a manual run — and, run by hand on any other
+branch, builds it as a downloadable artifact without deploying. A published
+build applies [`config/privacy.yaml`](config/privacy.yaml) and carries
+`noindex`.
 
 What is *not* built is the interactive view of the **diagram** — a static page
 over the generated SVG and `components.json`. That is
@@ -556,6 +577,11 @@ a change to the diagram or the page, and the conventions. Read
 [`docs/design.md`](docs/design.md) and the module map in
 [`src/translator_diagram/AGENTS.md`](src/translator_diagram/AGENTS.md) before
 a first change.
+
+Changes reach `main` only through a pull request approved by a code owner.
+[`.github/CODEOWNERS`](.github/CODEOWNERS) lists them: gaurav maintains the
+whole repository, and anyone who wants responsibility for part of the code is
+welcome to add themselves for that path.
 
 ## Licence
 

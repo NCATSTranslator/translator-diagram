@@ -5,6 +5,12 @@ How to work in this repository, for people and coding agents alike.
 them. Agents also read [AGENTS.md](AGENTS.md), which adds the few rules only an
 agent needs and maps the per-directory notes.
 
+**If you use Claude Code, use v2.1.281 or later.** There is deliberately no
+`CLAUDE.md` here (AGENTS.md says why), and Claude Code reads `AGENTS.md` only
+from v2.1.277, and in every session type only from v2.1.281. An older version
+loads none of this repository's notes, including the rule not to read `.env`,
+and nothing warns you.
+
 ## Setup, and the checks CI runs
 
 ```bash
@@ -14,10 +20,12 @@ uv run ruff check      # Python lint
 uv run rumdl check .   # Markdown lint
 ```
 
-All of these run on every pull request (`.github/workflows/ci.yml`), and
-`pages.yml` builds the dashboard as a downloadable artifact as well. The JS
-tests in `tests/web/` run under `node --test` from inside `pytest`; without
-Node 18 or later on `PATH` they skip rather than fail, and CI has one.
+All of these run on every pull request (`.github/workflows/ci.yml`).
+`pages.yml`, which builds the dashboard, does not: it deploys from `main`, and
+runs on a branch only when asked to, as README.md's *The components dashboard*
+describes. The JS tests in `tests/web/` run under `node --test` from inside
+`pytest`; without Node 18 or later on `PATH` they skip rather than fail, and CI
+has one.
 
 The commands, as you will run them while working:
 

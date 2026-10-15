@@ -10,6 +10,7 @@ Nothing imports this module, in either direction — same rule as cli.py.
 from pathlib import Path
 
 import click
+from dotenv import find_dotenv, load_dotenv
 
 from .components import load_components
 from .dashboard import build_payload, write_dashboard
@@ -57,6 +58,13 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
     of every fetch, and the dashboard shows it. The command fails only if it
     could not fetch anything at all, so a non-zero exit stays meaningful.
     """
+    # For GITHUB_TOKEN, which `fetch._headers` reads from the environment. The
+    # same lookup `download_sheet_csv` makes for GOOGLE_SHEET_ID, and
+    # usecwd=True for the reason given there. load_dotenv never overrides a
+    # variable already set, so the token a CI runner exports wins over any
+    # file.
+    if env_file := find_dotenv(usecwd=True):
+        load_dotenv(env_file)
     components = _load(components_dir)
     click.echo(f"Following the pointers in {len(components)} component files ...")
     report = sync(

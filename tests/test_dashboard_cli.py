@@ -7,12 +7,14 @@ nothing in test_privacy.py can hold it in place.
 """
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main
+from translator_diagram import dashboard_cli
+from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main, sync_main
 
 
 @pytest.fixture
@@ -145,6 +147,57 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestSyncReadsTheTokenFromDotEnv:
+    """sync-components takes GITHUB_TOKEN from a .env, as generate-diagram
+    takes GOOGLE_SHEET_ID. Without this, the GITHUB_TOKEN= line env.default
+    offers would do nothing for the one command that sends it."""
+
+    @pytest.fixture
+    def token_seen(self, monkeypatch, workspace):
+        # A copy of the environment, so whatever load_dotenv writes is gone
+        # after the test rather than leaking a token into the next one.
+        monkeypatch.setattr(os, "environ", dict(os.environ))
+        os.environ.pop("GITHUB_TOKEN", None)
+        seen = {}
+
+        class Report:
+            def to_dict(self):
+                return {"counts": {"succeeded": 1, "attempted": 1, "cached": 0, "failed": 0}}
+
+        def fake_sync(*args, **kwargs):
+            seen["token"] = os.environ.get("GITHUB_TOKEN")
+            return Report()
+
+        monkeypatch.setattr(dashboard_cli, "sync", fake_sync)
+
+        def run(dotenv):
+            (workspace / ".env").write_text(dotenv)
+            runner = CliRunner()
+            with runner.isolated_filesystem(temp_dir=workspace):
+                result = runner.invoke(sync_main, [
+                    "--components", str(workspace / "catalog" / "components"),
+                    "--output-dir", str(workspace / "sync"),
+                ])
+            assert result.exit_code == 0, result.output
+            return seen["token"]
+
+        return run
+
+    def test_a_token_in_dotenv_reaches_the_fetches(self, token_seen):
+        assert token_seen("GITHUB_TOKEN=from-the-file\n") == "from-the-file"
+
+    def test_the_environment_wins_over_the_file(self, token_seen):
+        # What keeps a CI runner's token in charge of a checkout that has a
+        # .env lying about.
+        os.environ["GITHUB_TOKEN"] = "from-the-environment"
+        assert token_seen("GITHUB_TOKEN=from-the-file\n") == "from-the-environment"
+
+    def test_the_empty_template_line_sends_no_token(self, token_seen):
+        # env.default's `GITHUB_TOKEN=` copied as it is: an empty value, which
+        # _headers treats as no token at all.
+        assert not token_seen("GITHUB_TOKEN=\n")
 
 
 def test_the_default_components_directory_is_the_catalogs():
