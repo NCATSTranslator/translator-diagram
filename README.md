@@ -243,6 +243,17 @@ is older than `--max-age` (15 minutes by default); `--force` ignores the cache.
 A service being down is recorded rather than fatal, so the run still succeeds
 and the page shows what was reachable.
 
+To see a branch's page the way the published build will be — built on a
+GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
+the branch and download what it builds. On any branch but `main` it deploys
+nothing:
+
+```bash
+gh workflow run pages.yml --ref my-branch
+gh run list --workflow pages.yml --branch my-branch   # the run's id
+gh run download <run id> --name dashboard --dir data/pages-preview
+```
+
 It exists to test whether the metadata in `catalog/` is worth keeping. Two
 things it reports are the answer:
 
@@ -513,11 +524,12 @@ translator-diagram/
 ## Status and next steps
 
 Both commands work. The dashboard is also published: `.github/workflows/ci.yml`
-runs the tests, lints and a build on every pull request, and
-`.github/workflows/pages.yml` builds the page on every pull request as a
-downloadable artifact while deploying only from `main`, a nightly schedule, or
-an explicit manual run. A published build applies
-[`config/privacy.yaml`](config/privacy.yaml) and carries `noindex`.
+runs the tests and lints on every pull request, and
+`.github/workflows/pages.yml` builds and deploys the page from `main` — on a
+push, a nightly schedule, or a manual run — and, run by hand on any other
+branch, builds it as a downloadable artifact without deploying. A published
+build applies [`config/privacy.yaml`](config/privacy.yaml) and carries
+`noindex`.
 
 What is *not* built is the interactive view of the **diagram** — a static page
 over the generated SVG and `components.json`. That is
@@ -560,7 +572,7 @@ uv run ruff check    # Python lint
 uv run rumdl check . # Markdown lint
 ```
 
-All four run in CI on every pull request, along with a dashboard build. The
+All four run in CI on every pull request. The
 source is one module per subject under `src/translator_diagram/`, and `tests/`
 has one file per module — a change to `loading.py` belongs in
 `tests/test_loading.py`.
