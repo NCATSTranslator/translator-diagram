@@ -264,7 +264,7 @@ code {
 /* The chip: text on a hairline, rounded, never a fill. An external beside a
    component name, a release tag, a repository topic. Each adds its own
    spacing where it is used. */
-.chip, .rel, .dw-tag {
+.chip, .rel, .cv-tag {
   display: inline-block;
   padding: 0 7px;
   border: 1px solid var(--hairline-strong);

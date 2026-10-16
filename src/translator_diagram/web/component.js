@@ -47,8 +47,8 @@
   const list = (value) => (Array.isArray(value) ? value.filter((v) => v != null) : []);
   const filled = (value) => value !== null && value !== undefined && value !== "";
 
-  const mono = (value) => `<span class="dw-mono">${esc(value)}</span>`;
-  const note = (text) => `<span class="dw-note">${esc(text)}</span>`;
+  const mono = (value) => `<span class="cv-mono">${esc(value)}</span>`;
+  const note = (text) => `<span class="cv-note">${esc(text)}</span>`;
 
   /* A value as text, or nothing: what most rows of a definition list are. */
   const val = (value) => (filled(value) ? esc(value) : "");
@@ -62,7 +62,7 @@
 
   /* A list of small-caps tags, or nothing. */
   const tags = (items) =>
-    items.map((item) => `<span class="dw-tag">${esc(item)}</span>`).join("");
+    items.map((item) => `<span class="cv-tag">${esc(item)}</span>`).join("");
 
   /* Every link out of this page opens in its own tab: the page holds the
      reader's place in a filtered, sorted, scrolled table, and navigating away
@@ -71,14 +71,14 @@
     if (!filled(url)) return "";
     const href = TD.fmt.href(url);
     if (!href) return esc(filled(text) ? text : url);
-    return `<a class="${cls || "dw-link"}" href="${esc(href)}" target="_blank"
+    return `<a class="${cls || "cv-link"}" href="${esc(href)}" target="_blank"
       rel="noopener">${esc(filled(text) ? text : url)}</a>`;
   }
 
   /* Truncation is done by CSS (one line, ellipsis), so the full string has to
      travel with the node for the tooltip to have anything to show. */
   function clip(text) {
-    return `<span class="dw-clip" data-tip="1" data-full="${esc(text)}">${esc(text)}</span>`;
+    return `<span class="cv-clip" data-tip="1" data-full="${esc(text)}">${esc(text)}</span>`;
   }
 
   const yesNo = (value) =>
@@ -92,16 +92,16 @@
       if (!always) return "";
       html = DASH;
     }
-    return `<div class="dw-r"><dt>${esc(label)}</dt><dd>${html}</dd></div>`;
+    return `<div class="cv-r"><dt>${esc(label)}</dt><dd>${html}</dd></div>`;
   }
 
   const dl = (parts) => {
     const body = parts.filter(Boolean).join("");
-    return body ? `<dl class="dw-dl">${body}</dl>` : "";
+    return body ? `<dl class="cv-dl">${body}</dl>` : "";
   };
 
   const stack = (items) =>
-    items.length ? `<ul class="dw-stack">${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
+    items.length ? `<ul class="cv-stack">${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
 
   let discId = 0;
 
@@ -112,11 +112,11 @@
      does. */
   function disclosure(summary, html) {
     if (!html) return "";
-    const id = `dw-disc-${++discId}`;
-    return `<button type="button" class="dw-disc" data-disc="${id}"
+    const id = `cv-disc-${++discId}`;
+    return `<button type="button" class="cv-disc" data-disc="${id}"
         aria-expanded="false" aria-controls="${id}"
         >${TD.ui.CHEVRON}<span>${esc(summary)}</span></button>
-      <div class="dw-disc-body" id="${id}"><div>${html}</div></div>`;
+      <div class="cv-disc-body" id="${id}"><div>${html}</div></div>`;
   }
 
   /* Eight is where a list stops being scannable and starts being a wall. The
@@ -141,13 +141,13 @@
     return parts
       .filter(Boolean)
       .map((html, index) =>
-        `<section class="dw-sec${cls ? ` ${cls}` : ""}" style="--i:${index}">${html}</section>`)
+        `<section class="cv-sec${cls ? ` ${cls}` : ""}" style="--i:${index}">${html}</section>`)
       .join("");
   }
 
-  const heading = (text) => `<h3 class="dw-h">${esc(text)}</h3>`;
-  const caption = (text) => `<p class="dw-cap">${esc(text)}</p>`;
-  const muted = (text) => `<p class="dw-muted">${esc(text)}</p>`;
+  const heading = (text) => `<h3 class="cv-h">${esc(text)}</h3>`;
+  const caption = (text) => `<p class="cv-cap">${esc(text)}</p>`;
+  const muted = (text) => `<p class="cv-muted">${esc(text)}</p>`;
 
   function table(headers, bodyRows) {
     if (!bodyRows.length) return "";
@@ -155,7 +155,7 @@
     const body = bodyRows
       .map((cells) => `<tr>${cells.map((c) => `<td>${c || DASH}</td>`).join("")}</tr>`)
       .join("");
-    return `<div class="dw-tscroll"><table class="dw-t"><thead><tr>${head}</tr></thead>
+    return `<div class="cv-tscroll"><table class="cv-t"><thead><tr>${head}</tr></thead>
       <tbody>${body}</tbody></table></div>`;
   }
 
@@ -171,7 +171,7 @@
   function ago(iso) {
     if (!filled(iso)) return "";
     const age = TD.fmt.relativeAge(iso);
-    return age ? `${age} <span class="dw-note" title="${esc(iso)}">${esc(String(iso).slice(0, 10))}</span>` : esc(String(iso).slice(0, 10));
+    return age ? `${age} <span class="cv-note" title="${esc(iso)}">${esc(String(iso).slice(0, 10))}</span>` : esc(String(iso).slice(0, 10));
   }
 
   /* --- Header -------------------------------------------------------------- */
@@ -199,7 +199,7 @@
     // the catalog file, and where to correct it.
     const file = catalogUrls(row.id);
     links.push(ext(file.view, "Catalog file"), ext(file.edit, "Edit catalog file"));
-    return links.length ? `<div class="dw-links">${links.join("")}</div>` : "";
+    return links.length ? `<div class="cv-links">${links.join("")}</div>` : "";
   }
 
   /* The component's own file in catalog/components/, on GitHub, to read and to
@@ -232,13 +232,13 @@
     const blurb = blurbFor(row);
     const meta = joinHtml([row.refactor_status, row.hosted_at, row.component_type || row.type,
       row.layer, thirdPartyText(row) ? "third-party" : ""]);
-    return `<div class="dw-headtop">
-        <div class="dw-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
+    return `<div class="cv-headtop">
+        <div class="cv-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
       </div>
-      <div class="dw-id">${esc(row.id)}</div>
-      ${blurb ? `<div class="dw-blurb clamp-2">${esc(blurb)}</div>` : ""}
-      <div class="dw-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
-      ${meta ? `<div class="dw-metaline">${meta}</div>` : ""}
+      <div class="cv-id">${esc(row.id)}</div>
+      ${blurb ? `<div class="cv-blurb clamp-2">${esc(blurb)}</div>` : ""}
+      <div class="cv-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
+      ${meta ? `<div class="cv-metaline">${meta}</div>` : ""}
       ${headerLinks(row)}`;
   }
 
@@ -255,8 +255,8 @@
       // differs from the reported one by a capital letter is genuinely a name
       // nothing reports, and saying so is the point of this row.
       const where = seen.length
-        ? `<span class="dw-note">${esc(seen.join(" · "))}</span>`
-        : `<span class="dw-note dw-off">not reporting</span>`;
+        ? `<span class="cv-note">${esc(seen.join(" · "))}</span>`
+        : `<span class="cv-note cv-off">not reporting</span>`;
       return `${mono(name)} ${where}`;
     });
     return longList(items, "services");
@@ -297,7 +297,7 @@
     // The key in small caps, the path in mono: "openapi openapi.json" in one
     // typeface reads as one string rather than as a name and its value.
     return stack(keys.map((key) =>
-      `<span class="dw-key">${esc(key)}</span> ${
+      `<span class="cv-key">${esc(key)}</span> ${
         filled(endpoints[key]) ? mono(endpoints[key]) : DASH}`));
   }
 
@@ -341,7 +341,7 @@
     const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
       ? (record && record.registry_url
-        ? ext(record.registry_url, smartapiId, "dw-link dw-mono")
+        ? ext(record.registry_url, smartapiId, "cv-link cv-mono")
         : mono(smartapiId))
       : "";
 
@@ -351,7 +351,7 @@
       ? charts.map((name) => {
         const detail = chartDetails.find((c) => c && c.chart === name);
         return detail && detail.source_url
-          ? ext(detail.source_url, name, "dw-link dw-mono")
+          ? ext(detail.source_url, name, "cv-link cv-mono")
           : mono(name);
       }).join(" ")
       : "";
@@ -378,7 +378,7 @@
       drow("Software", softwareHtml),
       drow("Layer", val(row.layer), true),
       drow("Stage", stage ? `${stage}${row.step_description
-        ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
+        ? `<span class="cv-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
       drow("Owner", row.owner ? TD.row.ownerLabel(row.owner) : "", true),
       drow("Part of", val(row.part_of)),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
@@ -410,9 +410,9 @@
     // catalog's `description` and `notes` answer those two questions, which
     // is why the notes carry a heading and the description does not.
     return sections([
-      row.description ? `<div class="dw-prose dw-desc">${TD.fmt.prose(row.description)}</div>` : "",
+      row.description ? `<div class="cv-prose cv-desc">${TD.fmt.prose(row.description)}</div>` : "",
       row.notes
-        ? `<div class="dw-notes">${heading("Notes")}<p class="dw-prose">${esc(row.notes)}</p></div>`
+        ? `<div class="cv-notes">${heading("Notes")}<p class="cv-prose">${esc(row.notes)}</p></div>`
         : "",
       identity,
       meta ? heading("Repository") + meta : "",
@@ -431,7 +431,7 @@
     if (!fact) return DASH;
     const text = fact.mono ? esc(fact.value).replace(/\./g, ".<wbr>") : esc(fact.value);
     const value = fact.href
-      ? `<a class="dw-link" href="${esc(fact.href)}" target="_blank" rel="noopener">${text}</a>`
+      ? `<a class="cv-link" href="${esc(fact.href)}" target="_blank" rel="noopener">${text}</a>`
       : text;
     const src = fact.src ? ` <span class="src" data-src="${esc(fact.src)}">${esc(sourceLabel(fact.src))}</span>` : "";
     return `${value}${src}${fact.note ? ` ${note(fact.note)}` : ""}`;
@@ -443,7 +443,7 @@
 
   function urlCell(url) {
     if (!filled(url)) return DASH;
-    return ext(url, url, "dw-link dw-mono dw-url");
+    return ext(url, url, "cv-link cv-mono cv-url");
   }
 
   function envMatrix(row) {
@@ -475,7 +475,7 @@
         : "",
     ].join("");
 
-    return `<div class="dw-tscroll"><table class="cv-envs">
+    return `<div class="cv-tscroll"><table class="cv-envs">
         <thead><tr><th></th>${names.map((env) => `<th scope="col">${esc(env)}</th>`).join("")}</tr></thead>
         <tbody>${body}</tbody></table></div>${rejectedHtml(row)}`;
   }
@@ -486,7 +486,7 @@
     return heading("Probed, not confirmed")
       + caption("a conventional hostname that did not confirm; not a claim that anything is down")
       + stack(rejected.map((entry) =>
-        `<span class="dw-key">${esc(entry.env)}</span> ${ext(entry.url, entry.url, "dw-link dw-mono")}`));
+        `<span class="cv-key">${esc(entry.env)}</span> ${ext(entry.url, entry.url, "cv-link cv-mono")}`));
   }
 
   /* --- Releases tab -------------------------------------------------------- */
@@ -516,15 +516,15 @@
     if (release.published) marks.push(note(release.published));
 
     const tag = release.url
-      ? ext(release.url, release.tag, `dw-link dw-mono${isDeployed ? " dw-on" : ""}`)
-      : `<span class="dw-mono${isDeployed ? " dw-on" : ""}">${esc(release.tag)}</span>`;
+      ? ext(release.url, release.tag, `cv-link cv-mono${isDeployed ? " cv-on" : ""}`)
+      : `<span class="cv-mono${isDeployed ? " cv-on" : ""}">${esc(release.tag)}</span>`;
     const name = release.name && release.name !== release.tag
-      ? `<span class="dw-relname">${esc(release.name)}</span>` : "";
+      ? `<span class="cv-relname">${esc(release.name)}</span>` : "";
 
-    return `<div class="dw-rel">
-      <div class="dw-relhead">${tag}${name}</div>
-      <div class="dw-relmeta">${marks.join(" ")}</div>
-      ${release.body_excerpt ? `<p class="dw-excerpt">${esc(release.body_excerpt)}</p>` : ""}
+    return `<div class="cv-rel">
+      <div class="cv-relhead">${tag}${name}</div>
+      <div class="cv-relmeta">${marks.join(" ")}</div>
+      ${release.body_excerpt ? `<p class="cv-excerpt">${esc(release.body_excerpt)}</p>` : ""}
     </div>`;
   }
 
@@ -569,7 +569,7 @@
       // someone meant to change what runs; it does not say a cluster took it.
       drow("Chart last changed", changed
         ? `${changed.url ? ext(changed.url, changed.date || changed.sha || "commit") : esc(changed.date || "")}
-           ${changed.subject ? `<span class="dw-sub">${esc(changed.subject)}</span>` : ""}
+           ${changed.subject ? `<span class="cv-sub">${esc(changed.subject)}</span>` : ""}
            ${note("intent to deploy, not a deployment")}`
         : ""),
       drow("Chart source", ext(chart.source_url, "open in translator-devops")),
@@ -621,7 +621,7 @@
       candidates.length === 1 ? "entry shares" : "entries share"
     } this infores; none is recorded on the component: ${titles.join(", ")}`)
       + stack(candidates.map((c) =>
-        `${ext(`https://smart-api.info/ui/${c.smartapi_id}`, c.smartapi_id, "dw-link dw-mono")} ${
+        `${ext(`https://smart-api.info/ui/${c.smartapi_id}`, c.smartapi_id, "cv-link cv-mono")} ${
           val(c.title)}`));
   }
 
@@ -667,8 +667,8 @@
       const under = joinHtml([server.location, server.description]);
       return [
         val(server.maturity),
-        `${server.url ? ext(server.url, server.url, "dw-link dw-mono") : ""}${
-          under ? `<span class="dw-sub">${under}</span>` : ""}`,
+        `${server.url ? ext(server.url, server.url, "cv-link cv-mono") : ""}${
+          under ? `<span class="cv-sub">${under}</span>` : ""}`,
       ];
     });
 
@@ -694,7 +694,7 @@
       drow("Contact", [contact.name, contact.email, contact.url].filter(filled).length
         ? [
           val(contact.name),
-          contact.email ? `<a class="dw-link" href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : "",
+          contact.email ? `<a class="cv-link" href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : "",
           contact.url ? ext(contact.url) : "",
         ].filter(Boolean).join(" · ")
         : ""),
@@ -708,7 +708,7 @@
       statusBlock,
       registration,
       record.description_text ? heading("Description")
-        + `<p class="dw-prose">${esc(record.description_text)}</p>` : "",
+        + `<p class="cv-prose">${esc(record.description_text)}</p>` : "",
     ]);
   }
 
@@ -717,14 +717,14 @@
   function connButton(id, planned) {
     const other = rowById(id);
     const label = other ? other.name : id;
-    return `<button type="button" class="dw-conn${planned ? " planned" : ""}" data-go="${esc(id)}">
-      ${other ? TD.owner.coin(other.owner) : ""}<span class="dw-connname">${esc(label)}</span>
-      <span class="dw-mono dw-connid" data-tip="1" data-full="${esc(id)}">${esc(id)}</span>${
-      planned ? `<span class="dw-note">planned</span>` : ""}</button>`;
+    return `<button type="button" class="cv-conn${planned ? " planned" : ""}" data-go="${esc(id)}">
+      ${other ? TD.owner.coin(other.owner) : ""}<span class="cv-connname">${esc(label)}</span>
+      <span class="cv-mono cv-connid" data-tip="1" data-full="${esc(id)}">${esc(id)}</span>${
+      planned ? `<span class="cv-note">planned</span>` : ""}</button>`;
   }
 
   /* The chips of a connections group, or nothing. */
-  const conns = (items) => (items.length ? `<div class="dw-conns">${items.join("")}</div>` : "");
+  const conns = (items) => (items.length ? `<div class="cv-conns">${items.join("")}</div>` : "");
 
   function connGroup(title, ids, plannedIds) {
     const items = list(ids).map((id) => connButton(id, false))
@@ -757,8 +757,8 @@
       .map((other) => other.id);
 
     const externalsHtml = conns(list(row.externals).map((entry) =>
-      `<span class="dw-conn static">${TD.row.arrow(entry.direction)}
-          <span class="dw-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
+      `<span class="cv-conn static">${TD.row.arrow(entry.direction)}
+          <span class="cv-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
 
     const parts = [
       connGroup("Gets results from",
@@ -788,10 +788,10 @@
         + caption("the infores catalog's view, beside what this repository records")
         + facts
         + (consumes.length
-          ? `<div class="dw-sublabel">consumes</div>${
+          ? `<div class="cv-sublabel">consumes</div>${
             conns(consumes.map((id) => connButton(id, false)))}` : "")
         + (consumedBy.length
-          ? `<div class="dw-sublabel">consumed by</div>${
+          ? `<div class="cv-sublabel">consumed by</div>${
             conns(consumedBy.map((id) => connButton(id, false)))}` : "")
         + (!consumes.length && !consumedBy.length && !facts
           ? muted("Nothing recorded in the catalog for this component.") : ""));

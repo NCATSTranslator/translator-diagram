@@ -100,10 +100,10 @@ test("the last-updated note escapes its date, label and tag once", (t) => {
   t.after(() => { VIEW_TD.DATA = saved; });
   VIEW_TD.DATA = { updated_labels: { release: "Release & tag" } };
   const html = updatedHtml({ last_updated: { source: "release", tag: "v1<2", date: "2026<01" } });
-  assert.match(html, /^2026&lt;01 <span class="dw-note">Release &amp; tag · v1&lt;2<\/span>$/);
+  assert.match(html, /^2026&lt;01 <span class="cv-note">Release &amp; tag · v1&lt;2<\/span>$/);
   // A source with no label falls back to itself, and is escaped the same way.
   const fallback = updatedHtml({ last_updated: { source: "a&b" } });
-  assert.match(fallback, /<span class="dw-note">a&amp;b<\/span>/);
+  assert.match(fallback, /<span class="cv-note">a&amp;b<\/span>/);
   assert.doesNotMatch(html + fallback, /&amp;(amp|lt);/);
 });
 
