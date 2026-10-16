@@ -247,15 +247,29 @@ class TestWatch:
         (tmp_path / "a.yaml").write_text("a")
         (tmp_path / "__pycache__").mkdir()
         (tmp_path / "__pycache__" / "x.pyc").write_text("x")
-        before = dashboard_cli._snapshot([tmp_path, tmp_path / "missing"])
-        assert list(before) == [tmp_path / "a.yaml"]
+        out = tmp_path.parent / "out"
+        before = dashboard_cli._snapshot([tmp_path, tmp_path / "missing"], out)
+        assert list(before) == [tmp_path.resolve() / "a.yaml"]
 
         os.utime(tmp_path / "a.yaml", ns=(0, 0))
-        assert dashboard_cli._snapshot([tmp_path]) != before
+        assert dashboard_cli._snapshot([tmp_path], out) != before
         (tmp_path / "b.yaml").write_text("b")
-        added = dashboard_cli._snapshot([tmp_path])
+        added = dashboard_cli._snapshot([tmp_path], out)
         (tmp_path / "b.yaml").unlink()
-        assert dashboard_cli._snapshot([tmp_path]) != added
+        assert dashboard_cli._snapshot([tmp_path], out) != added
+
+    def test_a_snapshot_skips_an_output_directory_inside_a_root(self, tmp_path):
+        (tmp_path / "a.yaml").write_text("a")
+        (tmp_path / "preview").mkdir()
+        (tmp_path / "preview" / "index.html").write_text("built")
+        assert list(dashboard_cli._snapshot([tmp_path], tmp_path / "preview")) == [
+            tmp_path.resolve() / "a.yaml"
+        ]
+        # An output directory around a root hides nothing in it.
+        assert set(dashboard_cli._snapshot([tmp_path], tmp_path.parent)) == {
+            tmp_path.resolve() / "a.yaml",
+            tmp_path.resolve() / "preview" / "index.html",
+        }
 
     def test_it_rebuilds_on_a_change_and_only_then(self, monkeypatch, workspace):
         monkeypatch.chdir(workspace)

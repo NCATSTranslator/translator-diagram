@@ -200,18 +200,17 @@ def _watch(components_dir: Path, sync_dir: Path, output_dir: Path,
     ]
     if include_private:
         command.append("--include-private")
-    # output_dir is under none of these, so a build cannot set off the next.
     roots = (Path(__file__).parent, components_dir, sync_dir,
              Path("catalog"), Path("config"))
     try:
-        seen = _snapshot(roots)
+        seen = _snapshot(roots, output_dir)
         subprocess.run(command, check=False)  # a failed build is printed, not fatal
         click.echo("Watching for changes; Ctrl-C to stop.")
         while True:
             # ponytail: polls stat() over ~330 files each second; switch to
             # watchfiles if the trees grow enough for that to show.
             time.sleep(1)
-            now = _snapshot(roots)
+            now = _snapshot(roots, output_dir)
             if now != seen:
                 seen = now
                 click.echo("Changed; rebuilding ...")
@@ -220,13 +219,27 @@ def _watch(components_dir: Path, sync_dir: Path, output_dir: Path,
         pass
 
 
-def _snapshot(roots) -> dict[Path, int]:
+def _snapshot(roots, output_dir: Path) -> dict[Path, int]:
     """Every file under `roots` with its mtime, so comparing two snapshots
-    catches an edit, an addition and a deletion alike."""
+    catches an edit, an addition and a deletion alike.
+
+    Skips `output_dir` where it lies inside a root — `--output-dir
+    data/sync/preview`, say — since otherwise each build's own writes would
+    set off the next, once a second for good. Only inside, not around: an
+    output directory of `.` contains every root, and skipping everything
+    under it would watch nothing.
+    """
+    output_dir = output_dir.resolve()
     seen = {}
     for root in roots:
-        for path in root.rglob("*") if root.is_dir() else ():
-            if "__pycache__" in path.parts:
+        if not root.is_dir():
+            continue
+        root = root.resolve()
+        inside = output_dir if output_dir.is_relative_to(root) else None
+        for path in root.rglob("*"):
+            if "__pycache__" in path.parts or (
+                inside and path.is_relative_to(inside)
+            ):
                 continue
             try:
                 if path.is_file():
