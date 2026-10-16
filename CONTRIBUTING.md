@@ -33,6 +33,7 @@ The commands, as you will run them while working:
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
 uv run build-dashboard --include-private             # ignore config/privacy.yaml
+uv run build-dashboard --watch                       # stays running; see below
 
 uv run generate-diagram --input data/components.csv  # from a local CSV
 uv run generate-diagram --google-sheet               # the real sheet
@@ -40,8 +41,13 @@ uv run generate-diagram --google-sheet               # the real sheet
 
 `sync-components` and `build-dashboard` are split because fetching is slow and
 rate-limited while rendering is iterated on: one sync serves a hundred
-rebuilds. `--google-sheet` reaches the real sheet, so prefer a local CSV when
-testing. The README has every flag.
+rebuilds. Every other command here writes its output and exits;
+`build-dashboard --watch` builds once and then keeps running, rebuilding
+`data/dashboard/` each time a component file, the sync cache, `catalog/`,
+`config/` or the code changes, until you stop it with Ctrl-C. Run it in a
+terminal of its own, beside `python3 -m http.server`, and reload the tab to see
+each rebuild. `--google-sheet` reaches the real sheet, so prefer a local CSV
+when testing. The README has every flag.
 
 ## Before a first change
 

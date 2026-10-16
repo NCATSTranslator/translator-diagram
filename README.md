@@ -239,6 +239,10 @@ open data/dashboard/index.html
 # Map export and other features some browsers block from file://:
 cd data/dashboard && python3 -m http.server 8765
 
+# Rebuild on every edit to the catalog, config, sync cache or code (Ctrl-C
+# stops it). Reload the tab by hand; a new sync is still a separate step.
+uv run build-dashboard --watch
+
 # Everything, including what a published build withholds. Local use only.
 uv run build-dashboard --include-private
 ```

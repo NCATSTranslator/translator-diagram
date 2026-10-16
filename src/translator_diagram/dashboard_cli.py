@@ -7,6 +7,9 @@ means you can rebuild the page a hundred times against one sync.
 Nothing imports this module, in either direction — same rule as cli.py.
 """
 
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import click
@@ -109,7 +112,11 @@ def sync_main(components_dir, output_dir, max_age, force, workers):
 @click.option("--include-private", is_flag=True,
               help="Skip config/privacy.yaml and build the full page. For "
                    "local use: the result is not safe to publish.")
-def build_main(components_dir, sync_dir, output_dir, include_private):
+@click.option("--watch", is_flag=True,
+              help="Rebuild whenever a component file, the sync cache, catalog/, "
+                   "config/ or the package's own code changes. Reload the "
+                   "browser tab by hand.")
+def build_main(components_dir, sync_dir, output_dir, include_private, watch):
     """Compile the synced responses into a single self-contained page.
 
     Withholds what config/privacy.yaml names unless --include-private is
@@ -117,6 +124,9 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     rather than publishing it, and the workflow that publishes passes no flag
     at all, so it cannot regress into a full build by being edited.
     """
+    if watch:
+        _watch(components_dir, sync_dir, output_dir, include_private)
+        return
     components = _load(components_dir)
     manifest = manifest_path(sync_dir)
     if not manifest.exists():
@@ -168,6 +178,77 @@ def build_main(components_dir, sync_dir, output_dir, include_private):
     click.echo(f"Wrote {json_path}")
     click.echo(f"Wrote {html_path}")
     _warn_about_leftovers(output_dir, {html_path, json_path})
+
+
+def _watch(components_dir: Path, sync_dir: Path, output_dir: Path,
+           include_private: bool) -> None:
+    """Build, then build again each time a watched file changes, until Ctrl-C.
+
+    Each build runs `build-dashboard` in a fresh interpreter rather than
+    calling it in this one. In-process, an edit to cells.py or dashboard.py
+    would not take effect — the modules loaded at the start would keep running,
+    and `importlib.reload` across a package is not reliable — and a build that
+    fails, whether a ClickException or a YAML file saved halfway through an
+    edit, would end the watch rather than print and wait for the fix.
+    """
+    command = [
+        sys.executable, "-c",
+        "from translator_diagram.dashboard_cli import build_main; build_main()",
+        "--components", str(components_dir),
+        "--sync-dir", str(sync_dir),
+        "--output-dir", str(output_dir),
+    ]
+    if include_private:
+        command.append("--include-private")
+    roots = (Path(__file__).parent, components_dir, sync_dir,
+             Path("catalog"), Path("config"))
+    try:
+        seen = _snapshot(roots, output_dir)
+        subprocess.run(command, check=False)  # a failed build is printed, not fatal
+        click.echo("Watching for changes; Ctrl-C to stop.")
+        while True:
+            # ponytail: polls stat() over ~330 files each second; switch to
+            # watchfiles if the trees grow enough for that to show.
+            time.sleep(1)
+            now = _snapshot(roots, output_dir)
+            if now != seen:
+                seen = now
+                click.echo("Changed; rebuilding ...")
+                subprocess.run(command, check=False)
+    except KeyboardInterrupt:
+        pass
+
+
+def _snapshot(roots, output_dir: Path) -> dict[Path, int]:
+    """Every file under `roots` with its mtime, so comparing two snapshots
+    catches an edit, an addition and a deletion alike.
+
+    Skips `output_dir` where it lies inside a root — `--output-dir
+    data/sync/preview`, say — since otherwise each build's own writes would
+    set off the next, once a second for good. Only inside, not around: an
+    output directory of `.` contains every root, and skipping everything
+    under it would watch nothing.
+    """
+    output_dir = output_dir.resolve()
+    seen = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        root = root.resolve()
+        inside = output_dir if output_dir.is_relative_to(root) else None
+        for path in root.rglob("*"):
+            if "__pycache__" in path.parts or (
+                inside and path.is_relative_to(inside)
+            ):
+                continue
+            try:
+                if path.is_file():
+                    seen[path] = path.stat().st_mtime_ns
+            except FileNotFoundError:
+                # Gone between the walk and the stat: an editor's atomic save,
+                # or a sync rewriting its cache. The next snapshot sees it.
+                pass
+    return seen
 
 
 def _warn_about_leftovers(output_dir: Path, written: set[Path]) -> None:
