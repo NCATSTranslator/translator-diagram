@@ -33,6 +33,7 @@ The commands, as you will run them while working:
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
 uv run build-dashboard --include-private             # ignore config/privacy.yaml
+uv run build-dashboard --watch                       # rebuild on every change
 
 uv run generate-diagram --input data/components.csv  # from a local CSV
 uv run generate-diagram --google-sheet               # the real sheet
