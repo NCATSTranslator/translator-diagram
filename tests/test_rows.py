@@ -412,6 +412,21 @@ class TestDerivedRejected:
         assert build_rows([_comp("svc")], synced)[0]["derived_rejected"] == []
 
 
+class TestRecorded:
+    def test_the_row_carries_a_copy_of_the_file(self, tmp_path):
+        """A copy, because privacy.apply edits rows in place and must not
+        reach back into the ComponentFile the next build reads."""
+        raw = {"id": "svc", "notes": "as written", "connections": {"calls": ["other"]}}
+        component = _comp("svc", raw=raw)
+        row = build_rows([component], _Probes(tmp_path).build())[0]
+        assert row["recorded"] == raw
+        row["recorded"]["connections"]["calls"].clear()
+        assert raw["connections"]["calls"] == ["other"]
+
+    def test_a_component_built_in_code_has_none(self, tmp_path):
+        assert build_rows([_comp("svc")], _Probes(tmp_path).build())[0]["recorded"] is None
+
+
 class TestTheMetadataBlock:
     def test_the_file_speaks_for_itself(self, synced):
         component = _comp(

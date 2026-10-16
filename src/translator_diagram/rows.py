@@ -8,6 +8,7 @@ Drift is marked here rather than in `build_cell` because it is a comparison
 *between* an environment and its neighbours, which a single cell cannot see.
 """
 
+import copy
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
@@ -495,6 +496,11 @@ def build_rows(
                     for env in ENVIRONMENTS
                     if (spec := synced.rejected.get(component.id, {}).get(env))
                 ],
+                # The component file as written, for the Component view's
+                # field-by-field Recorded section. A copy, not the parsed dict:
+                # `privacy.apply` prunes and scrubs rows in place, and sharing
+                # it would let a published build edit the ComponentFile.
+                "recorded": copy.deepcopy(component.raw),
                 "environments": cells,
             }
         )

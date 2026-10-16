@@ -20,10 +20,13 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import click
+
 from .cells import SOURCE_LABELS
 from .charts import unclaimed_charts
 from .colors import load_owner_colors, owner_styles
 from .components import ENVIRONMENTS, ComponentFile
+from .files import find_upward, read_json
 from .payload_details import mapping, text
 from .privacy import UNCLAIMED_CHART_FREE_TEXT, Policy, Report, patterns_for, scrub
 from .privacy import apply as apply_policy
@@ -278,6 +281,39 @@ def source_tally(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 # --- The payload -----------------------------------------------------------
 
+SCHEMA_PATH = Path("catalog/schema/component.schema.json")
+
+
+def load_schema(path: Path | None = None) -> dict[str, Any]:
+    """The component schema, which the Component view lists every field from.
+
+    The page gets the whole schema rather than a list of names derived from
+    it, so a field appears on the page the day it enters the schema, with the
+    description the schema already gives it. Found the way the stage file is
+    (`find_upward`), and missing is an error for the same reason: the page
+    would show a component with no gaps in it, which is the one thing the
+    Recorded section exists to show.
+    """
+    found = path if path is not None else find_upward(SCHEMA_PATH)
+    schema = read_json(found) if found is not None else None
+    if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
+        raise click.ClickException(
+            f"No component schema at {SCHEMA_PATH}. The Component view lists "
+            f"every field a component file may carry from it. Run from the "
+            f"repository root."
+        )
+    return schema
+
+
+def _mappings_in(node: Any) -> list[dict[str, Any]]:
+    """Every mapping in a JSON document, at any depth."""
+    if isinstance(node, dict):
+        return [node, *(m for value in node.values() for m in _mappings_in(value))]
+    if isinstance(node, list):
+        return [m for item in node for m in _mappings_in(item)]
+    return []
+
+
 def build_payload(
     components: list[ComponentFile],
     synced: SyncedData,
@@ -314,12 +350,20 @@ def build_payload(
     rows = build_rows(components, synced, stages=stages)
     report = Report()
     unclaimed = build_unclaimed_charts(components, synced)
+    schema = load_schema()
     if policy is not None:
         rows, report = apply_policy(rows, policy)
+        patterns = patterns_for(policy)
         report = dataclasses.replace(
             report,
             mentions=report.mentions
-            + scrub(unclaimed, UNCLAIMED_CHART_FREE_TEXT, patterns_for(policy)),
+            + scrub(unclaimed, UNCLAIMED_CHART_FREE_TEXT, patterns)
+            # The schema's prose names examples ("such as Jaeger"), and any of
+            # its mappings at any depth can carry a description.
+            + sum(
+                scrub(mapping, (((), ("description",)),), patterns)
+                for mapping in _mappings_in(schema)
+            ),
         )
     manifest = synced.manifest
     colors = load_owner_colors()
@@ -335,6 +379,7 @@ def build_payload(
         # separately is how a page and a legend come to disagree about a team.
         "owner_styles": owner_styles(colors),
         "source_labels": SOURCE_LABELS,
+        "component_schema": schema,
         "updated_labels": UPDATED_LABELS,
         "source_tally": source_tally(rows),
         "unregistered_count": sum(
