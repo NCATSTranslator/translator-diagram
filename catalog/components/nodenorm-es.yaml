@@ -35,6 +35,8 @@ repositories:
 
 endpoints:
   openapi: webapp/openapi.json
+  # Reports the Babel release loaded, which nothing else exposes at runtime.
+  status: status
 
 environments:
   ci:

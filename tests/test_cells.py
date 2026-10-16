@@ -5,6 +5,8 @@ fact extractors directly, and the resolved cell that comes out of `build_rows`.
 `_Probes` builds the recorded-probe shapes `sync` actually writes.
 """
 
+import pytest
+
 from tests.dashboard_helpers import _cell, _comp, _Probes
 from translator_diagram.cells import (
     CELL_REASONS,
@@ -76,6 +78,71 @@ class TestVersionSourceChain:
         cell = build_rows([component], synced)[0]["environments"]["ci"]
         assert cell["version"] is None
         assert cell["data_release"] == "babel 2025sep1"
+
+    def test_a_plain_version_key_is_the_software_version(self, tmp_path):
+        # NodeNorm ES's body, as served: `version` spelled plainly, and the
+        # Biolink Model Toolkit it loads reported under a `*_version` key.
+        # Without the plain key the toolkit would be badged as the software.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "status": "running",
+            "version": "1.0.0",
+            "babel_version": "2025sep1",
+            "biolink_model_toolkit_version": "v4.4.3",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.0.0", "status")
+        assert cell["data_release"] == "babel 2025sep1"
+
+    def test_the_toolkit_version_is_not_the_software_version(self, tmp_path):
+        # NameRes ES's body has no `version` at all, and a Babel of null.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "status": "ok",
+            "babel_version": None,
+            "biolink_model_toolkit_version": "v4.2.6-rc5",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert cell["version"] is None
+        assert cell["data_release"] is None
+
+    def test_a_plain_version_wins_over_an_earlier_version_key(self, tmp_path):
+        # Order decides among the `*_version` keys, never against the plain one.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "nameres_version": "2.0.0",
+            "version": "1.0.0",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.0.0", "status")
+
+    @pytest.mark.parametrize("plain", ["", "  ", None, 3])
+    def test_a_plain_version_that_says_nothing_gives_way(self, tmp_path, plain):
+        # An empty string is a string, and taking it would drop the
+        # `nameres_version` beside it, then fall through to SmartAPI or Helm.
+        synced = _Probes(tmp_path).body("status", "ci", {
+            "version": plain,
+            "nameres_version": "1.4.0",
+        }).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert (cell["version"], cell["version_source"]) == ("1.4.0", "status")
 
     def test_the_helm_chart_is_the_last_resort(self, tmp_path):
         # Tier four, and the only tier that describes what *should* be
@@ -372,6 +439,22 @@ class TestCellReasons:
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         ))
         assert cell["reason"] == "up · document has no version"
+
+    def test_a_broken_api_document_outranks_a_status_body_with_no_version(
+        self, tmp_path
+    ):
+        # NameRes ES: its /status never carries a version, so letting that
+        # answer first would say "no version" on the day its OpenAPI 500s.
+        probes = (_Probes(tmp_path)
+                  .probe("ci", 200)
+                  .document("openapi", "ci", 500)
+                  .document("status", "ci", 200, {"status": "ok", "babel_version": None}))
+        cell = _cell(probes, _comp(
+            "svc",
+            endpoints={"openapi": "openapi.json", "status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        ))
+        assert cell["reason"] == "HTTP 500"
 
     def test_up_with_nowhere_to_look_for_a_version(self, tmp_path):
         # The UI: four hosts that are up, record `openapi: null`, and publish

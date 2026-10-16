@@ -80,13 +80,19 @@ DOCUMENT_ERROR_STATUSES = frozenset({403}) | frozenset(range(500, 600))
 
 # `*_version` keys in a /status body that name something other than the
 # software's own version. Babel and Biolink are *data* releases and TRAPI is a
-# spec, and a body is free to report any of them before it reports its own
-# version — at which point the first `*_version` key would become the
-# component's version, badged `status`, tinted for drift against its
-# neighbours, and matched against the repository's releases.
-NOT_SOFTWARE_VERSIONS = frozenset(
-    {"babel_version", "biolink_version", "biolink_model_version", "trapi_version"}
-)
+# spec, and a body with no plain `version` is free to report any of them
+# before it reports its own — at which point the first `*_version` key would
+# become the component's version, badged `status`, tinted for drift against
+# its neighbours, and matched against the repository's releases.
+NOT_SOFTWARE_VERSIONS = frozenset({
+    "babel_version",
+    "biolink_version",
+    "biolink_model_version",
+    # NodeNorm ES and NameRes ES report the Biolink Model Toolkit they load,
+    # a library pinned to a model release, not the service's own version.
+    "biolink_model_toolkit_version",
+    "trapi_version",
+})
 
 
 # --- What one fetched document says ----------------------------------------
@@ -182,23 +188,31 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
 
     There is no Translator-wide /status schema — NameRes's shape is its own,
     and its OpenAPI declares the response `additionalProperties: true`. So this
-    looks for conventions rather than parsing a schema: any `*_version` key
-    that is not one of the known data or spec releases, plus the Babel and
-    Biolink fields that carry the *data* release, which is a genuinely
-    separate axis from the software version and which nothing else exposes at
-    runtime.
+    looks for conventions rather than parsing a schema: a plain `version`, else
+    any `*_version` key that is not one of the known data or spec releases,
+    plus the Babel and Biolink fields that carry the *data* release, which is
+    a genuinely separate axis from the software version and which nothing else
+    exposes at runtime.
 
-    Key order is the tie-break when a body reports several, which is why the
-    exclusions matter: a document that lists its Biolink version before its
-    own would otherwise have that reported as the software it is running.
+    A plain `version` comes first because it is the most literal spelling,
+    and NodeNorm's bodies use it. Among the `*_version` keys, order is the
+    tie-break when a body reports several, which is why the exclusions
+    matter: a document that lists its Biolink version before its own would
+    otherwise have that reported as the software it is running. Either way an
+    empty string is no answer, so the next candidate gets its turn.
+
+    ponytail: a plain `version` is taken on trust, because its name says
+    nothing about *what* it versions. Every body surveyed so far that has one
+    means the software (docs/metadata-sources.md, *Status endpoints*), and
+    recording `status` in a component file is what vouches for that
+    (catalog/README.md). The first body whose bare `version` is a spec or data
+    release needs a per-component override naming the key to read.
     """
     if not document:
         return {}
-    versions = {
-        key: value
-        for key, value in document.items()
-        if key.endswith("_version") and isinstance(value, str)
-    }
+    candidates = [("version", document.get("version"))] + [
+        (key, value) for key, value in document.items() if key.endswith("_version")
+    ]
     biolink = document.get("biolink_model")
     release = []
     if babel := document.get("babel_version"):
@@ -208,7 +222,13 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     message = document.get("message")
     return {
         "version": next(
-            (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
+            (
+                value
+                for key, value in candidates
+                if isinstance(value, str) and value.strip()
+                and key not in NOT_SOFTWARE_VERSIONS
+            ),
+            None,
         ),
         "data_release": " · ".join(release) or None,
         # A sentence the service wrote about itself — "Reporting results from
@@ -329,10 +349,15 @@ def _missing_version_reason(
     of that is for one of them to be derived from the other.
 
     Then the documents, in the order they would have supplied a version: a 200
-    that was not JSON at all, a document with no version in it, a status body
-    with no version in it. Only after those does the absence of a document
-    become the answer, and the two kinds of absence are kept apart — an
-    endpoint that was never recorded, and one that was recorded and 404s.
+    that was not JSON at all, a document with no version in it, an API
+    document the host refused or failed on, a status body with no version in
+    it. The error comes before the status body because it is a fault worth
+    seeing, and NodeNorm ES and NameRes ES record a /status that never carries
+    a version: putting the status body first would hide a broken API document
+    behind a sentence that is true of every day it works. Only after those
+    does the absence of a document become the answer, and the two kinds of
+    absence are kept apart — an endpoint that was never recorded, and one that
+    was recorded and 404s.
     """
     if reachable is None:
         return CELL_REASONS["not-probed"]
@@ -340,10 +365,12 @@ def _missing_version_reason(
         return CELL_REASONS["unreachable"]
     if document == "not-json":
         return CELL_REASONS["html-document"]
-    if document == "no-version" or status_answered:
+    if document == "no-version":
         return CELL_REASONS["no-version-in-document"]
     if http_status in DOCUMENT_ERROR_STATUSES:
         return CELL_REASONS["http-error"].format(code=http_status)
+    if status_answered:
+        return CELL_REASONS["no-version-in-document"]
     if openapi_url is None:
         return CELL_REASONS["no-endpoint"]
     return CELL_REASONS["no-document"]

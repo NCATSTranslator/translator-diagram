@@ -81,6 +81,13 @@ repositories:
     role: helm-chart
     visibility: public
 
+# Reports the Babel release loaded, which nothing else exposes at runtime.
+# Its `version` is also the running version should the default openapi.json
+# stop giving one; with no SmartAPI record attached, the next source after
+# it is the Helm chart's, which is what should be deployed rather than what is.
+endpoints:
+  status: status
+
 # Recorded by hand while the infores above is commented out: until then
 # nothing attaches the SmartAPI record that also lists this server. When the
 # infores comes back, drop this block if that record still lists it
