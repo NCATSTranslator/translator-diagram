@@ -338,10 +338,15 @@ def _missing_version_reason(
     of that is for one of them to be derived from the other.
 
     Then the documents, in the order they would have supplied a version: a 200
-    that was not JSON at all, a document with no version in it, a status body
-    with no version in it. Only after those does the absence of a document
-    become the answer, and the two kinds of absence are kept apart — an
-    endpoint that was never recorded, and one that was recorded and 404s.
+    that was not JSON at all, a document with no version in it, an API
+    document the host refused or failed on, a status body with no version in
+    it. The error comes before the status body because it is a fault worth
+    seeing, and NodeNorm ES and NameRes ES record a /status that never carries
+    a version: putting the status body first would hide a broken API document
+    behind a sentence that is true of every day it works. Only after those
+    does the absence of a document become the answer, and the two kinds of
+    absence are kept apart — an endpoint that was never recorded, and one that
+    was recorded and 404s.
     """
     if reachable is None:
         return CELL_REASONS["not-probed"]
@@ -349,10 +354,12 @@ def _missing_version_reason(
         return CELL_REASONS["unreachable"]
     if document == "not-json":
         return CELL_REASONS["html-document"]
-    if document == "no-version" or status_answered:
+    if document == "no-version":
         return CELL_REASONS["no-version-in-document"]
     if http_status in DOCUMENT_ERROR_STATUSES:
         return CELL_REASONS["http-error"].format(code=http_status)
+    if status_answered:
+        return CELL_REASONS["no-version-in-document"]
     if openapi_url is None:
         return CELL_REASONS["no-endpoint"]
     return CELL_REASONS["no-document"]

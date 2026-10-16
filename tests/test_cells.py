@@ -408,6 +408,22 @@ class TestCellReasons:
         ))
         assert cell["reason"] == "up · document has no version"
 
+    def test_a_broken_api_document_outranks_a_status_body_with_no_version(
+        self, tmp_path
+    ):
+        # NameRes ES: its /status never carries a version, so letting that
+        # answer first would say "no version" on the day its OpenAPI 500s.
+        probes = (_Probes(tmp_path)
+                  .probe("ci", 200)
+                  .document("openapi", "ci", 500)
+                  .document("status", "ci", 200, {"status": "ok", "babel_version": None}))
+        cell = _cell(probes, _comp(
+            "svc",
+            endpoints={"openapi": "openapi.json", "status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        ))
+        assert cell["reason"] == "HTTP 500"
+
     def test_up_with_nowhere_to_look_for_a_version(self, tmp_path):
         # The UI: four hosts that are up, record `openapi: null`, and publish
         # no version anywhere. Different from a 404, which is an endpoint we
