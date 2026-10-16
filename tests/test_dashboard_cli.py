@@ -240,3 +240,45 @@ def test_the_default_components_directory_is_the_catalogs():
     # sync-components or build-dashboard with no flags.
     root = Path(__file__).resolve().parent.parent
     assert list((root / DEFAULT_COMPONENTS).glob("*.yaml"))
+
+
+class TestWatch:
+    def test_a_snapshot_sees_an_edit_an_addition_and_a_deletion(self, tmp_path):
+        (tmp_path / "a.yaml").write_text("a")
+        (tmp_path / "__pycache__").mkdir()
+        (tmp_path / "__pycache__" / "x.pyc").write_text("x")
+        before = dashboard_cli._snapshot([tmp_path, tmp_path / "missing"])
+        assert list(before) == [tmp_path / "a.yaml"]
+
+        os.utime(tmp_path / "a.yaml", ns=(0, 0))
+        assert dashboard_cli._snapshot([tmp_path]) != before
+        (tmp_path / "b.yaml").write_text("b")
+        added = dashboard_cli._snapshot([tmp_path])
+        (tmp_path / "b.yaml").unlink()
+        assert dashboard_cli._snapshot([tmp_path]) != added
+
+    def test_it_rebuilds_on_a_change_and_only_then(self, monkeypatch, workspace):
+        monkeypatch.chdir(workspace)
+        builds = []
+        monkeypatch.setattr(dashboard_cli.subprocess, "run",
+                            lambda command, **_: builds.append(command))
+        component = next((workspace / "catalog" / "components").glob("*.yaml"))
+        ticks = [
+            lambda: os.utime(component, ns=(0, 0)),  # a change: rebuild
+            lambda: None,                            # none: no rebuild
+        ]
+
+        def sleep(_seconds):
+            if not ticks:
+                raise KeyboardInterrupt
+            ticks.pop(0)()
+
+        monkeypatch.setattr(dashboard_cli.time, "sleep", sleep)
+        result = CliRunner().invoke(build_main, [
+            "--components", "catalog/components", "--sync-dir", "sync",
+            "--output-dir", "out", "--include-private", "--watch",
+        ])
+        assert result.exit_code == 0, result.output
+        assert len(builds) == 2
+        assert "--watch" not in builds[0]
+        assert "--include-private" in builds[0]
