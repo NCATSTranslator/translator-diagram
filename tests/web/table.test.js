@@ -24,11 +24,14 @@ const { table } = TD;
 const cell = (version, extra) => ({ deployed: true, version, ...extra });
 const ROWS = [
   { id: "ars", name: "ARS", owner: "NCATS", step: 1, step_label: "Step 1", step_title: "Front door",
-    environments: { ci: cell("1.0"), prod: cell("1.0") } },
+    smartapi_record: { id: "abc" }, repository: "https://github.com/x/ars",
+    releases_detail: [{ tag: "v1.0", url: "https://github.com/x/ars/releases/tag/v1.0", deployed: true }],
+    environments: { ci: cell("1.0"), prod: cell("1.0", { reachable: false }) } },
   { id: "arax", name: "ARAX", owner: "CATRAX", step: 2, step_label: "Step 2", step_title: "ARAs",
-    environments: { ci: cell("2.1", { drift: ["version"] }), prod: cell("2.0", { trapi: "1.5" }) } },
+    smartapi_record: { id: "def" },
+    environments: { ci: cell("2.1", { drift: ["version"], unregistered: true }), prod: cell("2.0", { trapi: "1.5" }) } },
   { id: "ui", name: "UI", owner: "UI", step: 3, step_label: "Step 3", step_title: "Front end",
-    environments: { prod: { deployed: true, reachable: true, reason: "up · no version endpoint" } } },
+    environments: { prod: { deployed: true, reachable: true, reason: "no version endpoint to read", reason_key: "no-endpoint" } } },
 ];
 
 function reset(patch) {
@@ -62,6 +65,12 @@ test("the owner filter and the version views narrow the rows", () => {
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
   reset({ versions: "none" });
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["ui"]);
+  reset({ versions: "unreachable" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["ars"]);
+  reset({ versions: "unregistered" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
+  reset({ versions: "no-smartapi" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["ui"]);
 });
 
 test("a header click cycles preferred direction, the other, then home", () => {
@@ -86,27 +95,72 @@ test("stage order draws a band per step present, and never an empty one", () => 
 });
 
 test("a sort by date draws no bands, and no rows draws the empty message", () => {
-  reset({ sort: "updated", dir: "asc" });
+  reset({ sort: "smartapi", dir: "asc" });
   assert.doesNotMatch(table.bodyHtml(table.visibleRows()), /class="band"/);
   assert.match(table.bodyHtml([]), /No components match these filters/);
 });
 
 test("an expanded row shows only the fields some environment answered", () => {
   reset();
-  const arax = table.detailRowsHtml(ROWS[1], "Step 2", true);
+  const arax = table.detailRowsHtml(ROWS[1], "Step 2");
   assert.match(arax, /TRAPI/);
   assert.doesNotMatch(arax, /Biolink/);
-  const ars = table.detailRowsHtml(ROWS[0], "Step 1", true);
+  // The label is written into every non-environment cell, each with its
+  // column's drop class, so CSS can show the one beside the first environment.
+  assert.match(arax, /class="dk dk-smartapi drop-sm"/);
+  assert.match(arax, /class="dk dk-name "/);
+  // And a (?) that says where the row comes from.
+  assert.match(arax, /class="help" data-tip="fact" data-id="arax"\s+data-fact="TRAPI"/);
+  const ars = table.detailRowsHtml(ROWS[0], "Step 1");
   assert.match(ars, /Nothing else is recorded/);
+  // Releases are not a detail row: they sit in the Repository cell, for CSS
+  // to show once the row is open.
+  assert.doesNotMatch(ars, /v1\.0/);
+  assert.match(table.bodyHtml([ROWS[0]]), /class="rels"><a class="rel deployed"[^>]*>v1\.0</);
+});
+
+test("a cell's state follows the model: known absences are white, a lone deployment is not green", () => {
+  reset();
+  const state = (m, peers = 2) => table.cellState({ deployed: false, knownAbsent: false, reach: "", version: "", drift: [], ...m }, peers);
+  assert.equal(state({ knownAbsent: true }), "none");
+  assert.equal(state({}), "off");
+  assert.equal(state({ deployed: true, reach: "down", version: "1.0" }), "down");
+  assert.equal(state({ deployed: true, reach: "up" }), "nov");
+  assert.equal(state({ deployed: true, version: "1.0", drift: ["version"] }), "diff");
+  assert.equal(state({ deployed: true, version: "1.0" }), "same");
+  assert.equal(state({ deployed: true, version: "1.0" }, 1), "one");
+});
+
+test("the repository and SmartAPI cells carry their dates and the registry's probe", () => {
+  reset();
+  const row = {
+    ...ROWS[0],
+    last_updated: { at: "2026-10-01T00:00:00Z", date: "2026-10-01", source: "release", tag: "v1.0" },
+    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc", status: { uptime_status: "fail" } },
+  };
+  const html = table.bodyHtml([row]);
+  assert.match(html, /class="repo drop-md"><a[^>]*href="https:\/\/github\.com\/x\/ars"/);
+  assert.match(html, /class="l2" data-tip="upd" data-id="ars"><span class="age">[^<]+<\/span> · v1\.0/);
+  assert.match(html, /class="sapi drop-sm"><span class="dot down" aria-label="registry probe: fail"><\/span><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>registered/);
+  // Registered, but the date came from the registry: it goes under "registered".
+  const registry = { ...row, last_updated: { ...row.last_updated, source: "registry", tag: null } };
+  assert.match(table.bodyHtml([registry]), /registered<\/a><span class="l2" data-tip="upd" data-id="ars">changed/);
+  // No record: say so, or count the candidates.
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]), /not registered/);
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null, smartapi_candidates: [{}, {}] }]), /2 possible records/);
 });
 
 test("an environment cell says why it has no version, and marks drift", () => {
   reset();
-  assert.match(table.envCell(ROWS[2], "prod"), /up · no version endpoint/);
+  assert.match(table.envCell(ROWS[2], "prod"), /no version endpoint to read/);
   assert.match(table.envCell(ROWS[2], "prod"), /dot up/);
   assert.match(table.envCell(ROWS[2], "ci"), /class="env absent"/);
+  // A lone deployment agrees with nobody, so it is not tinted "same".
+  assert.match(table.envCell(ROWS[2], "prod"), /class="env nov"/);
+  assert.match(table.envCell(ROWS[0], "ci"), /class="env same"/);
   const drifting = table.envCell(ROWS[1], "ci");
-  assert.match(drifting, /class="env drift"/);
+  assert.match(drifting, /class="env drift diff/);
+  assert.match(drifting, /≠/);
   assert.match(drifting, /aria-label="disagrees with the row"/);
   assert.doesNotMatch(table.envCell(ROWS[1], "prod"), /drift/);
 });

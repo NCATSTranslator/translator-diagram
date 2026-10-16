@@ -13,11 +13,9 @@
 
   const TD = (globalThis.TD = globalThis.TD || {});
   const esc = (value) => TD.fmt.esc(value);
-  const $ = (selector) => document.querySelector(selector);
 
   TD.boot(JSON.parse(document.getElementById("payload").textContent));
   const DATA = TD.DATA;
-  const ENVS = TD.ENVS;
 
   /* --- State and URL -------------------------------------------------------- */
 
@@ -26,16 +24,37 @@
   // rewrite the URL and discard the state a shared link asked for.
   let urlReady = false;
 
-  function writeUrl() {
+  function writeUrl(push) {
     if (!urlReady) return;
     const query = TD.url.serialize(TD.state);
-    history.replaceState(null, "", query ? `?${query}${location.hash}` : location.pathname + location.hash);
+    // A change of view or of component is a place, so it gets a history entry
+    // and Back returns to it; a keystroke in the search box is not, and
+    // replaces the entry rather than burying the last place under fifty.
+    const url = query ? `?${query}${location.hash}` : location.pathname + location.hash;
+    if (push) history.pushState(null, "", url);
+    else history.replaceState(null, "", url);
   }
 
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
-    writeUrl();
+    writeUrl(false);
     if (!(options && options.silent)) renderView();
+  };
+
+  /* Go somewhere: another view, or another component. Unlike commit, this
+     pushes a history entry and redraws the whole shown view. */
+  TD.navigate = function navigate(patch) {
+    // Leaving a view for a component: the entry being left records which one
+    // was picked there, so Back returns to its row highlighted and in view,
+    // or to its node ringed, rather than to the place as it was before.
+    if (patch.sel && patch.view && patch.view !== TD.state.view) {
+      TD.state.sel = patch.sel;
+      writeUrl(false);
+    }
+    Object.assign(TD.state, patch);
+    writeUrl(true);
+    syncControls();
+    showView(true);
   };
 
   /* --- Theme ----------------------------------------------------------------- */
@@ -102,56 +121,62 @@
     xmlns="http://www.w3.org/2000/svg"><rect class="tile" width="32" height="32"
     rx="6"/><text class="glyph" x="16" y="22.6" text-anchor="middle">Tr</text></svg>`;
 
-  /* --- Prose ----------------------------------------------------------------- */
+  /* --- The sync panel ------------------------------------------------------- */
 
-  function driftSentence() {
-    const drifting = (DATA.rows || []).filter(TD.table.hasDrift);
-    if (!drifting.length) return "Every component reports the same version in every environment.";
-    const names = drifting.map((row) => `<a href="#c-${esc(row.id)}">${esc(row.id)}</a>`);
-    return `${drifting.length} disagree across environments: ${names.join(", ")}.`;
-  }
-
-  function statsHtml() {
-    const counts = DATA.sync_counts || {};
-    const deployments = TD.summary.deployments(DATA.rows, ENVS);
-    const perEnv = Object.entries(DATA.otel_service_counts || {})
-      .map(([env, n]) => `${esc(env)} ${n}`).join(", ");
-    const stat = (n, key) =>
-      `<div class="stat"><span class="n" data-n="${n}">${n}</span><span class="k">${key}</span></div>`;
-    return [
-      stat(DATA.rows.length, "components"),
-      stat(deployments, "deployments"),
-      stat(counts.succeeded ?? 0,
-        `of ${counts.attempted ?? 0} fetches<span class="qual"> · ${counts.failed ?? 0} failed</span>`),
-      stat(DATA.otel_service_total ?? 0,
-        `otel services${perEnv ? `<span class="qual"> · ${perEnv}</span>` : ""}`),
-    ].join("");
+  /* What the page knows about its own data, behind the note that says when
+     it was checked: shares rather than counts, because "27 components" has
+     nothing to be compared to and "40 of 49 reachable" does, and each share
+     links to the Show view that lists the rest. A native <details>: it is
+     prose and links, not a listbox, and <details> gives the toggle, the
+     keyboard and aria-expanded for nothing. */
+  function syncPanelHtml() {
+    const f = TD.summary.figures(DATA);
+    const when = f.syncedAt ? `checked ${esc(TD.fmt.since(f.syncedAt))}` : "never checked";
+    const stamp = f.syncedAt ? f.syncedAt.slice(0, 16).replace("T", " ") + " UTC" : "";
+    const pct = (s) => Math.round((100 * s.n) / s.of);
+    const shares = f.shares.map((s) => {
+      const query = TD.url.serialize({ ...TD.url.defaults(), versions: s.view });
+      return `<tr><td class="n">${s.n} of ${s.of}</td><td class="pct">${pct(s)}%</td><td>${esc(s.label)}
+        <span class="bar"><i style="width:${pct(s)}%"></i></span>
+        <a href="?${esc(query)}" data-show="${esc(s.view)}">show which are not</a></td></tr>`;
+    }).join("");
+    const otel = f.otel.perEnv.map(([env, n]) => `${esc(env)} ${n}`).join(" · ");
+    return `<details class="sync" id="sync"><summary class="btn" title="${esc(stamp)}">${when}</summary>
+      <div class="sync-pop">
+        <p>Every deployment was checked <b>${esc(TD.fmt.since(f.syncedAt))}</b>${
+          stamp ? ` <span class="muted">(${esc(stamp)})</span>` : ""}: ${
+          f.checks.succeeded} of ${f.checks.attempted} checks succeeded, ${f.checks.failed} failed.</p>
+        ${shares ? `<h3>How much of the platform</h3><table>${shares}</table>` : ""}
+        ${f.sources.length ? `<h3>Where versions came from</h3><p>${f.sources.map(esc).join(", ")}.</p>` : ""}
+        ${f.otel.total ? `<h3>OpenTelemetry</h3><p>${f.otel.total} services reporting: ${otel}.</p>` : ""}
+      </div></details>`;
   }
 
   /* --- Shell ------------------------------------------------------------------ */
 
   function shell() {
-    const synced = DATA.synced_at
-      ? `synced ${esc(TD.fmt.since(DATA.synced_at))}` : "never synced";
     document.getElementById("app").innerHTML = `
       <div class="topbar">
-        <div class="brandmark">${BRAND_MARK}<span class="name">Translator components</span></div>
+        <div class="brandmark">${BRAND_MARK}<span class="name">Translator Components</span><span
+          class="tagline">what is running where, in which version, on which data</span></div>
         <div id="viewswitch"></div>
-        <div class="topright"><span class="synced" title="${esc(DATA.synced_at || "")}"
-          >${synced}</span><button type="button" class="btn icon" id="theme"></button></div>
+        <div class="topright">${syncPanelHtml()}<button type="button" class="btn icon" id="theme"></button></div>
       </div>
       <main class="page">
-        <div class="finding">
-          <p>${TD.summary.finding(DATA)}</p>
-          <p>${driftSentence()}</p>
-        </div>
-        <div class="stats">${statsHtml()}</div>
         <div class="filters">
           <input type="search" id="q" placeholder="Search components, versions, ids…"
                  aria-label="Search components">
           <span id="f-owner"></span><span id="f-view"></span>
           <button type="button" class="btn" id="reset">Reset</button>
           <button type="button" class="btn" id="copy">Copy link</button>
+          <span class="legend" aria-label="What the environment cells' colours mean">
+            <span><i class="sw same"></i>same as the rest of the row</span>
+            <span><i class="sw diff"></i>differs</span>
+            <span><i class="sw nov"></i>up, no version</span>
+            <span><i class="sw down"></i>down</span>
+            <span><i class="sw off"></i>no address on file</span>
+            <span><i class="sw copied"></i>copied from a registry or chart</span>
+          </span>
           <span class="spacer"></span>
           <span class="status">
             <span class="order" id="order"></span>
@@ -160,6 +185,7 @@
         </div>
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
+        <div class="view" id="view-component"></div>
       </main>`;
   }
 
@@ -178,9 +204,13 @@
   function controls() {
     viewSwitch = TD.ui.segmented({
       label: "View",
-      items: [{ value: "overview", label: "Overview" }, { value: "map", label: "Map" }],
+      items: [
+        { value: "overview", label: "Overview" },
+        { value: "map", label: "Map" },
+        { value: "component", label: "Component" },
+      ],
       value: TD.state.view,
-      onChange: (value) => { TD.commit({ view: value }); showView(true); },
+      onChange: (value) => TD.navigate({ view: value }),
     });
     document.getElementById("viewswitch").append(viewSwitch.el);
 
@@ -199,7 +229,7 @@
     versionBox = TD.ui.listbox({
       label: "Show",
       value: TD.state.versions,
-      options: Object.entries(TD.table.VERSION_VIEWS)
+      options: Object.entries(TD.table.SHOW_VIEWS)
         .map(([key, view]) => ({ value: key, label: view.label })),
       onChange: (value) => TD.commit({ versions: value }),
     });
@@ -239,61 +269,81 @@
       if (currentTheme() === "auto") applyTheme("auto");
     });
 
+    // A share's link lists the rows it leaves out: switch to the Overview on
+    // that view, set the control to match, and close the panel. The href is
+    // real too, so a middle-click opens the same view in a new tab.
+    const sync = document.getElementById("sync");
+    sync.addEventListener("click", (event) => {
+      const link = event.target.closest("a[data-show]");
+      if (!link) return;
+      event.preventDefault();
+      TD.commit({ view: "overview", versions: link.dataset.show }, { silent: true });
+      viewSwitch.set("overview");
+      versionBox.set(link.dataset.show);
+      showView(false);
+      sync.open = false;
+    });
+    // Anywhere else closes it, the way the listboxes close.
+    document.addEventListener("click", (event) => {
+      if (sync.open && !sync.contains(event.target)) sync.open = false;
+    });
+
     // The order label's ✕ is the only way back to stage order when a narrow
     // window has hidden the column whose header would complete the cycle.
     document.getElementById("order").addEventListener("click", (event) => {
       if (event.target.closest("#unsort")) TD.commit({ sort: "", dir: "asc" });
     });
+  }
 
-    // A component named in the drift sentence scrolls the table to its row,
-    // which now has its own scrollport and so is not reachable by the
-    // browser's own fragment handling.
-    document.addEventListener("click", (event) => {
-      const link = event.target.closest('a[href^="#c-"]');
-      if (!link) return;
-      event.preventDefault();
-      const id = link.getAttribute("href").slice(3);
-      history.replaceState(null, "", `${location.pathname}${location.search}#c-${id}`);
-      TD.table.scrollTo(id);
-    });
+  /* Set every control from TD.state, after something other than the control
+     itself changed it: Back, Forward, or a navigation. */
+  function syncControls() {
+    viewSwitch.set(TD.state.view);
+    ownerBox.set(TD.state.owner);
+    versionBox.set(TD.state.versions);
+    search.value = TD.state.q;
   }
 
   /* --- Measurement ------------------------------------------------------------ */
 
-  /* The filter strip is not a constant height: it wraps at the widths where the
-     controls and the order label no longer fit on one line. Measured rather
-     than guessed, because a wrong offset hides the first row under the bar. */
+  /* The view switch's sliding indicator is placed from measured widths, so it
+     is re-measured whenever the layout can have changed. */
   function measure() {
-    const root = document.documentElement;
-    const bar = $(".filters");
-    if (bar) {
-      root.style.setProperty("--filters-height",
-        `${Math.round(bar.getBoundingClientRect().height)}px`);
-    }
     if (viewSwitch) viewSwitch.measure();
   }
 
   /* --- Views ------------------------------------------------------------------- */
 
   function showView(animate) {
-    const overview = document.getElementById("view-overview");
-    const map = document.getElementById("view-map");
-    const onMap = TD.state.view === "map";
-    overview.classList.toggle("on", !onMap);
-    map.classList.toggle("on", onMap);
-    const shown = onMap ? map : overview;
+    const name = TD.state.view;
+    // base.css hides the filter bar on the Component view, where it filters
+    // nothing; this attribute is what it keys on.
+    document.documentElement.dataset.view = name;
+    let shown = null;
+    for (const view of TD.url.vocabulary().views) {
+      const el = document.getElementById(`view-${view}`);
+      el.classList.toggle("on", view === name);
+      if (view === name) shown = el;
+    }
     if (animate && TD.motion.enabled) {
       shown.classList.remove("enter");
       void shown.offsetWidth;
       shown.classList.add("enter");
     }
     renderView();
+    // Back from a component lands on the table freshly drawn and scrolled to
+    // the top, so bring its row back into sight.
+    if (name === "overview" && TD.state.sel) TD.table.revealRow(TD.state.sel);
   }
 
   function renderView() {
     if (TD.state.view === "map") {
       const shown = TD.map.render(document.getElementById("view-map"));
       setStatus(shown, (DATA.rows || []).length);
+      return;
+    }
+    if (TD.state.view === "component") {
+      TD.component.render(document.getElementById("view-component"));
       return;
     }
     const result = TD.table.render(document.getElementById("view-overview"));
@@ -307,40 +357,6 @@
       `${shown} of ${total} component${total === 1 ? "" : "s"}`;
   }
 
-  /* --- Stat count-up ------------------------------------------------------------ */
-
-  /* Once, on first paint, and never again: a number that re-counts every time a
-     filter changes is a distraction, and these four do not depend on the
-     filters anyway. */
-  function countUp() {
-    const nodes = [...document.querySelectorAll(".stat .n[data-n]")];
-    const targets = nodes.map((node) => Math.max(0, Number(node.dataset.n) || 0));
-    const write = (values) => {
-      nodes.forEach((node, index) => { node.textContent = String(values[index]); });
-    };
-    // A hidden document does not animate: rAF is throttled in a background
-    // tab, and a screenshot or a print of a tab that was never shown would
-    // otherwise catch the counters part-way to their own values.
-    if (!TD.motion.enabled || document.hidden) { write(targets); return; }
-    const duration = 600;
-    const start = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - t, 3);
-      // Clamped at zero and, on the last frame, written exactly: an eased
-      // value is never allowed to render as a number the payload does not
-      // contain.
-      if (t < 1) {
-        write(targets.map((value) => Math.max(0, Math.round(value * eased))));
-        requestAnimationFrame(step);
-      } else {
-        write(targets);
-      }
-    };
-    write(targets.map(() => 0));
-    requestAnimationFrame(step);
-  }
-
   /* --- Boot --------------------------------------------------------------------- */
 
   TD.table.ensureColumns();
@@ -349,29 +365,16 @@
   renderTheme();
   showView(false);
   measure();
-  countUp();
 
   addEventListener("resize", measure);
 
-  /* Something other than the window changed how much room the views have —
-     the drawer opening or closing. The same two measurements a window resize
-     triggers, without dispatching a fake event to get them. */
-  TD.layoutChanged = function layoutChanged() {
-    measure();
-    TD.map.resized();
-  };
-
   // Back and forward: the URL is the state, so re-read it, set the controls
-  // and the shown view from it, and let the drawer open or close to match.
-  // renderView alone drew into whichever view was already showing.
+  // and the shown view from it. renderView alone drew into whichever view
+  // was already showing.
   addEventListener("popstate", () => {
     Object.assign(TD.state, TD.url.parse(location.search));
-    viewSwitch.set(TD.state.view);
-    ownerBox.set(TD.state.owner);
-    versionBox.set(TD.state.versions);
-    search.value = TD.state.q;
+    syncControls();
     showView(false);
-    TD.drawer.sync();
   });
 
   // A deep link arrives before the table exists, so the browser's own fragment

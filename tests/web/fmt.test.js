@@ -53,29 +53,44 @@ test("the theme cycle starts by moving away from the system", () => {
   assert.equal(theme.next("dark", true), "auto");
 });
 
-test("the deployments tile counts deployed cells, not rows or environments", () => {
-  const rows = [
-    { environments: { ci: { deployed: true }, prod: { deployed: true }, dev: { deployed: false } } },
-    { environments: { prod: { deployed: true } } },
-    { environments: {} },
-    {},
-  ];
-  assert.equal(summary.deployments(rows, ["dev", "ci", "test", "prod"]), 3);
-  assert.equal(summary.deployments(rows, ["dev"]), 0);
-  assert.equal(summary.deployments(undefined, ["prod"]), 0);
+test("the figures are shares with honest denominators, each naming a view", () => {
+  const live = (version, extra) => ({ deployed: true, version, version_source: "openapi", reachable: true, ...extra });
+  const data = {
+    environments: ["ci", "prod"],
+    synced_at: "2026-10-15T10:00:00Z",
+    sync_counts: { attempted: 10, succeeded: 8, failed: 2 },
+    source_tally: { openapi: 3, none: 1 },
+    otel_service_total: 5, otel_service_counts: { ci: 3, prod: 2 },
+    rows: [
+      // Registered, reachable everywhere, agreeing.
+      { id: "a", smartapi: "x", smartapi_record: { id: "x" },
+        environments: { ci: live("1.0"), prod: live("1.0") } },
+      // Unregistered in prod, prod down, versions differ; nothing probed in ci.
+      { id: "b", smartapi: "y", smartapi_record: { id: "y" },
+        environments: { ci: { deployed: true, version: "2.0", version_source: "openapi", reachable: null, drift: ["version"] },
+                        prod: { deployed: true, reachable: false, unregistered: true, drift: ["version"] } } },
+      // No record at all, no version anywhere.
+      { id: "c", environments: { ci: { deployed: false, reason: "no address on file" } } },
+    ],
+  };
+  const f = summary.figures(data);
+  assert.equal(f.syncedAt, data.synced_at);
+  assert.deepEqual(f.checks, { attempted: 10, succeeded: 8, failed: 2 });
+  const byView = Object.fromEntries(f.shares.map((s) => [s.view, [s.n, s.of]]));
+  // 3 probed (b.ci was not), 2 up.
+  assert.deepEqual(byView.unreachable, [2, 3]);
+  // 4 deployed, 3 with a version.
+  assert.deepEqual(byView.none, [3, 4]);
+  // 4 deployed cells on rows with a recorded id, one of them unregistered.
+  assert.deepEqual(byView.unregistered, [3, 4]);
+  assert.deepEqual(byView["no-smartapi"], [2, 3]);
+  assert.deepEqual(byView.differ, [2, 3]);
+  assert.deepEqual(f.otel, { total: 5, perEnv: [["ci", 3], ["prod", 2]] });
+  assert.deepEqual(f.sources, ["3 from its API document", "1 from nowhere"]);
 });
 
-test("the finding sentence names each source by the payload's label", () => {
-  const html = summary.finding({
-    source_tally: { openapi: 26, smartapi: 13, none: 11 },
-    source_labels: { openapi: "OpenAPI document", smartapi: "SmartAPI" },
-    unregistered_count: 3,
-  });
-  assert.match(html, /^Of 50 deployments, <strong>26<\/strong> from OpenAPI document, <strong>13<\/strong> from SmartAPI, and <strong>11<\/strong> from nothing at all\./);
-  assert.match(html, /<strong>3<\/strong> of them are absent/);
-});
-
-test("the finding sentence says when nothing was found at all", () => {
-  assert.match(summary.finding({}), /No deployments were found/);
-  assert.doesNotMatch(summary.finding({ source_tally: { helm: 2 } }), /absent/);
+test("the figures leave out a share with nothing to count", () => {
+  const f = summary.figures({ rows: [] });
+  assert.deepEqual(f.shares, []);
+  assert.deepEqual(f.checks, { attempted: 0, succeeded: 0, failed: 0 });
 });

@@ -39,31 +39,42 @@ SOURCE_LABELS = {
 # never asked" from "we asked and there is nothing there". An empty cell says
 # neither, which is what these replace.
 #
-# Every label is lowercase and short enough to sit in a version column. Two
-# carry a placeholder — the environment and an HTTP code — and are formatted at
-# the point of use; the rest are used as they are. A cell that *has* a version
-# has no reason at all: `reason` is null there, never "ok".
+# Every label is lowercase, in a reader's words rather than the pipeline's,
+# and short enough to sit in a version column. Two carry a placeholder — the
+# environment and an HTTP code — and are formatted by `_reason`; the rest are
+# used as they are. A cell that *has* a version has no reason at all: `reason`
+# is null there, never "ok". The cell also carries the key, as `reason_key`,
+# so the page can style a kind of absence without matching its English.
+#
+# None of the "deployed, no version" labels says "running": the cell's
+# `reachable` says that, and the page draws it as the dot and the tint.
 CELL_REASONS = {
     # Not deployed here, for five different reasons.
-    "not-registered": "not in registry for {env}",
+    "not-registered": "SmartAPI lists no {env} server",
     "no-such-host": "no such host",
-    "another-service": "host answers as another service",
-    "unverified-host": "host answers, unverified",
-    "not-confirmed": "probed, not confirmed",
-    "no-host": "no host recorded",
+    "another-service": "the address serves another component",
+    "unverified-host": "a host answers, unconfirmed",
+    "not-confirmed": "guessed address, unconfirmed",
+    "no-host": "no address on file",
     "not-hosted": "not a hosted service",
     # Deployed, and still no version to show.
-    "unreachable": "unreachable",
-    "html-document": "up · serves HTML, no API document",
-    "no-version-in-document": "up · document has no version",
-    "http-error": "HTTP {code}",
-    "no-endpoint": "up · no version endpoint",
-    "no-document": "up · no API document",
+    "unreachable": "not answering",
+    "html-document": "serves a web page, not an API document",
+    "no-version-in-document": "API document has no version",
+    "http-error": "API document answered HTTP {code}",
+    "no-endpoint": "no version endpoint to read",
+    "no-document": "no API document found",
     # And the one that is a gap in our own data rather than in the platform's:
     # this build's sync recorded no request for this deployment at all, which
     # is what a cache written before root probes existed looks like.
-    "not-probed": "not probed",
+    "not-probed": "not checked this run",
 }
+
+
+def _reason(key: str, **fmt: Any) -> dict[str, Any]:
+    """The two keys a cell with no version carries: the words, and the key
+    they were formatted from."""
+    return {"reason": CELL_REASONS[key].format(**fmt), "reason_key": key}
 
 
 # A status the host itself answered with, however unhappily, still means
@@ -282,7 +293,7 @@ def _undeployed_reason(
     env: str,
     smartapi_record: dict[str, Any],
     synced: SyncedData,
-) -> str:
+) -> dict[str, Any]:
     """Why this component has no deployment in this environment.
 
     Ordered by how much each answer knows, most to least. A component that
@@ -290,17 +301,17 @@ def _undeployed_reason(
     first; a candidate host we contacted and were turned away from is the next
     strongest, because something was actually asked; a registration that lists
     other environments and not this one is a fact about a document somebody
-    filed; and "no host recorded" is what is left, which is a gap in this
+    filed; and "no address on file" is what is left, which is a gap in this
     repository rather than a finding about the platform.
     """
     if (component.hosted_at or "") == "Local":
-        return CELL_REASONS["not-hosted"]
+        return _reason("not-hosted")
     verdict = synced.rejected.get(component.id, {}).get(env)
     if verdict is not None:
-        return _rejection_reason(verdict)
+        return _reason(_rejection_reason(verdict))
     if deployments_from_smartapi(smartapi_record):
-        return CELL_REASONS["not-registered"].format(env=env)
-    return CELL_REASONS["no-host"]
+        return _reason("not-registered", env=env)
+    return _reason("no-host")
 
 
 def _rejection_reason(verdict: dict[str, Any]) -> str:
@@ -324,13 +335,10 @@ def _rejection_reason(verdict: dict[str, Any]) -> str:
     Anything else was asked and did not settle it.
     """
     if verdict.get("error"):
-        return CELL_REASONS["no-such-host"]
+        return "no-such-host"
     if verdict.get("status") == 200:
-        return CELL_REASONS[
-            "another-service" if verdict.get("checked") == "document"
-            else "unverified-host"
-        ]
-    return CELL_REASONS["not-confirmed"]
+        return "another-service" if verdict.get("checked") == "document" else "unverified-host"
+    return "not-confirmed"
 
 
 def _missing_version_reason(
@@ -340,11 +348,11 @@ def _missing_version_reason(
     status_answered: bool,
     http_status: int | None,
     openapi_url: str | None,
-) -> str:
+) -> dict[str, Any]:
     """Why a deployment we can see is showing no version.
 
     Reads off `reachable` rather than recomputing the same three states beside
-    it: a cell that says "up · no API document" next to a red dot is the
+    it: a cell that says "no API document found" next to a red dot is the
     contradiction this page exists not to print, and the only way to be sure
     of that is for one of them to be derived from the other.
 
@@ -360,20 +368,20 @@ def _missing_version_reason(
     was recorded and 404s.
     """
     if reachable is None:
-        return CELL_REASONS["not-probed"]
+        return _reason("not-probed")
     if reachable is False:
-        return CELL_REASONS["unreachable"]
+        return _reason("unreachable")
     if document == "not-json":
-        return CELL_REASONS["html-document"]
+        return _reason("html-document")
     if document == "no-version":
-        return CELL_REASONS["no-version-in-document"]
+        return _reason("no-version-in-document")
     if http_status in DOCUMENT_ERROR_STATUSES:
-        return CELL_REASONS["http-error"].format(code=http_status)
+        return _reason("http-error", code=http_status)
     if status_answered:
-        return CELL_REASONS["no-version-in-document"]
+        return _reason("no-version-in-document")
     if openapi_url is None:
-        return CELL_REASONS["no-endpoint"]
-    return CELL_REASONS["no-document"]
+        return _reason("no-endpoint")
+    return _reason("no-document")
 
 
 def _probe_statuses(
@@ -428,10 +436,7 @@ def build_cell(
 ) -> dict[str, Any]:
     """One component in one environment."""
     if deployment is None:
-        return {
-            "deployed": False,
-            "reason": _undeployed_reason(component, env, smartapi_record, synced),
-        }
+        return {"deployed": False, **_undeployed_reason(component, env, smartapi_record, synced)}
 
     # One read, then two readings of it: the fields the version chain compares
     # across sources, and the fields only a served document can answer for.
@@ -511,11 +516,11 @@ def build_cell(
         # Only where there is nothing to show. A reason beside a version would
         # be a caption on a fact, and the two would drift apart the first time
         # a fallback source filled the cell in.
-        cell["reason"] = _missing_version_reason(
+        cell.update(_missing_version_reason(
             reachable=reachable,
             document=cell["document"],
             status_answered=status_document is not None,
             http_status=http_status,
             openapi_url=openapi_url,
-        )
+        ))
     return cell

@@ -170,7 +170,7 @@
   }
 
   /* The brushed-metal gradient for one owner, at an angle: the coin, the
-     drawer's rule and the map's rail all draw the same four stops. */
+     Component view's rule and the map's rail all draw the same four stops. */
   function ownerMetal(name, angle) {
     const style = ownerStyle(name);
     return style ? `linear-gradient(${angle}, ${style.metal.join(", ")})` : "";
@@ -190,15 +190,15 @@
 
   /* --- Rows --------------------------------------------------------------- */
 
-  /* What every view says about a row the same way. The table, the drawer and
-     the map each used to carry their own copy of these, and a label that
-     drifts between two views reads as two different facts. */
+  /* What every view says about a row the same way. The table, the Component
+     view and the map each used to carry their own copy of these, and a label
+     that drifts between two views reads as two different facts. */
 
   let rowIndex = null;
 
   /* The row with this id, or null. Indexed once per payload rather than
-     searched: the tooltips, the drawer and the map all look rows up by id,
-     some of them on every hover. */
+     searched: the tooltips, the Component view and the map all look rows up
+     by id, some of them on every hover. */
   function rowById(id) {
     if (!rowIndex) {
       rowIndex = new Map();
@@ -228,6 +228,121 @@
 
   TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach };
 
+  /* --- The cell model ---------------------------------------------------- */
+
+  /* Everything a renderer needs to know about one environment of one
+     component, in one shape, so the table cell, its tooltip and the expanded
+     row cannot disagree (issue #78: four renderers once did). Always an
+     object: a missing environment is simply not deployed, with no facts.
+
+     `facts` is the ordered, null-pruned list the expansion and the tooltip
+     iterate, so a new per-environment payload key reaches both by being
+     added here. Version, source, reachability, the reason and the two flags
+     are named fields instead, because the row shows them and the tooltip
+     prints them first. */
+
+  /* Where a version was read from, as a reader would say it, and the short
+     form that fits beside the number. The payload's own `source_labels`
+     (OpenAPI, status, SmartAPI, Helm) stay the contract; these are the
+     page's words for the same keys. */
+  const SOURCE_WORDS = {
+    openapi: "its API document",
+    status: "its /status page",
+    smartapi: "the SmartAPI registry",
+    helm: "the Helm chart",
+  };
+  const SOURCE_SHORT = { openapi: "API", status: "status", smartapi: "registry", helm: "chart" };
+
+  /* The document the version was read from, so the cell can link to it. */
+  const VERSION_DOC = {
+    openapi: (row, cell) => cell.openapi_url,
+    status: (row, cell) => cell.status_url,
+    smartapi: (row) => (row.smartapi_record || {}).registry_url,
+    helm: (row) => ((row.helm_charts || [])[0] || {}).source_url,
+  };
+
+  const DOCUMENT_WORDS = {
+    version: "has a version",
+    "no-version": "document has no version",
+    "not-json": "serves HTML, not JSON",
+  };
+
+  /* An absence the page is sure of, as against one that is a gap in its own
+     data: a hostname that does not resolve, a registry that lists other
+     environments and not this one, a component that runs on no server. */
+  const KNOWN_ABSENT = ["no-such-host", "not-registered", "not-hosted"];
+
+  function recentQueries(value) {
+    if (!value || typeof value.count !== "number") return "";
+    const parts = [`${value.count.toLocaleString()} queries`];
+    if (value.p50_ms != null) parts.push(`p50 ${value.p50_ms} ms`);
+    if (value.p95_ms != null) parts.push(`p95 ${value.p95_ms} ms`);
+    return parts.join(" · ");
+  }
+
+  function cellModel(row, env) {
+    const cell = ((row || {}).environments || {})[env] || {};
+    const source = cell.version_source || "";
+    const otel = ((row || {}).otel_presence || [])
+      .filter((p) => (p.seen_in || []).includes(env)).map((p) => p.service);
+    // Each fact says where it comes from (`about`): the (?) beside its label
+    // in the expanded row shows that sentence, so a new fact explains itself.
+    const facts = [
+      { label: "TRAPI", value: cell.trapi, src: cell.trapi_source,
+        about: "The TRAPI version the deployment's own API document declares (x-trapi.version), or failing that the SmartAPI registration's copy." },
+      { label: "Biolink", value: cell.biolink,
+        about: "The Biolink Model version the API document declares (x-translator.biolink-version), or failing that the registration's." },
+      { label: "Data release", value: cell.data_release, href: href(cell.status_url),
+        about: "From the deployment's /status page: the Babel release it has loaded, and the Biolink model tag where the page reports one." },
+      { label: "Released", value: cell.released, href: href(cell.release_url), note: cell.release_tag,
+        about: "The GitHub release whose tag matches the version running here, and the day it was published." },
+      { label: "Host", value: cell.url ? host(cell.url) : "", href: href(cell.url), mono: true,
+        about: "The deployment's address, from its catalog file or from the SmartAPI registration." },
+      { label: "Location", value: cell.location,
+        about: "Who hosts it: the catalog file's word, or the registration's x-location." },
+      { label: "API document", value: DOCUMENT_WORDS[cell.document] || "",
+        href: href(cell.openapi_url), note: cell.http_status != null ? `HTTP ${cell.http_status}` : "",
+        about: "What fetching the OpenAPI document returned this sync: a version, a document with none, or a web page instead of JSON, with the HTTP status." },
+      { label: "Root URL", value: cell.root_status != null ? `HTTP ${cell.root_status}` : "",
+        about: "The HTTP status the deployment's own URL answered with this sync; what says it is up when there is no document to read." },
+      { label: "Title", value: cell.openapi_title, about: "The title the API document gives itself." },
+      { label: "Paths", value: cell.paths_count, about: "How many paths the API document lists." },
+      { label: "Operations", value: (cell.trapi_operations || []).length || "",
+        about: "How many TRAPI operations the API document declares (x-trapi.operations)." },
+      { label: "Async query",
+        value: typeof cell.asyncquery === "boolean" ? (cell.asyncquery ? "yes" : "no") : "",
+        about: "Whether the API document declares support for asynchronous queries (x-trapi.asyncquery)." },
+      { label: "Recent queries", value: recentQueries(cell.recent_queries),
+        about: "From the /status page: how many queries the service has answered lately, and its median and 95th-percentile latency." },
+      { label: "Status message", value: cell.status_message,
+        about: "The sentence the /status page reports about the service." },
+      { label: "Telemetry", value: otel.join(", "),
+        about: "The service names this component reports under that were seen at this environment's OpenTelemetry collector." },
+    ]
+      .filter((f) => f.value != null && f.value !== "")
+      .map((f) => ({ ...f, value: String(f.value) }));
+    return {
+      deployed: !!cell.deployed,
+      version: cell.version || "",
+      source,
+      sourceLabel: source ? sourceLabel(source) : "",
+      sourceWord: SOURCE_WORDS[source] || source,
+      sourceShort: SOURCE_SHORT[source] || source,
+      live: source === "openapi" || source === "status",
+      href: href(VERSION_DOC[source] ? VERSION_DOC[source](row || {}, cell) : ""),
+      reach: reach(cell),
+      drift: cell.drift || [],
+      reason: cell.reason || "",
+      reasonKey: cell.reason_key || "",
+      knownAbsent: KNOWN_ABSENT.includes(cell.reason_key),
+      dataRelease: cell.data_release || "",
+      flags: { inferred: !!cell.inferred, unregistered: !!cell.unregistered },
+      facts,
+    };
+  }
+
+  TD.cell = cellModel;
+
   /* --- Theme ------------------------------------------------------------- */
 
   /* The cycle starts by moving *away* from what the system says, because the
@@ -244,39 +359,58 @@
 
   /* --- The page's own summary of the payload ------------------------------ */
 
-  /* Deployed cells, across every row and environment. The second stat tile;
-     a count that once said 74 where there were 41, which is why it is here
-     where a test can reach it rather than inline in the shell. */
-  function deploymentCount(rows, envs) {
-    return (rows || []).reduce(
-      (n, row) => n + (envs || []).filter((env) => ((row.environments || {})[env] || {}).deployed).length,
-      0,
-    );
-  }
+  /* The figures behind the sync note. Shares, not counts: a count of
+     deployments has nothing to be compared to, but "40 of 49 reachable"
+     says how much of the platform has a property, and each share names the
+     Show view that lists the rest. Data, not HTML, so a test can read it.
 
-  /* The first sentence on the page: how many deployments, and from which
-     source each version was read. */
-  function findingSentence(data) {
+     Denominators: reachable is up over up + down, so a cell nothing probed
+     counts in neither; with-a-version is over deployed cells; listed-in-
+     record is over deployed cells on rows with a recorded SmartAPI id, the
+     same gate rows.py uses for `unregistered`; the two component shares are
+     over rows. One mismatch to know: `none` is a row view (no version in any
+     environment) while its share counts cells. */
+  function figures(data) {
+    const rows = data.rows || [];
+    const envs = Array.isArray(data.environments) && data.environments.length
+      ? data.environments : DEFAULT_ENVS;
+    const cells = [];
+    for (const row of rows) for (const env of envs) cells.push({ row, m: cellModel(row, env) });
+    const deployed = cells.filter((c) => c.m.deployed);
+    const probed = deployed.filter((c) => c.m.reach);
+    const onRecord = deployed.filter((c) => c.row.smartapi);
+    const share = (label, n, of, view) => ({ label, n, of, view });
+    const counts = data.sync_counts || {};
     const tally = data.source_tally || {};
-    const total = Object.values(tally).reduce((a, b) => a + b, 0);
-    const named = ["openapi", "status", "smartapi", "helm"]
-      .filter((key) => tally[key])
-      .map((key) => `<strong>${tally[key]}</strong> from ${esc(sourceLabel(key, data))}`);
-    const none = tally.none
-      ? `, and <strong>${tally.none}</strong> from nothing at all`
-      : "";
-    if (!total) return "No deployments were found — has <code>sync-components</code> run?";
-    // The count is computed from the registry rather than from how the URL was
-    // found, so it covers deployments recorded by hand and deployments
-    // registered without an x-maturity as well as the ones a probe discovered.
-    const gaps = data.unregistered_count
-      ? ` <strong>${data.unregistered_count}</strong> of them are absent from their
-         component's SmartAPI record, which does list other environments.`
-      : "";
-    return `Of ${total} deployments, ${named.join(", ")}${none}.${gaps}`;
+    return {
+      syncedAt: data.synced_at || "",
+      checks: {
+        attempted: counts.attempted ?? 0, succeeded: counts.succeeded ?? 0, failed: counts.failed ?? 0,
+      },
+      shares: [
+        share("deployments reachable",
+          probed.filter((c) => c.m.reach === "up").length, probed.length, "unreachable"),
+        share("deployments with a version read",
+          deployed.filter((c) => c.m.version).length, deployed.length, "none"),
+        share("deployments listed in their SmartAPI record",
+          onRecord.filter((c) => !c.m.flags.unregistered).length, onRecord.length, "unregistered"),
+        share("components with a SmartAPI record",
+          rows.filter((r) => r.smartapi_record).length, rows.length, "no-smartapi"),
+        share("components running the same version everywhere",
+          rows.filter((r) => !envs.some((env) => cellModel(r, env).drift.length)).length,
+          rows.length, "differ"),
+      ].filter((s) => s.of > 0),
+      otel: {
+        total: data.otel_service_total ?? 0,
+        perEnv: Object.entries(data.otel_service_counts || {}),
+      },
+      sources: ["openapi", "status", "smartapi", "helm"].filter((k) => tally[k])
+        .map((k) => `${tally[k]} from ${SOURCE_WORDS[k]}`)
+        .concat(tally.none ? [`${tally.none} from nowhere`] : []),
+    };
   }
 
-  TD.summary = { deployments: deploymentCount, finding: findingSentence };
+  TD.summary = { figures };
 
   /* --- Sorting ----------------------------------------------------------- */
 
@@ -328,9 +462,9 @@
 
   /* --- URL state --------------------------------------------------------- */
 
-  const VIEWS = ["overview", "map"];
-  const VERSIONS = ["all", "differ", "known", "none"];
-  const BASE_SORTS = ["name", "owner", "repo", "updated"];
+  const VIEWS = ["overview", "map", "component"];
+  const VERSIONS = ["all", "differ", "known", "none", "unreachable", "unregistered", "no-smartapi"];
+  const BASE_SORTS = ["name", "owner", "repo", "smartapi"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
 
   const DEFAULTS = {
@@ -341,8 +475,7 @@
     sort: "",          // empty means the payload's own order, which is by stage
     dir: "asc",
     expand: [],
-    sel: "",
-    tab: "",
+    sel: "",           // the component looked at: its page, its table row, its map node
     edges: [],
   };
 
@@ -397,7 +530,8 @@
     // writes them back.
     state.expand = commaList(params.get("expand"), 400);
     state.sel = (params.get("sel") ?? "").slice(0, 100);
-    state.tab = (params.get("tab") ?? "").slice(0, 40);
+    // `tab` named the drawer's tab; the drawer is gone and the Component
+    // view shows every section at once, so an old link's tab is ignored.
     state.edges = commaList(params.get("edges"), 120)
       .filter((kind) => v.edges.indexOf(kind) >= 0);
     return state;
@@ -425,7 +559,6 @@
     }
     if (expand) params.set("expand", expand);
     if (state.sel) params.set("sel", state.sel);
-    if (state.tab) params.set("tab", state.tab);
     if (edges) params.set("edges", edges);
     // Commas are legal in a query string and this page's are all list
     // separators; leaving them encoded makes a shared link unreadable.

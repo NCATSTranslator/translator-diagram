@@ -164,6 +164,33 @@ class TestApply:
         kept, _ = apply(rows, _policy(components=["jaeger"]))
         assert kept[0]["connections"]["planned_calls"] == ["~other"]
 
+    def test_the_component_file_is_pruned_scrubbed_and_emptied_too(self):
+        """`recorded` is the row's own file, so the three rules that apply to
+        the row apply to it: references pruned, prose scrubbed, and a withheld
+        field spelled like one of its keys emptied."""
+        rows = [
+            {
+                "id": "keep",
+                "notes": "ours",
+                "connections": {"calls": ["other"]},
+                "recorded": {
+                    "notes": "Sends spans to drop.",
+                    "summary": "Talks to drop.",
+                    "connections": {"calls": ["drop", "other"], "gets_results_from": ["~drop"]},
+                    "repositories": [{"url": "https://x", "note": "forked from drop"}],
+                },
+                "environments": {},
+            },
+            {"id": "drop", "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["drop"]))
+        recorded = kept[0]["recorded"]
+        assert recorded["connections"] == {"calls": ["other"], "gets_results_from": []}
+        assert recorded["summary"] == "Talks to …."
+        assert recorded["repositories"][0]["note"] == "forked from …"
+        kept, _ = apply(rows, _policy(fields=["notes"]))
+        assert kept[0]["recorded"]["notes"] is None
+
     def test_a_mention_in_free_text_is_scrubbed_and_counted(self):
         """Third-party prose we cannot edit at the source: a note, a registry
         description, a release title. A withheld id as a word there must not
@@ -403,6 +430,18 @@ class TestInThePayload:
         payload = build_payload(components, synced, _policy(components=["hidden"]))
         rostered = [cid for stage in payload["stages"] for cid in stage["components"]]
         assert rostered == ["alpha", "omega"]
+
+    def test_the_schema_prose_is_scrubbed(self, synced):
+        """The schema names Jaeger as an example of third-party software, and
+        it ships whole, so a published build withholding jaeger scrubs it."""
+        components = [
+            ComponentFile(id=cid, name=cid, owner="DOGSLED", refactor_status="New in Refactor")
+            for cid in ("alpha", "jaeger")
+        ]
+        policy = _policy(components=["jaeger"])
+        payload = build_payload(components, synced, policy)
+        verify(payload, policy)
+        assert "such as … or" in json.dumps(payload["component_schema"], ensure_ascii=False)
 
     def test_the_withheld_row_is_gone_from_the_json_entirely(
         self, components, synced

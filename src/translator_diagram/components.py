@@ -89,6 +89,12 @@ class ComponentFile:
     # live here -- the status, the layer, the edges -- are fields above.
     diagram: dict[str, Any] = field(default_factory=dict)
     notes: str | None = None
+    # The file as parsed, before any of the defaults above were applied. The
+    # Component view shows it field by field against the schema, so a reader
+    # can tell "nobody wrote this down" from "checked, there is none": the
+    # absent-versus-null distinction the format is built on, which the typed
+    # fields above flatten. None for a ComponentFile built in code.
+    raw: dict[str, Any] | None = None
 
     # -- identifiers ------------------------------------------------------
 
@@ -323,6 +329,7 @@ def parse_component(data: dict[str, Any]) -> ComponentFile:
         environments=_parse_environments(data.get("environments") or {}),
         diagram=dict(data.get("diagram") or {}),
         notes=data.get("notes"),
+        raw=data,
     )
 
 

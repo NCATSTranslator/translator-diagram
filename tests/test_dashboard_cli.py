@@ -17,6 +17,8 @@ from translator_diagram import dashboard_cli
 from translator_diagram.dashboard_cli import DEFAULT_COMPONENTS, build_main, sync_main
 from translator_diagram.files import manifest_path
 
+REPO = Path(__file__).resolve().parent.parent
+
 
 @pytest.fixture
 def workspace(tmp_path):
@@ -52,6 +54,12 @@ def workspace(tmp_path):
         "unplaced:\n"
         "  description: Nothing is unplaced.\n"
         "  components: []\n"
+    )
+    # The schema the Component view lists every field from; the real one,
+    # since a build without it stops.
+    (catalog / "schema").mkdir()
+    (catalog / "schema" / "component.schema.json").write_text(
+        (REPO / "catalog" / "schema" / "component.schema.json").read_text()
     )
     config = tmp_path / "config"
     config.mkdir()
@@ -167,6 +175,16 @@ class TestAMissingStageFileStopsTheBuild:
         result, _ = _run(workspace)
         assert result.exit_code != 0
         assert "No stage file" in result.output
+
+
+class TestAMissingSchemaStopsTheBuild:
+    def test_no_schema_is_an_error(self, workspace):
+        """The Component view's Recorded section lists every field the schema
+        allows; without it a file would show no gaps at all."""
+        (workspace / "catalog" / "schema" / "component.schema.json").unlink()
+        result, _ = _run(workspace)
+        assert result.exit_code != 0
+        assert "No component schema" in result.output
 
 
 class TestSyncReadsTheTokenFromDotEnv:

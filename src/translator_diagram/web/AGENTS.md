@@ -10,7 +10,7 @@ the payload this code reads, and which module builds which part of it — is in
 ## Looking at the page
 
 `CONTRIBUTING.md` says to render the page and look before calling it fine, in
-both views and both themes. This is how.
+every view and both themes. This is how.
 
 Either browser works. Chromium's headless shell runs from the command line
 with no Python package; Firefox runs through Playwright's API, which also
@@ -30,13 +30,11 @@ $CHROME --headless --disable-gpu --hide-scrollbars \
 Each run needs its **own `--user-data-dir`**, or concurrent shots collide.
 `?view=map` selects the Map view.
 
-**`--force-prefers-reduced-motion` is not optional.** The stat tiles count up
-on load, and a screenshot without it catches them mid-animation: the page
-reads `3 components · 6 deployments` when there are 24 and 51. That is
-indistinguishable from a real tile-counting bug — the page once shipped one
-that counted 74 things where there were 41 — so a naive shot invents a bug
-that is not there. Freeze the animation, then check the tiles against what
-`build-dashboard` printed.
+**`--force-prefers-reduced-motion` is not optional.** The map's nodes
+stagger in and a view switch crossfades, and a screenshot without it catches
+either mid-animation, which is indistinguishable from a rendering bug. (The
+stat tiles that used to count up on load, and once invented a tile-counting
+bug in exactly this way, are gone.)
 
 **Forcing the theme needs a `matchMedia` stub, not a flag.** Chromium's
 `--force-dark-mode` does not move the page's `prefers-color-scheme`, and the
@@ -49,13 +47,13 @@ stubbing trick as the JS note below. Insert it straight after
 a script that looks for `<head>` to insert after finds nothing.
 
 **The stub must answer the reduced-motion query too.** `core.js` asks
-`matchMedia("(prefers-reduced-motion: reduce)")` to decide whether the tiles
-count up, and a stub that returns `matches: false` for every query but the
-colour scheme switches the animation back on: four shots taken with the flag
-above still showed tiles mid-count (`40`, `41`, `42`, `43` fetches of the
-same 219). This one answers the colour scheme itself and hands every other
-query to the real `matchMedia`, so the flag keeps working. Run it in the
-build directory; it writes `light.html` and `dark.html` beside `index.html`:
+`matchMedia("(prefers-reduced-motion: reduce)")` through `TD.motion.enabled`,
+and a stub that returns `matches: false` for every query but the colour
+scheme switches every animation back on (four shots taken with the flag above
+once showed the then-tiles mid-count). This one answers the colour scheme
+itself and hands every other query to the real `matchMedia`, so the flag
+keeps working. Run it in the build directory; it writes `light.html` and
+`dark.html` beside `index.html`:
 
 ```bash
 for theme in light dark; do python3 - "$theme" <<'PY'
@@ -78,8 +76,7 @@ PY
 done
 ```
 
-Checked on 8b5d40d: both themes render, and the tiles read the final counts
-in both.
+Checked on 8b5d40d: both themes render.
 
 **Firefox** needs two environment variables on macOS 27, and nothing else.
 Without them every launch dies with `Could not find profile folder`, whatever
@@ -121,20 +118,19 @@ The Playwright version has to match a Firefox build in
 `~/Library/Caches/ms-playwright/`: 1.64.0 wants `firefox-1555`, and
 `uv run --with playwright==1.64.0 playwright install firefox` fetches it.
 Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
-render, and the tiles read the final counts.
+render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
-between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
-1480 and 1540 — where a column returns before there is room for it. The page
-root never overflows at any width, and the wrap scrolls, so nothing is
-unreachable; issue #31 describes the wider 1100–1500px version of this, most
-of which is now gone. At 760px the PROD column is likewise clipped but
-reachable, and the Map's EDGES legend sits over the Translator UI / Node
-Annotator row; neither has been fixed, and neither hides anything that cannot
-be scrolled or panned to. The overflow is not visible in a screenshot: measure
-`scrollWidth` against `clientWidth` at several widths instead of judging by
-eye.
+breakpoints. Measured at fourteen widths from 760 to 1700px on the redrawn
+table, `div.tablewrap` never overflows from 1000px up (`scrollWidth` equals
+`clientWidth` at every step); at 900px and below the environment columns
+run past the window and the wrap scrolls, so nothing is unreachable. The
+earlier table overflowed between about 1490 and 1535px (issue #31) because a
+wide-window rule widened the environment columns and the names and
+repository slugs could not wrap; both are gone. The overflow is not visible
+in a screenshot: measure `scrollWidth` against `clientWidth` at several
+widths instead of judging by eye. At 760px the Map's EDGES legend still sits
+over the Translator UI / Node Annotator row.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
@@ -145,12 +141,28 @@ headless shell's screenshots are deterministic here: the same build, the same
 flags and the same `--window-size` give byte-identical PNGs run after run, so
 a refactor of the JS or CSS is checked the way `CONTRIBUTING.md` checks a
 Python one — shoot before and after from one `data/sync/` snapshot and `cmp`
-the files. Shoot every surface the change can reach: both views, both
-themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
-component with data on all of them), and an expanded row (`?expand=<id>`).
+the files. Shoot every surface the change can reach: every view, both
+themes, a narrow width, the Component view on a component with data in every
+section (`?view=component&sel=arax`, scrolled down as well: the page is
+taller than any window), and an expanded row (`?expand=<id>`).
 The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
 checked this way; a differing PNG means something moved, and `--dump-dom` on
-the two builds, diffed, says what.
+the two builds, diffed, says what. One pixel block is allowed to differ: the
+sync note in the top bar says "N minutes ago" against the reader's clock,
+so two shots minutes apart differ there and nowhere else. PIL's
+`ImageChops.difference(a, b).getbbox()` names the box; a box confined to
+the top bar's right end is the clock.
+
+**To shoot a tooltip, hover it synthetically.** The headless shell's window is
+never focused, so `element.focus()` fires no `focusin` and the tooltip stays
+hidden; `dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))` on
+the element does open it. Pick the *visible* element: an expanded row writes
+its label and (?) into every non-environment cell and shows one, so
+`querySelector` finds a hidden copy with a zero-size box and the tooltip
+lands at the top-left corner. Filter by `offsetParent`. And do not scroll
+first: the page hides the tooltip on any scroll, so size the window to hold
+the row instead. Run such loops under `bash`: in `zsh`, a loop variable
+named `path` overwrites `PATH`.
 
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.
@@ -158,19 +170,20 @@ saw and let them look.
 ## Testing JS with judgement in it
 
 There is no JS harness here, and that has not stopped anything being tested.
-The rule is that judgement is a pure function and the DOM is a thin layer
-over it: the filter, the band grouping, the detail-field pruning and the
-cell rendering in `table.js`, the edge kind, node version, reachability and
-tooltip buckets in `map.js`, the catalog edge direction and probe evidence
-in `drawer.js`, and the theme cycle, the finding sentence and the clock
-formatting in `core.js` are all exported and driven under `node --test` from
-`tests/web/`, which `tests/test_web_assets.py` runs. Anything that needs a
-clock or the system preference takes it as an argument (`relativeAge(iso,
-now)`, `TD.theme.next(choice, systemDark)`), so "a future timestamp says
-today" is a test rather than a stub. What is still untested is the DOM
-itself — the drawer's focus return, the row expansion animation — which
-issue #22 tracks. `TD.row` is where a fact about a row is said once for
-every view.
+The rule is that judgement is a pure function and the DOM is a thin layer over
+it: the filter, the band grouping, the detail-field pruning and the cell
+rendering in `table.js`, the edge kind, node version, reachability and tooltip
+buckets in `map.js`, the catalog edge direction, the picker's groups, the
+Recorded section and the whole page as a string in `component.js`, and the
+cell model, the sync panel's figures, the theme cycle and
+the clock formatting in `core.js` are all exported and driven under `node
+--test` from `tests/web/`, which `tests/test_web_assets.py` runs. Anything
+that needs a clock or the system preference takes it as an argument
+(`relativeAge(iso, now)`, `TD.theme.next(choice, systemDark)`), so "a future
+timestamp says today" is a test rather than a stub. What is still untested is
+the DOM itself — the Component view's picker and click handling, the row
+expansion animation — which issue #22 tracks. `TD.row` is where a fact about
+a row is said once for every view.
 
 ## Things that look wrong but aren't
 
@@ -196,23 +209,64 @@ when that suite passes.
 `Environments disagree` — which showed 7 rows of 24 and hid the platform to
 make a point about drift, so someone looking up one component found it missing
 from a page that never said it was filtered. Drift is still the first thing the
-page says, in the finding above the table. The four views (`all`, `differ`,
-`known`, `none`) live in `VERSION_VIEWS` in `table.js`, listed in that order so
-the default reads first, with `DEFAULT_VIEW` naming it. `differ` means any of
-the three tinted axes, not versions alone. It replaced a "Drift only" toggle
-rather than joining it: two controls that select the same rows cannot be told
-apart by a reader.
+page says, in the sync panel's shares. The views (`all`, `differ`, `known`,
+`none`, `unreachable`, `unregistered`, `no-smartapi`) live in `SHOW_VIEWS` in
+`table.js`, listed in that order so the default reads first, with
+`DEFAULT_VIEW` naming it. `differ` means any of the three tinted axes, not
+versions alone. It replaced a "Drift only" toggle rather than joining it: two
+controls that select the same rows cannot be told apart by a reader. The last
+three are the complements of the sync panel's shares, which link to them.
+
+**The table is a tinted board, and it was chosen over two others.** Three
+directions were mocked up over the real payload and compared side by side: a
+ruled ledger on the page's own tokens, this status matrix, and a GitHub-styled
+table. The matrix won because the four environment columns are what a reader
+comes to compare, and a tint per state lets them be read without reading
+every cell; the GitHub mockup's rounded pills and underlined links were kept
+because they parse faster than hairline rectangles. The mockups were deleted
+once the choice was made (the commit that deleted them says why), and their
+shared cell model moved into `core.js` as `TD.cell`. Two rules in the tint:
+a lone deployment is not tinted "same", because it agrees with nobody; and an
+absence the page is sure of (no such host, no server listed, not a hosted
+service) is left white, while "no address on file" — the page's own gap — is
+grey.
+
+**The expanded row's label sits beside the environments, not in the first
+column.** It is written into every non-environment cell and CSS shows the
+rightmost one still on screen (`td.dk-smartapi .dkl` and the ladder under it
+in `table.css`). The first-column
+label was tried in #90 and read as detached from the numbers it named; the
+ladder is more rules, and the right answer.
+
+**A component has a view of its own, not a drawer beside the table.** The
+440px side drawer this replaced could not fit its six tabs on one row, could
+not show two environments side by side, and needed its own column ladder in
+the table CSS so the table would not run under it. The Component view shows
+every section at once, at full width, and the table no longer shares the
+window. It is a view of the one page, `?view=component&sel=<id>`, and not a
+separate HTML file per component: #51 weighed that and turned it down,
+because each file would inline the payload again and `privacy.verify` would
+have to cover every copy.
+
+**The view reuses `sel` rather than a key of its own.** #51 used
+`component=<id>` because `sel` then meant "the drawer is open"; with the
+drawer gone, one key for "the component being looked at" lets the table's
+highlighted row, the map's ring and the Component view's subject follow each
+other, and Show on map is just a change of `view`. `TD.navigate`, unlike
+`TD.commit`, pushes a history entry, and records the picked component on the
+entry it leaves, so Back lands on the row highlighted rather than on the
+table as it was before the click.
+
+**The picker is a native `<select>`.** Twenty-seven components in stage
+groups, found by typing: the browser's own control does type-to-find, the
+keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
+taught all three.
 
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different
 components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
-
-**The sticky header's offset is measured, not declared.** `--filters-height` is
-set from the filter bar's real height on every render and on resize, because
-the bar wraps to two lines at some widths and a hardcoded `top` hides the first
-row underneath it.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
