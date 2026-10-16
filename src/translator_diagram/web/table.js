@@ -641,7 +641,7 @@
        button, because it contains links and buttons. */
     body.addEventListener("click", (event) => {
       const name = event.target.closest("button[data-open]");
-      if (name) { TD.drawer.open(name.dataset.open); return; }
+      if (name) { TD.component.open(name.dataset.open); return; }
       const tr = event.target.closest("tr.row");
       if (!tr) return;
       if (event.target.closest("button[data-expand]")) { toggleExpansion(tr); return; }

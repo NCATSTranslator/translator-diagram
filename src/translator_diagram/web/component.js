@@ -29,7 +29,7 @@
   "use strict";
 
   const TD = (globalThis.TD = globalThis.TD || {});
-  const drawer = (TD.drawer = TD.drawer || {});
+  const drawer = (TD.component = TD.component || {});
 
   const WIKI_BASE = "https://github.com/NCATSTranslator/Translator-All/wiki/";
   const TABS = [
@@ -1170,7 +1170,7 @@
   drawer.isOpen = () => !!root && !root.hidden;
   // Open or close to match TD.state.sel; app.js calls it on popstate.
   drawer.sync = sync;
-  // For tests/web/drawer.test.js; nothing on the page calls these from outside.
+  // For tests/web/component.test.js; nothing on the page calls these from outside.
   drawer.blurbFor = blurbFor;
   drawer.thirdPartyText = thirdPartyText;
   drawer.catalogNeighbours = catalogNeighbours;

@@ -2,7 +2,7 @@
   The drawer's one-line blurb under a component's name, and the name of the
   third-party software a component deploys.
 
-  drawer.js is otherwise uncovered (#22): it builds DOM and listens on the
+  component.js is otherwise uncovered (#22): it builds DOM and listens on the
   document, so only its pure helpers are reachable from node. Loading it needs
   core.js first, because it reads TD.fmt when it loads, and two stubs for the
   listeners it registers at load; its boot microtask finds no TD.state and
@@ -20,10 +20,10 @@ const WEB = path.join(__dirname, "..", "..", "src", "translator_diagram", "web")
 globalThis.TD = {};
 globalThis.document = globalThis.document || { addEventListener() {} };
 globalThis.addEventListener = globalThis.addEventListener || (() => {});
-for (const file of ["core.js", "drawer.js"]) {
+for (const file of ["core.js", "component.js"]) {
   vm.runInThisContext(fs.readFileSync(path.join(WEB, file), "utf8"), { filename: file });
 }
-const { blurbFor, thirdPartyText } = globalThis.TD.drawer;
+const { blurbFor, thirdPartyText } = globalThis.TD.component;
 
 const repo = { repository_meta: { description: "Code from a previous collaborator" } };
 
@@ -57,10 +57,10 @@ test("our own code has no third-party text", () => {
   assert.equal(thirdPartyText(undefined), "");
 });
 
-// The TD drawer.js captured, taken at load (see index.js): deployedIn reads
+// The TD component.js captured, taken at load (see index.js): deployedIn reads
 // its ENVS, and a test body runs after a later suite has replaced the global.
 const DRAWER_TD = globalThis.TD;
-const { catalogNeighbours, deployedIn, docLabel, probeEvidence, updatedHtml } = DRAWER_TD.drawer;
+const { catalogNeighbours, deployedIn, docLabel, probeEvidence, updatedHtml } = DRAWER_TD.component;
 
 test("catalog edges run with the data: into a consumer, out of what it consumes", () => {
   // Backwards once, and each list showed the other's components.

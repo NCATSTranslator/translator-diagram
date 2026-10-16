@@ -1045,7 +1045,7 @@
      full refresh used to do by way of paint(). */
   function select(id) {
     if (!id || !nodeById.has(id)) return;
-    TD.drawer.open(id, undefined, { opener: nodeEls.get(id) });
+    TD.component.open(id, undefined, { opener: nodeEls.get(id) });
     map.focus(id);
   }
 

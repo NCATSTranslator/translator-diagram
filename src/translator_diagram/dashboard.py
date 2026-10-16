@@ -42,7 +42,7 @@ CSS_FILES = (
     "controls.css",
     "table.css",
     "map.css",
-    "drawer.css",
+    "component.css",
 )
 
 
@@ -52,7 +52,7 @@ JS_FILES = (
     "table.js",
     "layout.js",
     "map.js",
-    "drawer.js",
+    "component.js",
     "app.js",
 )  # app.js runs last
 

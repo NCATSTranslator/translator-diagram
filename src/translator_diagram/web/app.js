@@ -340,7 +340,7 @@
     versionBox.set(TD.state.versions);
     search.value = TD.state.q;
     showView(false);
-    TD.drawer.sync();
+    TD.component.sync();
   });
 
   // A deep link arrives before the table exists, so the browser's own fragment
