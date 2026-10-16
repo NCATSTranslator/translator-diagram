@@ -224,9 +224,10 @@ A single self-contained HTML page with two views over the same payload:
   laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
   export, and the same detail drawer as the table.
 
-Click a row or a map node to open the drawer (Overview · Environments ·
-Releases · Helm · SmartAPI · Connections). Expand a row inline with the
-chevron for a side-by-side environment read without leaving the table: one
+Click a component's name or a map node to open the drawer (Overview ·
+Environments · Releases · Helm · SmartAPI · Connections). Click anywhere else
+on a row, or its chevron, to expand it inline for a side-by-side environment
+read without leaving the table: one
 line per fact, each with a (?) that says where its values come from, and the
 component's releases under its repository. A legend beside the filters says
 what the cell colours mean.
@@ -378,7 +379,7 @@ it.
 | `owner` | a comma-separated list of owners |
 | `versions` | the `Show` view: `all`, `differ`, `known`, `none`, `unreachable`, `unregistered` or `no-smartapi` |
 | `sort`, `dir` | the sorted column (`name`, `owner`, `repo`, `smartapi` or `env-<env>`) and `asc` or `desc`; absent means stage order |
-| `expand` | the ids of the rows opened with the chevron |
+| `expand` | the ids of the rows expanded inline |
 | `sel`, `tab` | the component the drawer is open on, and which of its tabs |
 | `edges` | on the map, which edge kinds are shown |
 

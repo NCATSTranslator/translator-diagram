@@ -101,6 +101,7 @@ thead th:not([aria-sort="none"]) .sortcol { color: var(--accent); }
   z-index: 2;
   padding-left: var(--cell-pad-left);
 }
+tbody tr.row { cursor: pointer; }
 tbody tr.row:hover td { background-color: var(--raised); }
 td.quiet, td.quiet a { color: var(--muted); }
 
@@ -209,6 +210,9 @@ tbody tr.band:first-child td { padding-top: var(--sp-2); }
   border-radius: var(--r-control);
 }
 .chev:hover { color: var(--text); background: var(--raised-2); }
+/* Lit from anywhere on the row, because a click anywhere on it does what the
+   chevron does. */
+tbody tr.row:hover .chev { color: var(--text); }
 .chev svg { transition: transform var(--dur-fast) var(--ease); }
 .chev[aria-expanded="true"] svg { transform: rotate(90deg); }
 .coin.narrow { display: none; }

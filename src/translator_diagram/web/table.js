@@ -622,20 +622,32 @@
       TD.commit(nextSort(state(), COLUMNS.find((entry) => entry.key === button.dataset.col)));
     });
 
+    function toggleExpansion(tr) {
+      const id = tr.dataset.id;
+      const expand = (state().expand || []).slice();
+      const at = expand.indexOf(id);
+      if (at >= 0) { expand.splice(at, 1); closeExpansion(body, id); }
+      else { expand.push(id); openExpansion(body, id); }
+      tr.querySelector("button[data-expand]").setAttribute("aria-expanded", at < 0);
+      TD.commit({ expand }, { silent: true });
+    }
+
+    /* A click anywhere on a row toggles it, so a reader looking at the
+       environment columns need not travel back to the chevron. Links and
+       buttons in the row keep their own job (the name opens the drawer), a
+       drag that selected text to copy is not a click, and the detail rows
+       never collapse their row: they hold the values people copy. The chevron
+       stays the keyboard and screen-reader control; the <tr> is not made a
+       button, because it contains links and buttons. */
     body.addEventListener("click", (event) => {
-      const chevron = event.target.closest("button[data-expand]");
-      if (chevron) {
-        const id = chevron.dataset.expand;
-        const expand = (state().expand || []).slice();
-        const at = expand.indexOf(id);
-        if (at >= 0) { expand.splice(at, 1); closeExpansion(body, id); }
-        else { expand.push(id); openExpansion(body, id); }
-        chevron.setAttribute("aria-expanded", at < 0);
-        TD.commit({ expand }, { silent: true });
-        return;
-      }
       const name = event.target.closest("button[data-open]");
-      if (name) TD.drawer.open(name.dataset.open);
+      if (name) { TD.drawer.open(name.dataset.open); return; }
+      const tr = event.target.closest("tr.row");
+      if (!tr) return;
+      if (event.target.closest("button[data-expand]")) { toggleExpansion(tr); return; }
+      if (event.target.closest("a, button")) return;
+      if (!(window.getSelection()?.isCollapsed ?? true)) return;
+      toggleExpansion(tr);
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
