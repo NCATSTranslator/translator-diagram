@@ -1,4 +1,4 @@
-"""One row per component: its cells, plus everything the drawer reads.
+"""One row per component: its cells, plus everything the Component view reads.
 
 `build_rows` is the assembler. It merges the deployments, calls `build_cell`
 per environment, then decorates the row with the dates, releases, charts and
@@ -406,7 +406,7 @@ def build_rows(
                 "helm_version": helm.get("version"),
                 "helm_images": helm.get("images") or [],
                 "notes": component.notes,
-                # The catalog's own line about what this is. The drawer puts it
+                # The catalog's own line about what this is. The Component view puts it
                 # ahead of the repository's GitHub blurb, which is whatever the
                 # repository's owner last typed there.
                 "summary": component.summary,

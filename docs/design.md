@@ -146,9 +146,10 @@ all. Its comments say why.
 `index.html` is self-contained. The CSS and JS under `src/translator_diagram/web/`
 are concatenated in a fixed order and inlined, and the payload is embedded, so
 the file works from `file://` with no server. The same payload is written
-beside it as `overview.json`, the machine-readable contract. The two views,
+beside it as `overview.json`, the machine-readable contract. The two list views,
 Overview (the version table) and Map (the same components laid out by stage,
-with their connections), read one payload, and the detail drawer serves both.
+with their connections), read one payload, and a third view, Component, shows
+one component from either in full.
 
 The JS is split by subject, and each file's pure helpers are tested under
 `node --test` from `tests/web/`. How to render the page, measure it and look

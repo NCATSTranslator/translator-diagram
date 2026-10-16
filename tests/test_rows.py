@@ -536,6 +536,6 @@ class TestTheMetadataBlock:
         assert record["trapi"]["version"] == "1.4.0"
 
     def test_no_registration_is_none_not_an_empty_block(self, synced):
-        # Different from a record whose fields are blank, and the drawer says
+        # Different from a record whose fields are blank, and the Component view says
         # so: "not registered" is a finding the page already counts.
         assert build_rows([_comp("svc")], synced)[0]["smartapi_record"] is None

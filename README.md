@@ -212,7 +212,7 @@ shows what a fetcher builds from one of them.
 
 ## The components dashboard
 
-A single self-contained HTML page with two views over the same payload:
+A single self-contained HTML page with three views over the same payload:
 
 - **Overview** — one row per component, in stages (data coming in at the top,
   the people who use it at the bottom), with a cell per environment tinted by
@@ -221,16 +221,20 @@ A single self-contained HTML page with two views over the same payload:
   document it was read from, and the data release it has loaded (`babel
   2025sep1`) sits under it.
 - **Map** — an interactive SVG diagram of which component connects to what,
-  laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
-  export, and the same detail drawer as the table.
+  laid out in the same stages, with pan/zoom, hover highlighting and SVG/PNG
+  export.
+- **Component** — one component on a page of its own, chosen from a picker:
+  its environments side by side, one row per fact with a link to every
+  document a fact was read from, then its overview, SmartAPI registration,
+  releases, Helm chart and connections, and its catalog file field by field
+  against the schema, marked recorded, "checked: none" or "not recorded".
 
-Click a component's name or a map node to open the drawer (Overview ·
-Environments · Releases · Helm · SmartAPI · Connections). Click anywhere else
-on a row, or its chevron, to expand it inline for a side-by-side environment
-read without leaving the table: one
-line per fact, each with a (?) that says where its values come from, and the
-component's releases under its repository. A legend beside the filters says
-what the cell colours mean.
+Click a component's name in the table, or a node on the map, to open its
+Component page; Back returns to where you were. Click anywhere else on a row,
+or its chevron, to expand it inline for a side-by-side environment read
+without leaving the table: one line per fact, each with a (?) that says where
+its values come from, and the component's releases under its repository. A
+legend beside the filters says what the cell colours mean.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
@@ -374,13 +378,13 @@ it.
 
 | Parameter | Meaning |
 |---|---|
-| `view` | `overview` (the default) or `map` |
+| `view` | `overview` (the default), `map` or `component` |
 | `q` | the search box |
 | `owner` | a comma-separated list of owners |
 | `versions` | the `Show` view: `all`, `differ`, `known`, `none`, `unreachable`, `unregistered` or `no-smartapi` |
 | `sort`, `dir` | the sorted column (`name`, `owner`, `repo`, `smartapi` or `env-<env>`) and `asc` or `desc`; absent means stage order |
 | `expand` | the ids of the rows expanded inline |
-| `sel`, `tab` | the component the drawer is open on, and which of its tabs |
+| `sel` | the component looked at: the Component view's subject, the table's highlighted row and the map's ringed node. A `tab` from an older link is ignored |
 | `edges` | on the map, which edge kinds are shown |
 
 Only what differs from the default is written, so a shared link says what the

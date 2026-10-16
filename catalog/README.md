@@ -104,7 +104,7 @@ record stops listing a host it no longer runs on.
 **`summary`, `description` and `notes` answer different questions.**
 
 - `summary` — *what is this?* One line, plain text, that makes sense on its
-  own: the drawer shows it under the component's name. "Contains ARAX,
+  own: the Component view shows it under the component's name. "Contains ARAX,
   ARAGORN and BTE" is not a summary; it needs the name beside it.
 - `description` — *what does it do, and where is it going?* As long as it
   needs, in a small Markdown subset: paragraphs, `code`, `-` lists and

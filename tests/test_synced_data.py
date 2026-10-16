@@ -51,7 +51,7 @@ class TestStaleBodies:
         assert self._cell(synced)["version"] == "1.5.4"
 
     def test_a_404_this_run_reports_no_operations_either(self, tmp_path):
-        # The same gate, over the fields that arrived with the drawer. A cell
+        # The same gate, over the fields that arrived with the side drawer. A cell
         # that has lost its version must not keep last run's operation list
         # beside its own 404 — that is the contradiction the gate exists for,
         # written out once per field the page shows.
@@ -143,7 +143,7 @@ class TestChartCommit:
         assert row["helm_charts"][0]["last_changed"]["date"] == "2026-09-02"
 
     def test_a_chart_with_no_commit_still_has_the_key(self, tmp_path, component):
-        # Absent, not missing: the drawer reads `last_changed` on every chart
+        # Absent, not missing: the Component view reads `last_changed` on every chart
         # block and a key that appears only sometimes is the shape that throws.
         synced = _Probes(tmp_path).chart("my-chart", chart="name: my-chart\n").build()
         component.identifiers = {"smartapi": "abc", "helm_chart": "my-chart"}

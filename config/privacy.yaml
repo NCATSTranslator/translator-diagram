@@ -30,14 +30,14 @@ fields:
     reason: >-
       Container image tags (solr:9.1, renci-python-image:latest, ...). Beside
       the version grid they make a ready-made inventory to match against a CVE
-      feed, with nothing to probe. The drawer does render Helm now, but out of
+      feed, with nothing to probe. The Component view does render Helm, but out of
       the public `helm_charts` block, which carries capacity — replicas,
       requests, limits, storage — and never an image repository or tag;
       tests/test_payload_details.py scans every cached chart's real output to
       keep it that way.
 
-# `helm_version` was withheld here until the drawer was built, and is not any
-# more. The chart's appVersion is a claim about what *should* be deployed, it
+# `helm_version` was withheld here until the side drawer (now the Component
+# view) was built, and is not any more. The chart's appVersion is a claim about what *should* be deployed, it
 # is public in helxplatform/translator-devops, and it is not where the image
 # tags come from — so withholding it emptied that field on the six published
 # rows that record a chart while protecting nothing, and would have blanked any
@@ -48,7 +48,7 @@ fields:
 # Per-environment cell fields. None today. The candidates if the health
 # signals turn out to be too much are `uptime`, `http_status` and `status_url`
 # — see the checklist on PR #21 — and now six more that arrived with the
-# drawer: `openapi_title`, `trapi_operations`, `asyncquery`, `paths_count`,
+# side drawer: `openapi_title`, `trapi_operations`, `asyncquery`, `paths_count`,
 # `status_message` and `recent_queries`. All six are read from the endpoint's
 # own public document, and `recent_queries` is the only one that says anything
 # about usage rather than shape: a count and two latencies, no per-query

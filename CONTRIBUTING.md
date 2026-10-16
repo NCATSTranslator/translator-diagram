@@ -74,9 +74,9 @@ matters inside one directory.
   self-containment assertion while shipping a badge on 27 of 45 cells that
   drowned the table, a tile that counted 74 things where there were 41, and two
   environment columns unreachable at narrow widths. Render it and look, in
-  **both views** (Overview and Map) and in light and dark. The recipe — which
-  browser, frozen animations, forcing the theme, and which widths to measure
-  rather than eyeball — is in
+  **every view** (Overview, Map and Component) and in light and dark. The
+  recipe — which browser, frozen animations, forcing the theme, and which
+  widths to measure rather than eyeball — is in
   [src/translator_diagram/web/AGENTS.md](src/translator_diagram/web/AGENTS.md),
   along with how to test the JS without a harness.
 - **When a change should not alter the output, prove it.** Generate from a

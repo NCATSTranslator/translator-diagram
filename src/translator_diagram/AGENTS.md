@@ -51,7 +51,7 @@ The dashboard is a second, parallel stack over the same components:
 | `fetch.py` | The transport: `fetch_to` (saves the body), `probe_to` (saves only how the host answered), `http_fetch`, and the injected `Fetcher` type that keeps tests off the network |
 | `sync.py` | What to fetch and in what order: the URL constants, the `_plan_*` planners, the two waves, derived-host confirmation, and the manifest |
 | `privacy.py` | `Policy`, `load_policy`, `apply`, `verify` — what a published build withholds |
-| `payload_details.py` | The drawer's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version`, and the readers over somebody else's JSON — `mapping`, `items`, `text`, `strings`, `number` — that every module reading an upstream document uses |
+| `payload_details.py` | The Component view's detail blocks, dict in and dict out: `smartapi_detail`, `helm_detail` (capacity only, never an image), `releases_detail`, `repo_meta_detail`, `catalog_detail`, plus `strip_html` and `same_version`, and the readers over somebody else's JSON — `mapping`, `items`, `text`, `strings`, `number` — that every module reading an upstream document uses |
 | `synced_data.py` | `SyncedData` — the build's reader of the sync cache (`files.py` holds the layout and the parsers it shares with `sync`), and where the 200 gate lives: a body this run's manifest records as a failed fetch never answers for a cell, though one it has no entry for still does (the module docstring has all three rules) |
 | `stages.py` | `Stage`, `load_stages`, `in_stage_order`, `stage_blocks`, `UNPLACED_TITLE` — the bands from `catalog/flow-steps.yaml`, hand-written rather than computed |
 | `cells.py` | `build_cell` and the version-source chain, the fact extractors it asks in order, and the two vocabularies `SOURCE_LABELS` and `CELL_REASONS` |
@@ -268,8 +268,8 @@ without its column.
 that list, so the fact appears in both with no renderer change; only the cell
 itself names what it draws (`envCell` in `web/table.js`). `TD.cell` is the one
 model of an environment cell the table, its tooltip and the expansion read,
-so they cannot disagree about a version or a reason; the drawer's
-Environments tab still has its own renderer (#78).
+so they cannot disagree about a version or a reason. The Component view's
+environment matrix reads it too.
 
 The payload written to `overview.json` is a contract a scheduled job would
 publish, so adding a key is safe and renaming one is not.
@@ -279,12 +279,13 @@ files without the payload changing at all, because `build_rows` writes those
 names as string literals. Rename a YAML key freely; renaming a payload key
 breaks `web/table.js`.
 
-**Add a field to the drawer** → the value in `build_rows` (`rows.py`) or
-`payload_details.py` if it needs sync data, then the tab renderer in
-`web/drawer.js`. Per-environment fields that come from a live document must
-respect the same 200 gate as the table: `SyncedData` only reads bodies this
+**Add a field to the Component view** → the value in `build_rows` (`rows.py`)
+or `payload_details.py` if it needs sync data, then the section renderer in
+`web/component.js` (a per-environment one goes in `TD.cell` instead, above).
+Per-environment fields that come from a live document must respect the same
+200 gate as the table: `SyncedData` only reads bodies this
 run fetched successfully. Chart facts are labelled as intent, not deployment.
-`privacy.verify` runs on the finished payload, so a field added to the drawer
+`privacy.verify` runs on the finished payload, so a field added to the page
 must survive it — a withheld id in a new string aborts the published build.
 
 `type` and `layer` are the exception in the other direction: the page no

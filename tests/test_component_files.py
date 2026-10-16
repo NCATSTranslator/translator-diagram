@@ -117,7 +117,7 @@ class TestSchema:
     def test_third_party_names_its_software(self, schema):
         # The block exists to say *what* we deploy, so a bare `third_party: {}`
         # would mark a component third-party without saying of what; and its
-        # url is a link the drawer renders, so it takes the same http(s) rule
+        # url is a link the Component view renders, so it takes the same http(s) rule
         # as a repository's.
         validator = _validator_for(schema)(schema)
         document = _load(COMPONENTS_DIR / "jaeger.yaml")
@@ -168,7 +168,7 @@ class TestSchema:
             assert bool(list(validator.iter_errors(document))) is not allowed, count
 
     def test_a_summary_is_one_short_line(self, schema):
-        # It is the drawer's two-line subtitle and, once #19 lands, the
+        # It is the Component view's subtitle and, once #19 lands, the
         # diagram's tooltip. Anything longer belongs in `description`.
         validator = _validator_for(schema)(schema)
         document = _load(COMPONENTS_DIR / "docmetadata-api.yaml")

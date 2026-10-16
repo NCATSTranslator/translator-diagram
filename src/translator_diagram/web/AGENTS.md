@@ -10,7 +10,7 @@ the payload this code reads, and which module builds which part of it — is in
 ## Looking at the page
 
 `CONTRIBUTING.md` says to render the page and look before calling it fine, in
-both views and both themes. This is how.
+every view and both themes. This is how.
 
 Either browser works. Chromium's headless shell runs from the command line
 with no Python package; Firefox runs through Playwright's API, which also
@@ -141,9 +141,10 @@ headless shell's screenshots are deterministic here: the same build, the same
 flags and the same `--window-size` give byte-identical PNGs run after run, so
 a refactor of the JS or CSS is checked the way `CONTRIBUTING.md` checks a
 Python one — shoot before and after from one `data/sync/` snapshot and `cmp`
-the files. Shoot every surface the change can reach: both views, both
-themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
-component with data on all of them), and an expanded row (`?expand=<id>`).
+the files. Shoot every surface the change can reach: every view, both
+themes, a narrow width, the Component view on a component with data in every
+section (`?view=component&sel=arax`, scrolled down as well: the page is
+taller than any window), and an expanded row (`?expand=<id>`).
 The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
 checked this way; a differing PNG means something moved, and `--dump-dom` on
 the two builds, diffed, says what. One pixel block is allowed to differ: the
@@ -172,16 +173,17 @@ There is no JS harness here, and that has not stopped anything being tested.
 The rule is that judgement is a pure function and the DOM is a thin layer over
 it: the filter, the band grouping, the detail-field pruning and the cell
 rendering in `table.js`, the edge kind, node version, reachability and tooltip
-buckets in `map.js`, the catalog edge direction and probe evidence in
-`drawer.js`, and the cell model, the sync panel's figures, the theme cycle and
+buckets in `map.js`, the catalog edge direction, the picker's groups, the
+Recorded section and the whole page as a string in `component.js`, and the
+cell model, the sync panel's figures, the theme cycle and
 the clock formatting in `core.js` are all exported and driven under `node
 --test` from `tests/web/`, which `tests/test_web_assets.py` runs. Anything
 that needs a clock or the system preference takes it as an argument
 (`relativeAge(iso, now)`, `TD.theme.next(choice, systemDark)`), so "a future
 timestamp says today" is a test rather than a stub. What is still untested is
-the DOM itself — the drawer's focus return, the row expansion animation —
-which issue #22 tracks. `TD.row` is where a fact about a row is said once for
-every view.
+the DOM itself — the Component view's picker and click handling, the row
+expansion animation — which issue #22 tracks. `TD.row` is where a fact about
+a row is said once for every view.
 
 ## Things that look wrong but aren't
 
@@ -232,9 +234,33 @@ grey.
 **The expanded row's label sits beside the environments, not in the first
 column.** It is written into every non-environment cell and CSS shows the
 rightmost one still on screen (`td.dk-smartapi .dkl` and the ladder under it
-in `table.css`, with the drawer-open steps in `drawer.css`). The first-column
+in `table.css`). The first-column
 label was tried in #90 and read as detached from the numbers it named; the
 ladder is more rules, and the right answer.
+
+**A component has a view of its own, not a drawer beside the table.** The
+440px side drawer this replaced could not fit its six tabs on one row, could
+not show two environments side by side, and needed its own column ladder in
+the table CSS so the table would not run under it. The Component view shows
+every section at once, at full width, and the table no longer shares the
+window. It is a view of the one page, `?view=component&sel=<id>`, and not a
+separate HTML file per component: #51 weighed that and turned it down,
+because each file would inline the payload again and `privacy.verify` would
+have to cover every copy.
+
+**The view reuses `sel` rather than a key of its own.** #51 used
+`component=<id>` because `sel` then meant "the drawer is open"; with the
+drawer gone, one key for "the component being looked at" lets the table's
+highlighted row, the map's ring and the Component view's subject follow each
+other, and Show on map is just a change of `view`. `TD.navigate`, unlike
+`TD.commit`, pushes a history entry, and records the picked component on the
+entry it leaves, so Back lands on the row highlighted rather than on the
+table as it was before the click.
+
+**The picker is a native `<select>`.** Twenty-seven components in stage
+groups, found by typing: the browser's own control does type-to-find, the
+keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
+taught all three.
 
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different
