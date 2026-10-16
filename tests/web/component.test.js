@@ -62,8 +62,11 @@ test("our own code has no third-party text", () => {
 // its ENVS, and a test body runs after a later suite has replaced the global.
 const VIEW_TD = globalThis.TD;
 const {
-  catalogNeighbours, catalogUrls, deployedIn, docLabel, pageHtml, pickerGroups, updatedHtml,
+  catalogNeighbours, catalogUrls, deployedIn, docLabel, fieldState, pageHtml, pickerGroups,
+  recordedSection, schemaFields, updatedHtml,
 } = VIEW_TD.component;
+const SCHEMA = JSON.parse(fs.readFileSync(
+  path.join(__dirname, "..", "..", "catalog", "schema", "component.schema.json"), "utf8"));
 
 test("catalog edges run with the data: into a consumer, out of what it consumes", () => {
   // Backwards once, and each list showed the other's components.
@@ -164,7 +167,7 @@ test("the page renders every section of a full row", (t) => {
   VIEW_TD.table.ensureColumns();
   const html = pageHtml("arax");
   assert.doesNotMatch(html, /could not be rendered/);
-  for (const id of ["environments", "overview", "smartapi", "releases", "helm", "connections"]) {
+  for (const id of ["environments", "overview", "smartapi", "releases", "helm", "connections", "recorded"]) {
     assert.match(html, new RegExp(`id="cv-${id}"`), `no ${id} section`);
   }
   assert.match(html, /<th scope="col">ci<\/th><th scope="col">prod<\/th>/);
@@ -183,3 +186,61 @@ test("an unknown or empty selection shows the picker and says why", (t) => {
   assert.match(pageHtml(""), /Choose a component above/);
   assert.match(pageHtml(""), /<option value="" selected disabled>/);
 });
+
+/* --- Recorded (from #51, 811826b) ------------------------------------------ */
+
+const RECORDED = {
+  id: "svc", name: "Service", owner: "Team", refactor_status: "Continues into Refactor",
+  identifiers: { infores: "infores:svc", smartapi: "abc" },
+  connections: { gets_results_from: ["other"], calls: ["third"], externals: [] },
+  endpoints: { openapi: "openapi.json", status: null, extra: "x" },
+  repositories: [{ url: "https://github.com/org/svc", role: "source", visibility: "public" }],
+  environments: { ci: { url: "https://svc.ci.transltr.io/", location: "ITRB" } },
+};
+
+test("the schema flattens to one row per field, nested blocks one level deep", (t) => {
+  const saved = VIEW_TD.ENVS;
+  t.after(() => { VIEW_TD.ENVS = saved; });
+  VIEW_TD.ENVS = ["dev", "ci", "test", "prod"];
+  const fields = schemaFields(SCHEMA, RECORDED);
+  const labels = fields.map((f) => f.label);
+  for (const expected of ["id", "identifiers.infores", "itrb.app", "connections.calls",
+    "endpoints.openapi", "environments.prod", "diagram.hide", "notes", "repositories"]) {
+    assert.ok(labels.includes(expected), expected);
+  }
+  // A key the file has under a block the schema leaves open (endpoints).
+  assert.ok(labels.includes("endpoints.extra"));
+  // No block appears as a row of its own beside its keys.
+  assert.ok(!labels.includes("identifiers"));
+  assert.ok(!labels.includes("environments"));
+  assert.equal(fields.find((f) => f.label === "id").required, true);
+  assert.equal(fields.find((f) => f.label === "notes").required, false);
+  // Schema order, so the page reads like the file.
+  assert.ok(labels.indexOf("id") < labels.indexOf("identifiers.infores"));
+  assert.ok(labels.indexOf("identifiers.infores") < labels.indexOf("notes"));
+});
+
+test("absent, null and empty are three different states", () => {
+  assert.equal(fieldState(RECORDED, ["id"]).state, "recorded");
+  assert.equal(fieldState(RECORDED, ["endpoints", "status"]).state, "none");
+  assert.equal(fieldState(RECORDED, ["connections", "externals"]).state, "none");
+  assert.equal(fieldState(RECORDED, ["description"]).state, "absent");
+  assert.equal(fieldState(RECORDED, ["environments", "prod"]).state, "absent");
+  assert.equal(fieldState(RECORDED, ["environments", "ci"]).state, "recorded");
+});
+
+test("the Recorded section counts, marks and links", (t) => {
+  const saved = VIEW_TD.DATA;
+  t.after(() => { VIEW_TD.DATA = saved; });
+  VIEW_TD.boot({ rows: [], environments: ["ci", "prod"], component_schema: SCHEMA });
+  const html = recordedSection({ id: "svc", recorded: RECORDED });
+  for (const cls of ["cv-f-absent", "cv-f-none", "cv-f-recorded"]) assert.match(html, new RegExp(cls));
+  assert.match(html, /\d+ of \d+ fields recorded/);
+  assert.match(html, /not recorded/);
+  assert.match(html, /checked: none/);
+  assert.match(html, /catalog\/components\/svc\.yaml/);
+  // Values render, URLs as links.
+  assert.match(html, /href="https:\/\/github\.com\/org\/svc"/);
+  assert.match(recordedSection({ id: "svc" }), /did not carry the component file/);
+});
+

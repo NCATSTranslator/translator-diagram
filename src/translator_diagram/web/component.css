@@ -110,6 +110,38 @@ table.cv-envs tbody th {
 table.cv-envs td.env { text-align: left; }
 .cv-url { font-size: var(--fs-label); }
 
+/* --- Recorded --------------------------------------------------------------- */
+
+.cv-count { margin: 0 0 var(--sp-2); font-size: var(--fs-table); }
+.cv-count strong { font-weight: 600; }
+.cv-rec th[scope="row"] {
+  font-family: var(--mono);
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+  padding: 5px 10px 5px 0;
+  white-space: nowrap;
+  color: var(--text);
+}
+.cv-rec thead th:first-child { width: 240px; }
+.cv-rec thead th:nth-child(2) { width: 120px; }
+.cv-rec td { padding-top: 5px; padding-bottom: 5px; }
+.cv-state { font-size: var(--fs-meta); white-space: nowrap; }
+/* Three states, three treatments, none of them colour alone: the word is in
+   every row. Absent is the one the section exists to show, so it is the one
+   that stands out: the field name dims and the state does not. */
+.cv-f-recorded .cv-state { color: var(--muted); }
+.cv-f-none .cv-state { color: var(--muted); font-style: italic; }
+.cv-f-absent th[scope="row"] { color: var(--muted); }
+.cv-f-absent .cv-state { color: var(--drift-ink); font-weight: 600; }
+.cv-value { overflow-wrap: anywhere; }
+.cv-value .cv-key { margin-right: 2px; }
+@media (max-width: 800px) {
+  .cv-rec thead th:first-child { width: auto; }
+  .cv-rec th[scope="row"] { white-space: normal; }
+}
+
 /* --- Header --------------------------------------------------------------- */
 
 .cv-headtop {

@@ -803,6 +803,124 @@
     return sections(parts);
   }
 
+  /* --- Recorded ---------------------------------------------------------- */
+
+  /* Flattens the schema's `properties` into the rows the Recorded section
+     draws, in schema order: a scalar or list is one row, a block with its
+     own `properties` (identifiers, itrb, connections, endpoints, diagram) is
+     one row per key inside it, and `environments` is one row per environment
+     the payload names. `endpoints` may carry keys the schema does not name
+     (`additionalProperties`), so the file's own extra keys are appended when
+     a file is given. Each row is {path, label, description, required}.
+     From #51 (811826b). */
+  function schemaFields(schema, recorded) {
+    const props = (schema && schema.properties) || {};
+    const required = new Set(list(schema && schema.required));
+    const out = [];
+    const push = (path, spec, isRequired) => out.push({
+      path,
+      label: path.join("."),
+      description: String((spec && spec.description) || ""),
+      required: !!isRequired,
+    });
+    for (const [key, spec] of Object.entries(props)) {
+      if (!spec || typeof spec !== "object") continue;
+      if (key === "environments") {
+        for (const env of envs()) push([key, env], { description: `Base URL and location for ${env}.` }, false);
+        continue;
+      }
+      const nested = spec.type === "object" && spec.properties && typeof spec.properties === "object"
+        ? spec.properties : null;
+      if (!nested) {
+        push([key], spec, required.has(key));
+        continue;
+      }
+      const inner = new Set(list(spec.required));
+      for (const [sub, subSpec] of Object.entries(nested)) push([key, sub], subSpec, inner.has(sub));
+      // Keys the file has under this block that the schema does not name
+      // (endpoints allows them): shown, so nothing recorded is invisible.
+      const block = recorded && recorded[key];
+      if (block && typeof block === "object" && !Array.isArray(block)) {
+        for (const sub of Object.keys(block)) {
+          if (!(sub in nested)) push([key, sub], {}, false);
+        }
+      }
+    }
+    return out;
+  }
+
+  /* Absent, null and empty are three different claims in this format
+     (docs/component-metadata.md): absent means "not recorded yet", an
+     explicit null or [] means "checked, there is none". This is where the
+     distinction is shown rather than flattened. */
+  function fieldState(recorded, path) {
+    let node = recorded;
+    for (const key of path) {
+      if (!node || typeof node !== "object" || !(key in node)) return { state: "absent" };
+      node = node[key];
+    }
+    const empty = node === null
+      || (Array.isArray(node) && node.length === 0)
+      || (typeof node === "object" && !Array.isArray(node) && Object.keys(node).length === 0);
+    return { state: empty ? "none" : "recorded", value: node };
+  }
+
+  /* A recorded value as HTML. A URL becomes a link; a list of strings is
+     joined; a list of mappings (repositories, documentation, externals) is
+     one line each; a mapping (an environment, an itrb block) is `key value`
+     pairs. Nothing here is prose the page wrote. */
+  function valueHtml(value) {
+    if (value === null || value === undefined) return DASH;
+    if (typeof value === "boolean") return value ? "yes" : "no";
+    if (typeof value === "string") {
+      return /^https?:\/\//i.test(value) ? ext(value, value, "cv-link cv-mono") : mono(value);
+    }
+    if (typeof value === "number") return mono(String(value));
+    if (Array.isArray(value)) {
+      if (!value.length) return DASH;
+      if (value.every((v) => typeof v !== "object" || v === null)) return value.map(valueHtml).join(", ");
+      return stack(value.map(valueHtml));
+    }
+    const entries = Object.entries(value);
+    if (!entries.length) return DASH;
+    return entries.map(([k, v]) => `<span class="cv-key">${esc(k)}</span> ${valueHtml(v)}`).join(" · ");
+  }
+
+  const STATE_WORDS = { recorded: "recorded", none: "checked: none", absent: "not recorded" };
+
+  /* The component's own file against every field the schema allows. This is
+     the section for "field X is wrong or missing": what the catalog says,
+     what it says it checked and found nothing, and what nobody has written
+     down yet. */
+  function recordedSection(row) {
+    const recorded = row.recorded;
+    if (!recorded || typeof recorded !== "object") {
+      return muted("This build did not carry the component file.");
+    }
+    const fields = schemaFields(data().component_schema, recorded);
+    if (!fields.length) return muted("This build carries no schema to compare the file against.");
+    let count = 0;
+    const body = fields.map((field) => {
+      const { state, value } = fieldState(recorded, field.path);
+      if (state === "recorded") count += 1;
+      const title = field.description ? ` title="${esc(field.description)}"` : "";
+      return `<tr class="cv-f cv-f-${state}">
+        <th scope="row"${title}>${esc(field.label)}${field.required ? ` ${note("required")}` : ""}</th>
+        <td class="cv-state">${STATE_WORDS[state]}</td>
+        <td class="cv-value">${state === "recorded" ? valueHtml(value) : DASH}</td></tr>`;
+    }).join("");
+    const absent = fields.length - count;
+    const file = catalogUrls(row.id);
+    return `<p class="cv-cap">The component's own file, ${
+      ext(file.view, `catalog/components/${row.id}.yaml`, "cv-link cv-mono")}, against every field the
+        schema allows. “Not recorded” means nobody has written the field down yet; “checked: none”
+        means someone looked and there is nothing to record. Hover a field for what it holds.</p>
+      <p class="cv-count">${count} of ${fields.length} fields recorded${
+        absent ? ` · <strong>${absent}</strong> not` : ""} · ${ext(file.edit, "edit the file")}</p>
+      <div class="cv-tscroll"><table class="cv-t cv-rec"><thead><tr>
+        <th>Field</th><th>State</th><th>Value</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
   /* The sections under the environments, in reading order: what it is, how
      it is registered, what it has released, what should be deployed, and
      what it talks to. */
@@ -813,6 +931,9 @@
     { id: "helm", label: "Helm", render: panelHelm },
     { id: "connections", label: "Connections", render: panelConnections },
   ];
+
+  // Full width, last: a table of every field is too wide for a column.
+  const RECORDED = { id: "recorded", label: "Recorded in the catalog", render: recordedSection };
 
   /* One malformed field must cost its section, not the page: this is a
      reading surface over data fetched from six upstreams. */
@@ -874,7 +995,8 @@
     return `${bar}<header class="cv-head">${headerHtml(row)}</header>
       <section class="cv-panel wide" id="cv-environments" aria-labelledby="cv-environments-h">
         <h2 class="cv-ph" id="cv-environments-h">Environments</h2>${envMatrix(row)}</section>
-      <div class="cv-cols">${PANELS.map((panel) => panelHtml(row, panel)).join("")}</div>`;
+      <div class="cv-cols">${PANELS.map((panel) => panelHtml(row, panel)).join("")}</div>
+      ${panelHtml(row, RECORDED, true)}`;
   }
 
   let host = null;
@@ -946,6 +1068,9 @@
   view.catalogNeighbours = catalogNeighbours;
   view.catalogUrls = catalogUrls;
   view.deployedIn = deployedIn;
+  view.fieldState = fieldState;
+  view.recordedSection = recordedSection;
+  view.schemaFields = schemaFields;
   view.docLabel = docLabel;
   view.pickerGroups = pickerGroups;
   view.pageHtml = pageHtml;
