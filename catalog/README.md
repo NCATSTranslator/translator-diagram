@@ -79,6 +79,13 @@ override exists: ci and test serve `webapp/openapi.json`, prod serves
 `openapi.json`, and ci and test are the intended convention going forward — so
 the override records the exception rather than the rule.
 
+**Recording `status` vouches for its `version`.** A /status body has no
+shared schema, so the dashboard reads a plain `version` key from it as the
+software's own version, ahead of any `*_version` key, and badges it `status`.
+Before you record one, look at the body: if its bare `version` is a TRAPI,
+Biolink or data release instead, the cell would show that as the software,
+so say so in an issue rather than recording the endpoint.
+
 **Environments are recorded only where SmartAPI cannot supply them.** For a
 registered component the block should be *absent*, and a fetcher fills it in.
 The unit is the environment, not the component: registration is manual and

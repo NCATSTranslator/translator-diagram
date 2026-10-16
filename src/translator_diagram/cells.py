@@ -80,10 +80,10 @@ DOCUMENT_ERROR_STATUSES = frozenset({403}) | frozenset(range(500, 600))
 
 # `*_version` keys in a /status body that name something other than the
 # software's own version. Babel and Biolink are *data* releases and TRAPI is a
-# spec, and a body is free to report any of them before it reports its own
-# version — at which point the first `*_version` key would become the
-# component's version, badged `status`, tinted for drift against its
-# neighbours, and matched against the repository's releases.
+# spec, and a body with no plain `version` is free to report any of them
+# before it reports its own — at which point the first `*_version` key would
+# become the component's version, badged `status`, tinted for drift against
+# its neighbours, and matched against the repository's releases.
 NOT_SOFTWARE_VERSIONS = frozenset({
     "babel_version",
     "biolink_version",
@@ -188,26 +188,31 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
 
     There is no Translator-wide /status schema — NameRes's shape is its own,
     and its OpenAPI declares the response `additionalProperties: true`. So this
-    looks for conventions rather than parsing a schema: any `*_version` key
-    that is not one of the known data or spec releases, plus the Babel and
-    Biolink fields that carry the *data* release, which is a genuinely
-    separate axis from the software version and which nothing else exposes at
-    runtime.
+    looks for conventions rather than parsing a schema: a plain `version`, else
+    any `*_version` key that is not one of the known data or spec releases,
+    plus the Babel and Biolink fields that carry the *data* release, which is
+    a genuinely separate axis from the software version and which nothing else
+    exposes at runtime.
 
-    A plain `version` key wins outright: it is the most literal spelling,
+    A plain `version` comes first because it is the most literal spelling,
     and NodeNorm's bodies use it. Among the `*_version` keys, order is the
     tie-break when a body reports several, which is why the exclusions
     matter: a document that lists its Biolink version before its own would
-    otherwise have that reported as the software it is running.
+    otherwise have that reported as the software it is running. Either way an
+    empty string is no answer, so the next candidate gets its turn.
+
+    ponytail: a plain `version` is taken on trust, because its name says
+    nothing about *what* it versions. Every body surveyed so far that has one
+    means the software (docs/metadata-sources.md, *Status endpoints*), and
+    recording `status` in a component file is what vouches for that
+    (catalog/README.md). The first body whose bare `version` is a spec or data
+    release needs a per-component override naming the key to read.
     """
     if not document:
         return {}
-    plain = document.get("version")
-    versions = {
-        key: value
-        for key, value in document.items()
-        if key.endswith("_version") and isinstance(value, str)
-    }
+    candidates = [("version", document.get("version"))] + [
+        (key, value) for key, value in document.items() if key.endswith("_version")
+    ]
     biolink = document.get("biolink_model")
     release = []
     if babel := document.get("babel_version"):
@@ -216,8 +221,14 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
         release.append(f"biolink {biolink['tag']}")
     message = document.get("message")
     return {
-        "version": plain if isinstance(plain, str) else next(
-            (v for k, v in versions.items() if k not in NOT_SOFTWARE_VERSIONS), None
+        "version": next(
+            (
+                value
+                for key, value in candidates
+                if isinstance(value, str) and value.strip()
+                and key not in NOT_SOFTWARE_VERSIONS
+            ),
+            None,
         ),
         "data_release": " · ".join(release) or None,
         # A sentence the service wrote about itself — "Reporting results from
