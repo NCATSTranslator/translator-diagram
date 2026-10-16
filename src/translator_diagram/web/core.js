@@ -462,7 +462,7 @@
 
   /* --- URL state --------------------------------------------------------- */
 
-  const VIEWS = ["overview", "map"];
+  const VIEWS = ["overview", "map", "component"];
   const VERSIONS = ["all", "differ", "known", "none", "unreachable", "unregistered", "no-smartapi"];
   const BASE_SORTS = ["name", "owner", "repo", "smartapi"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
@@ -475,8 +475,7 @@
     sort: "",          // empty means the payload's own order, which is by stage
     dir: "asc",
     expand: [],
-    sel: "",
-    tab: "",
+    sel: "",           // the component looked at: its page, its table row, its map node
     edges: [],
   };
 
@@ -531,7 +530,8 @@
     // writes them back.
     state.expand = commaList(params.get("expand"), 400);
     state.sel = (params.get("sel") ?? "").slice(0, 100);
-    state.tab = (params.get("tab") ?? "").slice(0, 40);
+    // `tab` named the drawer's tab; the drawer is gone and the Component
+    // view shows every section at once, so an old link's tab is ignored.
     state.edges = commaList(params.get("edges"), 120)
       .filter((kind) => v.edges.indexOf(kind) >= 0);
     return state;
@@ -559,7 +559,6 @@
     }
     if (expand) params.set("expand", expand);
     if (state.sel) params.set("sel", state.sel);
-    if (state.tab) params.set("tab", state.tab);
     if (edges) params.set("edges", edges);
     // Commas are legal in a query string and this page's are all list
     // separators; leaving them encoded makes a shared link unreadable.

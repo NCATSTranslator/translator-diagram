@@ -24,16 +24,30 @@
   // rewrite the URL and discard the state a shared link asked for.
   let urlReady = false;
 
-  function writeUrl() {
+  function writeUrl(push) {
     if (!urlReady) return;
     const query = TD.url.serialize(TD.state);
-    history.replaceState(null, "", query ? `?${query}${location.hash}` : location.pathname + location.hash);
+    // A change of view or of component is a place, so it gets a history entry
+    // and Back returns to it; a keystroke in the search box is not, and
+    // replaces the entry rather than burying the last place under fifty.
+    const url = query ? `?${query}${location.hash}` : location.pathname + location.hash;
+    if (push) history.pushState(null, "", url);
+    else history.replaceState(null, "", url);
   }
 
   TD.commit = function commit(patch, options) {
     Object.assign(TD.state, patch);
-    writeUrl();
+    writeUrl(false);
     if (!(options && options.silent)) renderView();
+  };
+
+  /* Go somewhere: another view, or another component. Unlike commit, this
+     pushes a history entry and redraws the whole shown view. */
+  TD.navigate = function navigate(patch) {
+    Object.assign(TD.state, patch);
+    writeUrl(true);
+    syncControls();
+    showView(true);
   };
 
   /* --- Theme ----------------------------------------------------------------- */
@@ -184,7 +198,7 @@
       label: "View",
       items: [{ value: "overview", label: "Overview" }, { value: "map", label: "Map" }],
       value: TD.state.view,
-      onChange: (value) => { TD.commit({ view: value }); showView(true); },
+      onChange: (value) => TD.navigate({ view: value }),
     });
     document.getElementById("viewswitch").append(viewSwitch.el);
 
@@ -269,6 +283,15 @@
     });
   }
 
+  /* Set every control from TD.state, after something other than the control
+     itself changed it: Back, Forward, or a navigation. */
+  function syncControls() {
+    viewSwitch.set(TD.state.view);
+    ownerBox.set(TD.state.owner);
+    versionBox.set(TD.state.versions);
+    search.value = TD.state.q;
+  }
+
   /* --- Measurement ------------------------------------------------------------ */
 
   /* The view switch's sliding indicator is placed from measured widths, so it
@@ -335,10 +358,7 @@
   // renderView alone drew into whichever view was already showing.
   addEventListener("popstate", () => {
     Object.assign(TD.state, TD.url.parse(location.search));
-    viewSwitch.set(TD.state.view);
-    ownerBox.set(TD.state.owner);
-    versionBox.set(TD.state.versions);
-    search.value = TD.state.q;
+    syncControls();
     showView(false);
     TD.component.sync();
   });
