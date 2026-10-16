@@ -206,10 +206,31 @@ curl -s 'https://name-lookup.ci.transltr.io/status?full=true'
  "recent_queries":{…}, "solr":{…}}
 ```
 
-**There is no Translator-wide `/status` schema** — this shape is specific to
-NameRes, and its own OpenAPI declares the response
-`additionalProperties: true`. So `/status` is a per-component pointer, not
-something a fetcher can parse generically.
+**There is no Translator-wide `/status` schema** — this shape is NameRes's
+own, and its OpenAPI declares the response `additionalProperties: true`. So
+`/status` is a per-component pointer, not something a fetcher can parse
+generically. Every deployed URL in the catalog was tried at `status`,
+`status?full=true`, `webapp/status`, `api/status` and `1.5/status` on
+2026-10-15. The table lists the ones that answer JSON and what they put in
+it, plus `kgx-storage-pipeline`, whose JSON is at `health` (none of those
+five paths); its file has recorded that path since 2026-09-02:
+
+| Component | Software version | Data release | Else |
+|---|---|---|---|
+| `name-lookup` | `nameres_version` | `babel_version`, `biolink_model.tag` | `recent_queries`, `solr` |
+| `nodenorm-es` (ci, test) | `version` | `babel_version` | `biolink_model_toolkit_version`, `elasticsearch` |
+| `nodenorm-redis` (RENCI dev) | `version` | `babel_version`, `biolink_model.tag` | `databases` |
+| `nameres-es` (ci) | none | `babel_version`, null on an empty index | `biolink_model_toolkit_version`, `numDocs` |
+| `pending-api` (`status`), `kgx-storage-pipeline` (`health`) | none | none | liveness only |
+| `node-annotator` | none | none | `{"success": true}`; **not recorded**, its OpenAPI document already says it is up |
+
+`cells._status_facts` reads a plain, non-empty `version` first, then the
+first `*_version` key that is not a data or spec release. A plain `version`
+says nothing about what it versions, so it is taken on trust: in every body
+above that has one, it is the software's.
+`biolink_model_toolkit_version` is in that exclusion list: it is the library
+the service loads, pinned to a model release, and neither the software's
+version nor the data release the page shows.
 
 What it uniquely offers is **data provenance**: `babel_version` and
 `biolink_model.tag` are a different axis from software version, and nothing
