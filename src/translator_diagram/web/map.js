@@ -785,6 +785,8 @@
   const pointers = new Map();
   let pinchStart = 0;
   let dragged = false;
+  // The node a press began on; see the click handler.
+  let pressed = null;
 
   function localPoint(event) {
     const rect = box.getBoundingClientRect();
@@ -802,6 +804,7 @@
     root.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 && event.pointerType === "mouse") return;
       pointers.set(event.pointerId, localPoint(event));
+      pressed = event.target.closest(".mp-node");
       root.setPointerCapture(event.pointerId);
       dragged = false;
       coasting = false;
@@ -856,7 +859,11 @@
 
     root.addEventListener("click", (event) => {
       if (dragged) { dragged = false; return; }
-      const node = event.target.closest(".mp-node");
+      // Capturing the pointer on press (for the drag) makes the browser send
+      // the click to the root rather than to the node under it, so the node
+      // is the one the press began on. Reading the click's own target found
+      // nothing, and a mouse click on a node did nothing.
+      const node = event.target.closest(".mp-node") || pressed;
       if (node) select(node.dataset.id);
     });
 
