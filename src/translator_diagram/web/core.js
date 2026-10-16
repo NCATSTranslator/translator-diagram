@@ -170,7 +170,7 @@
   }
 
   /* The brushed-metal gradient for one owner, at an angle: the coin, the
-     drawer's rule and the map's rail all draw the same four stops. */
+     Component view's rule and the map's rail all draw the same four stops. */
   function ownerMetal(name, angle) {
     const style = ownerStyle(name);
     return style ? `linear-gradient(${angle}, ${style.metal.join(", ")})` : "";
@@ -190,15 +190,15 @@
 
   /* --- Rows --------------------------------------------------------------- */
 
-  /* What every view says about a row the same way. The table, the drawer and
-     the map each used to carry their own copy of these, and a label that
-     drifts between two views reads as two different facts. */
+  /* What every view says about a row the same way. The table, the Component
+     view and the map each used to carry their own copy of these, and a label
+     that drifts between two views reads as two different facts. */
 
   let rowIndex = null;
 
   /* The row with this id, or null. Indexed once per payload rather than
-     searched: the tooltips, the drawer and the map all look rows up by id,
-     some of them on every hover. */
+     searched: the tooltips, the Component view and the map all look rows up
+     by id, some of them on every hover. */
   function rowById(id) {
     if (!rowIndex) {
       rowIndex = new Map();

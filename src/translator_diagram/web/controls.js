@@ -458,33 +458,4 @@
 
   ui.tooltip = tooltip;
   addEventListener("scroll", () => tooltip.hide(), true);
-
-  /* --- Tabs --------------------------------------------------------------- */
-
-  /* Each button gets `id` = `<prefix>-<tab id>` when `config.idPrefix` is
-     given, so a tabpanel can name the tab that labels it. */
-  ui.tabs = function tabs(config) {
-    const root = el("div", "tabs");
-    root.setAttribute("role", "tablist");
-    if (config.label) root.setAttribute("aria-label", config.label);
-
-    const buttons = config.tabs.map((tab) => {
-      const button = el("button", null, esc(tab.label));
-      button.type = "button";
-      button.setAttribute("role", "tab");
-      button.dataset.id = tab.id;
-      if (config.idPrefix) button.id = `${config.idPrefix}-${tab.id}`;
-      if (tab.panel) button.setAttribute("aria-controls", tab.panel);
-      root.append(button);
-      return button;
-    });
-
-    const radio = roving(root, buttons, {
-      attr: "id", aria: "aria-selected", ends: true,
-      value: config.value ?? (config.tabs[0] && config.tabs[0].id),
-      onChange: config.onChange,
-    });
-
-    return { el: root, get value() { return radio.value; }, set(next) { radio.set(next); } };
-  };
 })();

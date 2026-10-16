@@ -44,6 +44,13 @@
   /* Go somewhere: another view, or another component. Unlike commit, this
      pushes a history entry and redraws the whole shown view. */
   TD.navigate = function navigate(patch) {
+    // Leaving a view for a component: the entry being left records which one
+    // was picked there, so Back returns to its row highlighted and in view,
+    // or to its node ringed, rather than to the place as it was before.
+    if (patch.sel && patch.view && patch.view !== TD.state.view) {
+      TD.state.sel = patch.sel;
+      writeUrl(false);
+    }
     Object.assign(TD.state, patch);
     writeUrl(true);
     syncControls();
@@ -178,6 +185,7 @@
         </div>
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
+        <div class="view" id="view-component"></div>
       </main>`;
   }
 
@@ -196,7 +204,11 @@
   function controls() {
     viewSwitch = TD.ui.segmented({
       label: "View",
-      items: [{ value: "overview", label: "Overview" }, { value: "map", label: "Map" }],
+      items: [
+        { value: "overview", label: "Overview" },
+        { value: "map", label: "Map" },
+        { value: "component", label: "Component" },
+      ],
       value: TD.state.view,
       onChange: (value) => TD.navigate({ view: value }),
     });
@@ -303,24 +315,35 @@
   /* --- Views ------------------------------------------------------------------- */
 
   function showView(animate) {
-    const overview = document.getElementById("view-overview");
-    const map = document.getElementById("view-map");
-    const onMap = TD.state.view === "map";
-    overview.classList.toggle("on", !onMap);
-    map.classList.toggle("on", onMap);
-    const shown = onMap ? map : overview;
+    const name = TD.state.view;
+    // base.css hides the filter bar on the Component view, where it filters
+    // nothing; this attribute is what it keys on.
+    document.documentElement.dataset.view = name;
+    let shown = null;
+    for (const view of TD.url.vocabulary().views) {
+      const el = document.getElementById(`view-${view}`);
+      el.classList.toggle("on", view === name);
+      if (view === name) shown = el;
+    }
     if (animate && TD.motion.enabled) {
       shown.classList.remove("enter");
       void shown.offsetWidth;
       shown.classList.add("enter");
     }
     renderView();
+    // Back from a component lands on the table freshly drawn and scrolled to
+    // the top, so bring its row back into sight.
+    if (name === "overview" && TD.state.sel) TD.table.revealRow(TD.state.sel);
   }
 
   function renderView() {
     if (TD.state.view === "map") {
       const shown = TD.map.render(document.getElementById("view-map"));
       setStatus(shown, (DATA.rows || []).length);
+      return;
+    }
+    if (TD.state.view === "component") {
+      TD.component.render(document.getElementById("view-component"));
       return;
     }
     const result = TD.table.render(document.getElementById("view-overview"));
@@ -345,22 +368,13 @@
 
   addEventListener("resize", measure);
 
-  /* Something other than the window changed how much room the views have —
-     the drawer opening or closing. The same two measurements a window resize
-     triggers, without dispatching a fake event to get them. */
-  TD.layoutChanged = function layoutChanged() {
-    measure();
-    TD.map.resized();
-  };
-
   // Back and forward: the URL is the state, so re-read it, set the controls
-  // and the shown view from it, and let the drawer open or close to match.
-  // renderView alone drew into whichever view was already showing.
+  // and the shown view from it. renderView alone drew into whichever view
+  // was already showing.
   addEventListener("popstate", () => {
     Object.assign(TD.state, TD.url.parse(location.search));
     syncControls();
     showView(false);
-    TD.component.sync();
   });
 
   // A deep link arrives before the table exists, so the browser's own fragment

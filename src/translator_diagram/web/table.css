@@ -42,7 +42,7 @@ table.grid {
 
 /* The bare `thead th` and `tbody td` rules are scoped to this table with
    :where(), which adds no specificity: without the scope they reached every
-   table on the page, and the drawer's had to opt out of each one by name. */
+   table on the page, and the others had to opt out of each one by name. */
 :where(table.grid) thead th {
   position: sticky;
   top: 0;
@@ -416,8 +416,7 @@ tbody tr.detail.detail-last > td { padding-bottom: var(--sp-2); border-bottom: 1
    one: the rightmost still on screen, so it sits against the first
    environment column with no gap between the word and the numbers it names.
    The ladder is the reverse of the drop order — SmartAPI goes at 1150,
-   Owner at 800 (Repository goes at 1400, but SmartAPI is still to its right).
-   drawer.css has the same three steps for the widths with the drawer open. */
+   Owner at 800 (Repository goes at 1400, but SmartAPI is still to its right). */
 tbody tr.detail > td.dk {
   text-align: right;
   padding-right: var(--sp-3);

@@ -1,83 +1,117 @@
 /*
-  The detail drawer. Two rules govern everything below.
-
-  It is not modal. The table stays readable, sortable and scrollable while it
-  is open, which is why the page is given room with padding rather than being
-  covered — a drawer that hides the row you clicked answers the question and
-  loses the context.
-
-  And it is still the same page. No cards, no panels, no second visual
+  The Component view: one component, every section on one scrolling page.
+  It is still the same page as the table. No cards, no second visual
   language: a hairline between rows, an 11px uppercase label, and the same
-  owner coin, source label and reachability dot the table uses, so a
-  value read here and the same value read in a cell look like one claim.
-
-  The edge shadow is the one exception to "no shadows except the tooltip",
-  and it is what separates two surfaces that are both --page.
+  owner coin, source label and reachability dot the table uses, so a value
+  read here and the same value read in a cell look like one claim.
 */
 
-.drawer {
-  /* 280ms and 40ms, expressed in the tokens rather than typed: both collapse
-     to 0 under prefers-reduced-motion because their inputs do, so the
-     reduced-motion rule stays in one file. */
-  --dw-in: calc((var(--dur-layout) + var(--dur-slow)) / 2);
+#view-component {
+  /* 40ms between sections, expressed in the tokens rather than typed: it
+     collapses to 0 under prefers-reduced-motion because its input does. */
   --dw-stagger: calc(var(--dur-fast) / 3);
-
-  position: fixed;
-  top: var(--topbar-h);
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  width: var(--drawer-w);
-  display: flex;
-  flex-direction: column;
-  background: var(--page);
-  border-left: 1px solid var(--hairline);
-  box-shadow: -8px 0 24px var(--edge-shadow);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--sp-6);
   font-size: var(--fs-table);
 }
-.drawer[hidden] { display: none; }
 
-/* Re-triggered on every open rather than left as a transition, so reopening
-   on another component plays the entrance again instead of sitting still. */
-.drawer.in { animation: dw-in var(--dw-in) var(--ease) both; }
-@keyframes dw-in {
-  from { opacity: 0; transform: translateX(24px); }
-  to { opacity: 1; transform: none; }
+/* The filters choose rows of the table and nodes of the map; on one
+   component they do nothing, so they are not offered. */
+html[data-view="component"] .filters { display: none; }
+
+/* The picker and the page's own actions, on one line above the name. */
+.cv-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+}
+.cv-bar .spacer { flex: 1; }
+.cv-pick { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.cv-picklabel {
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+#cv-select {
+  max-width: min(32rem, 70vw);
+  padding: 5px 8px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  background: var(--page);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+}
+#cv-select:focus-visible { border-color: var(--accent); }
+
+.cv-head { padding-bottom: var(--sp-2); }
+
+/* Each section: a heading over a hairline, like a band in the table. */
+.cv-panel { margin-top: var(--sp-5); }
+.cv-ph {
+  margin: 0 0 var(--sp-3);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--hairline-strong);
+  font-size: var(--fs-body);
+  font-weight: 600;
 }
 
-/* The table reflows into what is left rather than being covered; app.js
-   re-measures its scrollport when the drawer says the layout changed. */
-html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
-
-/* Padding alone was not enough. base.css drops a column when the *window*
-   narrows past 1400 / 1150 / 800, but the drawer does not narrow the window —
-   it narrows the row, so at 1700px the table kept every column, outgrew the
-   1212px left to it, and pushed prod out of sight behind the drawer.
-
-   These are the same three rules with each breakpoint moved up by the
-   drawer's width (--drawer-w, 440px; a media query cannot read it), so "how
-   much room does the table have" is asked about the space the table actually
-   has. Below 1400 the table scrolls sideways as it always did; nothing here
-   changes that. tokens.css lists the whole ladder. */
-@media (max-width: 1840px) { html[data-drawer="open"] .drop-md { display: none; } }
-@media (max-width: 1590px) { html[data-drawer="open"] .drop-sm { display: none; } }
-@media (max-width: 1240px) { html[data-drawer="open"] .drop-xs { display: none; } }
-/* The expanded row's label ladder (table.css) follows the same steps. */
-@media (max-width: 1590px) {
-  html[data-drawer="open"] td.dk-smartapi .dkl { display: none; }
-  html[data-drawer="open"] td.dk-owner .dkl { display: inline; }
+/* The sections under the environments flow into as many columns of at least
+   34rem as fit, each kept whole: two on a wide window, one on a narrow one.
+   Columns rather than a grid, because the sections differ in height by ten
+   times and a grid row is as tall as its tallest. */
+.cv-cols {
+  columns: 34rem 2;
+  column-gap: var(--sp-6);
 }
-@media (max-width: 1240px) {
-  html[data-drawer="open"] td.dk-owner .dkl { display: none; }
-  html[data-drawer="open"] td.dk-name .dkl { display: inline; }
+/* Padding, not margin, above each: a margin at the top of a column is
+   dropped by the column break, so the second column started higher than the
+   first. */
+.cv-cols > .cv-panel {
+  break-inside: avoid;
+  margin-top: 0;
+  padding-top: var(--sp-5);
 }
+
+/* The environments, side by side: the table's own cell on the first row,
+   then one row per fact. The label column is as narrow as its words. */
+table.cv-envs {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+table.cv-envs th,
+table.cv-envs td {
+  padding: 6px var(--sp-3);
+  border-bottom: 1px solid var(--hairline);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+table.cv-envs thead th {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+table.cv-envs thead th:first-child { width: 11rem; }
+table.cv-envs tbody th {
+  font-size: var(--fs-label);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+table.cv-envs td.env { text-align: left; }
+.dw-url { font-size: var(--fs-label); }
 
 /* --- Header --------------------------------------------------------------- */
 
-.dw-head {
-  flex: none;
-  padding: var(--sp-4) var(--sp-5) var(--sp-3);
-}
 .dw-headtop {
   display: flex;
   align-items: flex-start;
@@ -92,27 +126,11 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 }
 .dw-name h2 {
   margin: 0;
-  font-size: var(--fs-body);
+  font-size: 1.4rem;
   font-weight: 600;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
-
-.dw-close {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  margin: -6px -8px 0 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--r-control);
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-.dw-close:hover { background: var(--raised); color: var(--text); }
 
 .dw-id {
   margin-top: 2px;
@@ -122,21 +140,14 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
   overflow-wrap: anywhere;
 }
 
-/* The catalog's `summary`, or GitHub's one-liner for the repository. Two lines,
-   clipped: it is orientation, not content. Two because the schema allows a
-   summary 160 characters long, which one line at this width cuts in half;
-   not three, because a long GitHub description would push the tabs down. */
+/* The catalog's `summary`, or GitHub's one-liner for the repository: what
+   this thing is, in a sentence, under its name. */
 .dw-blurb {
   margin-top: 3px;
   color: var(--muted);
   font-size: var(--fs-meta);
   line-height: 1.4;
 }
-
-/* The sheet has no drag handle — a handle that does not drag is a lie — so the
-   top edge carries a plain close bar instead. Hidden entirely on the desktop
-   drawer, where the ✕ is already at the top right. */
-.dw-sheetclose { display: none; }
 
 /* The same four metallic stops the map node's rail and the coin are built
    from, so the header, the table and the diagram agree about an owner. */
@@ -161,62 +172,13 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 }
 .dw-links a { color: var(--link); }
 
-/* --- Tabs ----------------------------------------------------------------- */
-
-/* One row, always. Six labels do not fit 440px, so the strip scrolls and its
-   scrollbar is hidden — a 15px system scrollbar under a 22px tab strip is
-   more furniture than the thing it measures. The fade at the right edge is
-   the only signal left that there is more, and drawer.js turns it on only
-   when there is (data-more), because a permanent fade dims a last tab that
-   was never cut. */
-.dw-tabs {
-  flex: none;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-}
-.dw-tabs::-webkit-scrollbar { display: none; }
-.dw-tabs[data-more="1"] {
-  mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-}
-.dw-tabs .tabs {
-  width: max-content;
-  min-width: 100%;
-  gap: 0;
-  padding: 0 calc(var(--sp-5) - 10px);
-}
-.dw-tabs .tabs button {
-  padding: 6px 10px;
-  /* .04em, not the label tracking: at .06em the six labels are 20px wider
-     again, and this is the one place on the page where every pixel of width
-     is a tab the reader has to scroll for. */
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-/* --- Body ----------------------------------------------------------------- */
-
-.dw-body {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 0 var(--sp-5) var(--sp-6);
-}
-.dw-panel:focus-visible { outline-offset: -2px; }
+/* --- Sections ------------------------------------------------------------ */
 
 .dw-sec {
   animation: dw-sec-in var(--dur-layout) var(--ease) both;
   animation-delay: calc(var(--i, 0) * var(--dw-stagger));
 }
 .dw-sec + .dw-sec { margin-top: 20px; }
-/* The one rule left inside the body. Four environments are four separate
-   claims about four separate machines, and 20px of air alone let prod's rows
-   read as a continuation of test's. */
-.dw-sec.dw-envsec + .dw-sec.dw-envsec {
-  padding-top: 20px;
-  border-top: 1px solid var(--hairline);
-}
 @keyframes dw-sec-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
@@ -252,9 +214,6 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 .dw-desc ul { padding-left: 1.2em; }
 .dw-desc code { font-family: var(--mono); font-size: 0.92em; }
 .dw-desc a { color: var(--link); }
-/* The body has no top padding; a paragraph that opens the tab brings its own
-   margin, and a heading, which has none, would sit against the tab bar. */
-.dw-sec:first-child > .dw-notes { margin-top: var(--sp-3); }
 .dw-sublabel {
   margin: var(--sp-3) 0 var(--sp-1);
   font-size: var(--fs-label);
@@ -395,7 +354,7 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 
 /* --- Tables --------------------------------------------------------------- */
 
-/* Wide content scrolls inside its own box rather than widening the drawer. */
+/* Wide content scrolls inside its own box rather than widening the page. */
 .dw-tscroll {
   margin-top: var(--sp-2);
   overflow-x: auto;
@@ -408,8 +367,8 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
   font-variant-numeric: tabular-nums;
 }
 /* Headers wrap here, which is the point: "Requests cpu / mem" on one line
-   costs the fourth column its place in a 392px drawer, and a header nobody
-   can read is worse than a header on two lines. */
+   costs the fourth column its place in a one-column layout, and a header
+   nobody can read is worse than a header on two lines. */
 .dw-t thead th {
   padding: 4px 10px 4px 0;
   border-bottom: 1px solid var(--hairline);
@@ -502,64 +461,4 @@ html[data-drawer="open"] .page { padding-right: var(--drawer-w); }
 .dw-conn.planned .dw-connname {
   text-decoration: var(--planned-underline);
   text-underline-offset: var(--planned-underline-offset);
-}
-
-/* --- Bottom sheet --------------------------------------------------------- */
-
-/* Under 900px there is no room to sit beside the table, so the drawer becomes
-   a sheet over the bottom 70% and the page keeps its full width. */
-@media (max-width: 900px) {
-  .drawer {
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: auto;
-    height: 70vh;
-    border-left: 0;
-    border-top: 1px solid var(--hairline);
-    box-shadow: 0 -8px 24px var(--edge-shadow);
-  }
-  .drawer.in { animation-name: dw-in-up; }
-  @keyframes dw-in-up {
-    from { opacity: 0; transform: translateY(24px); }
-    to { opacity: 1; transform: none; }
-  }
-
-  /* No drag handle — a handle that does not drag is a lie — but the top edge
-     of a sheet is where a thumb goes, so it carries a full-width close bar
-     instead. Full width because it is the target, not a decoration. */
-  .dw-sheetclose {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    flex: none;
-    width: 100%;
-    padding: 7px 0 6px;
-    border: 0;
-    border-bottom: 1px solid var(--hairline);
-    background: none;
-    color: var(--muted);
-    font: inherit;
-    font-size: var(--fs-label);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-label);
-    cursor: pointer;
-  }
-  .dw-sheetclose:hover { color: var(--text); background: var(--raised); }
-
-  /* The sheet takes 70vh, and app.js sizes the table from the window rather
-     than from what is left of it, so without this the table's first row sat
-     behind the sheet and the reader had to scroll to find the row they had
-     just clicked. 30vh is what fits above a 70vh sheet. */
-  html[data-drawer="open"] .tablewrap { max-height: 30vh; }
-  html[data-drawer="open"] .page { padding-right: 0; padding-bottom: 70vh; }
-  html[data-drawer="open"],
-  html[data-drawer="open"] body { overflow: auto; }
-
-  .dw-head { padding: var(--sp-3) var(--sp-4) var(--sp-2); }
-  .dw-tabs .tabs { padding: 0 calc(var(--sp-4) - 10px); }
-  .dw-body { padding: 0 var(--sp-4) var(--sp-5); }
-  .dw-r { grid-template-columns: 100px minmax(0, 1fr); }
 }

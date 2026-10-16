@@ -58,11 +58,8 @@
   --nov: rgba(102, 159, 56, 0.05);
   --off: rgba(128, 128, 128, 0.07);
 
-  /* The tooltip and the drawer edge are the only shadows on the page.
-     --edge-shadow is the colour of the drawer's, cast sideways or upwards
-     depending on which edge it enters from. */
+  /* The tooltip's is the only shadow on the page. */
   --shadow-pop: 0 6px 24px rgba(32, 33, 36, 0.14), 0 1px 2px rgba(32, 33, 36, 0.1);
-  --edge-shadow: rgba(0, 0, 0, 0.06);
 
   /* A plan rather than a fact: the planned edge on the map, the environment
      a registration does not list, the service nothing reports. */
@@ -101,9 +98,6 @@
 
   --topbar-h: 64px;
   --coin: 10px;
-  /* The drawer's column. Declared here, not on .drawer, because <main> pads
-     itself by it and is not inside the drawer. */
-  --drawer-w: 440px;
 
   /* One row style: a ruled table. Two lines per cell — the name over its
      summary, the version over where it was read from and the data release
@@ -165,7 +159,6 @@
   --off: rgba(255, 255, 255, 0.03);
 
   --shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --edge-shadow: rgba(0, 0, 0, 0.2);
 }
 
 /*
@@ -176,10 +169,7 @@
   - 1400 / 1150 / 800px: the columns leave, Repository, then Last updated,
     then Owner (base.css, the .drop-* rules); the expanded rows' label ladder
     in table.css follows the same 1150 and 800.
-  - 1840 / 1590 / 1240px: the same three with the drawer open — each is the
-    window width plus --drawer-w (drawer.css).
-  - 900px: the drawer becomes a sheet over the bottom of the page (drawer.css,
-    map.css, and SHEET_MAX_WIDTH in drawer.js).
+  - 900px: the map trades its lane titles and minimap for pills (map.css).
   - 1500px and up: the environment columns get room (table.css).
 */
 

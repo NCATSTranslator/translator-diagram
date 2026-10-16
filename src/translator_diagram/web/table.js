@@ -353,7 +353,7 @@
      width — SmartAPI, Owner and the rest drop out at the breakpoints — so
      the label is written into every non-environment cell, each carrying its
      column's drop class, and CSS shows the rightmost one still on screen
-     (the ladder in table.css and drawer.css). A colspan cannot do this: a
+     (the ladder in table.css). A colspan cannot do this: a
      hidden cell generates no box, so a colspan row keeps claiming the
      columns that have gone and shifts every value one column right. It was
      once put in the first column instead, and read as detached from the
@@ -634,14 +634,14 @@
 
     /* A click anywhere on a row toggles it, so a reader looking at the
        environment columns need not travel back to the chevron. Links and
-       buttons in the row keep their own job (the name opens the drawer), a
+       buttons in the row keep their own job (the name opens the component's page), a
        drag that selected text to copy is not a click, and the detail rows
        never collapse their row: they hold the values people copy. The chevron
        stays the keyboard and screen-reader control; the <tr> is not made a
        button, because it contains links and buttons. */
     body.addEventListener("click", (event) => {
       const name = event.target.closest("button[data-open]");
-      if (name) { TD.component.open(name.dataset.open); return; }
+      if (name) { TD.navigate({ view: "component", sel: name.dataset.open }); return; }
       const tr = event.target.closest("tr.row");
       if (!tr) return;
       if (event.target.closest("button[data-expand]")) { toggleExpansion(tr); return; }
@@ -679,26 +679,18 @@
   table.envCell = envCell;
   table.bodyHtml = bodyHtml;
   table.detailRowsHtml = detailRowsHtml;
+  // The Component view's environment matrix shows the same tooltips.
+  table.tipHtml = tipHtml;
   table.scrollTo = function scrollTo(id) {
     if (!body) return;
     const tr = findRow(body, id);
     if (tr) tr.scrollIntoView({ block: "center", behavior: TD.motion.enabled ? "smooth" : "auto" });
   };
 
-  /* The selected row's highlight, moved by hand: the drawer's commits are
-     silent (a full re-render for a tab change is a lot of work for nothing),
-     and the table paints `.sel` from TD.state only at render time. */
-  table.markSelected = function markSelected(id) {
-    if (!body) return;
-    for (const row of body.querySelectorAll("tr.row")) {
-      row.classList.toggle("sel", row.dataset.id === id);
-    }
-  };
-
   /* Scroll the table's own scrollport so the row sits just under the sticky
      header. Not scrollTo: scrollIntoView scrolls *every* ancestor scroller,
-     the document included, and with the drawer open as a sheet that slid the
-     whole page down and put the table behind the sheet. */
+     the document included, which once slid the whole page down under a
+     bottom sheet. */
   table.revealRow = function revealRow(id) {
     if (!body || !wrap) return;
     const tr = findRow(body, id);
