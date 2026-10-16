@@ -354,6 +354,10 @@ def build_payload(
         # Absent when nothing was withheld, so the page says nothing rather
         # than announcing an empty redaction on a full build.
         **({"redacted": report.for_payload()} if report else {}),
+        # Said outright rather than left to the absence of "redacted", which an
+        # empty policy also produces. The page shows a banner on it, because a
+        # full build otherwise looks exactly like the published one.
+        "full_build": policy is None,
         # All three read the kept rows, and are therefore withheld-free by
         # construction rather than by a second filter that could fall behind.
         "stages": stage_blocks(stages, rows),

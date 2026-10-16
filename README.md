@@ -233,7 +233,8 @@ open data/dashboard/index.html
 # Map export and other features some browsers block from file://:
 cd data/dashboard && python3 -m http.server 8765
 
-# Everything, including what a published build withholds. Local use only.
+# Everything, including what a published build withholds. Local use only;
+# written to data/dashboard-private/ so it cannot replace the public build.
 uv run build-dashboard --include-private
 ```
 
@@ -289,7 +290,9 @@ gh run download "$id" --name dashboard --dir data/pages-preview
 `build-dashboard` withholds what [`config/privacy.yaml`](config/privacy.yaml)
 names — today the tracing console, the internal test rig, and the container
 image tags that would turn the version grid into a CVE-matching inventory.
-`--include-private` builds the full picture for local use. Helm chart
+`--include-private` builds the full picture for local use, into
+`data/dashboard-private/` rather than over the publishable build, and the page
+it makes says it is a full build at the top and in its tab title. Helm chart
 `appVersion` and other chart metadata stay in the published build; only image
 tags are redacted.
 
@@ -305,6 +308,9 @@ public services and this repository is public, so the policy hides nothing from
 someone who looks — it keeps a few things off an indexed page. See
 [issue #7](https://github.com/NCATSTranslator/translator-diagram/issues/7) for
 the public/private split this anticipates.
+
+[`docs/security.md`](docs/security.md) collects what the page publishes, what it
+withholds, and the security questions still open.
 
 Release lists and repository metadata come from the GitHub API, which allows
 60 calls an hour to an unauthenticated address. A full sync spends about 46,

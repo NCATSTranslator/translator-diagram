@@ -371,6 +371,12 @@ class TestInThePayload:
         assert "redacted" not in build_payload(components, synced)
         assert "redacted" not in build_payload(components, synced, Policy())
 
+    def test_only_a_build_with_no_policy_calls_itself_full(self, components, synced):
+        """Not read off the missing "redacted" block: an empty policy leaves
+        that out too, and its build is the publishable one."""
+        assert build_payload(components, synced)["full_build"] is True
+        assert build_payload(components, synced, Policy())["full_build"] is False
+
     def test_no_edge_touches_a_withheld_component(self, synced):
         """The reason `build_edges` runs after the policy rather than before.
 

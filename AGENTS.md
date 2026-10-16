@@ -29,6 +29,7 @@ when it is relevant rather than every time:
 | [`docs/component-metadata.md`](docs/component-metadata.md) | Why that file format looks the way it does |
 | [`docs/metadata-sources.md`](docs/metadata-sources.md) | What each upstream source actually offers, surveyed |
 | [`catalog/owner-colors.md`](catalog/owner-colors.md) | The four constraints on a new team colour |
+| [`docs/security.md`](docs/security.md) | What the published page must not leak, what the build must not become, and the checklist for a change that adds a field, source or fetch |
 | [`FUTURE.md`](FUTURE.md) | Ideas with their costs worked out |
 
 **Read first:** [CONTRIBUTING.md](CONTRIBUTING.md), which is how to work in

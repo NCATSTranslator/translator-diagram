@@ -32,7 +32,7 @@ The commands, as you will run them while working:
 ```bash
 uv run sync-components                               # -> data/sync/
 uv run build-dashboard                               # -> data/dashboard/
-uv run build-dashboard --include-private             # ignore config/privacy.yaml
+uv run build-dashboard --include-private             # -> data/dashboard-private/, no policy
 
 uv run generate-diagram --input data/components.csv  # from a local CSV
 uv run generate-diagram --google-sheet               # the real sheet
@@ -86,6 +86,12 @@ matters inside one directory.
   `sync` itself cannot be compared across two live runs, because upstream
   answers change in between, so replay a recorded one with
   `tools/replay_sync.py` — its docstring has the recipe.
+- **When a change adds a field, a source, a fetch, a rendering path or a
+  workflow step, run the checklist** at the end of
+  [docs/security.md](docs/security.md#checklist-for-a-change). The page is
+  public and much of what it shows is written by people outside this
+  repository, so each of those is a question about what it publishes, whom it
+  loads, or what it trusts.
 
 ## Conventions
 

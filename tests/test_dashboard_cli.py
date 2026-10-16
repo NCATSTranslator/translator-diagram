@@ -143,6 +143,38 @@ class TestTheOutputIsOnlyThePage:
         assert (workspace / "out" / "notes" / "AGENTS.md").exists()
 
 
+class TestAFullBuildHasItsOwnDirectory:
+    """So it cannot overwrite the publishable build and be shared from there."""
+
+    def _outputs(self, workspace, *args):
+        with CliRunner().isolated_filesystem(temp_dir=workspace) as cwd:
+            result = CliRunner().invoke(build_main, [
+                "--components", str(workspace / "catalog" / "components"),
+                "--sync-dir", str(workspace / "sync"),
+                *args,
+            ])
+            assert result.exit_code == 0, result.output
+            return sorted(
+                str(path.relative_to(cwd)) for path in Path(cwd).rglob("overview.json")
+            )
+
+    def test_a_plain_build_writes_the_public_directory(self, workspace):
+        assert self._outputs(workspace) == ["data/dashboard/overview.json"]
+
+    def test_a_full_build_writes_somewhere_else(self, workspace):
+        assert self._outputs(workspace, "--include-private") == [
+            "data/dashboard-private/overview.json"
+        ]
+
+    def test_an_explicit_directory_wins_over_either_default(self, workspace):
+        """The private default is a default: someone who names a directory
+        gets that directory, with or without the flag."""
+        for args in ([], ["--include-private"]):
+            assert self._outputs(workspace, "--output-dir", "chosen", *args) == [
+                "chosen/overview.json"
+            ], args
+
+
 class TestAMissingPolicyStopsTheBuild:
     def test_no_policy_and_no_flag_is_an_error(self, workspace):
         """Not an empty policy. "Cannot find the file" must never be the path
