@@ -381,6 +381,36 @@
       class="band-count">${esc(count)}</span>${description}</span></td></tr>`;
   }
 
+  /* --- The data releases summary --------------------------------------------- */
+
+  /* Every release seen on each data axis and where it is, as one line that
+     opens into a table: the line says "Babel: 2026jul22 (dev), 2025sep1
+     (ci, test, prod)" and the table, in babel-validation's shape, has a row
+     per release and a column per environment with the number of components
+     on it there (hover for which), and a Show link that searches for it.
+     Takes the model from TD.summary.axes and the environments, so a test
+     can drive it without a document. */
+  function axesHtml(strip, envs) {
+    if (!strip.length) return "";
+    const line = strip.map((a) => `<b>${esc(a.label)}</b>: ${a.versions.map((v) =>
+      `${esc(v.version)} (${v.envs.map((e) => esc(e.env)).join(", ")})`).join(", ")}`).join(" · ");
+    const head = `<tr><th>Release</th>${envs.map((env) => `<th>${esc(env)}</th>`).join("")}<th></th></tr>`;
+    const rows = strip.map((a) =>
+      `<tr class="axband"><th colspan="${envs.length + 2}">${esc(a.label)}</th></tr>` + a.versions.map((v) => {
+        const cells = envs.map((env) => {
+          const here = v.envs.find((e) => e.env === env);
+          return here
+            ? `<td class="n" title="${esc(here.ids.join(", "))}">${here.ids.length}</td>`
+            : `<td>${DASH()}</td>`;
+        }).join("");
+        return `<tr><th scope="row"><span class="v data"><span class="ax">${esc(a.label)}</span> ${
+          esc(v.version)}</span></th>${cells}<td class="show"><a href="?q=${
+          encodeURIComponent(v.version)}" data-q="${esc(v.version)}">Show</a></td></tr>`;
+      }).join("")).join("");
+    return `<details class="axes"><summary><span class="axsum">${line}</span></summary>
+      <table class="axt"><thead>${head}</thead><tbody>${rows}</tbody></table></details>`;
+  }
+
   /* --- Row expansion --------------------------------------------------------- */
 
   /* The expansion is not a panel under the row: it is more rows of the same
@@ -747,6 +777,7 @@
   table.cellState = cellState;
   table.envCell = envCell;
   table.bodyHtml = bodyHtml;
+  table.axesHtml = axesHtml;
   table.detailRowsHtml = detailRowsHtml;
   // The Component view's environment matrix shows the same tooltips.
   table.tipHtml = tipHtml;

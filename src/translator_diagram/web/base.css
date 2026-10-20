@@ -240,33 +240,55 @@ code {
 }
 .order #unsort:hover { color: var(--text); }
 
-/* --- The data releases strip ---------------------------------------------- */
+/* --- The data releases summary -------------------------------------------- */
 
-/* One line per data axis, under the filters: each release as the same pill
-   the cells draw, then the environments it is in. The Overview's, like the
-   filters: the map and the Component view have their own ways of saying
-   where a thing is. */
+/* A native <details> under the filters: one line, never more, that opens
+   into a table with a row per release and a column per environment. The
+   Overview's, like the filters: the map and the Component view have their
+   own ways of saying where a thing is. */
 .axes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1) var(--sp-5);
-  padding: var(--sp-2) 0;
+  padding: var(--sp-1) 0;
   border-bottom: 1px solid var(--hairline);
   font-size: var(--fs-meta);
   color: var(--muted);
 }
 html:not([data-view="overview"]) .axes { display: none; }
-.axis { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); }
-.axname {
+.axes > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  list-style: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.axes > summary::-webkit-details-marker { display: none; }
+.axes > summary::before { content: "▸"; flex: none; font-size: var(--fs-micro); }
+.axes[open] > summary::before { content: "▾"; }
+.axsum { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.axsum b { font-weight: 600; color: var(--text); }
+table.axt {
+  margin: var(--sp-2) 0 var(--sp-1);
+  border-collapse: collapse;
+  font-size: var(--fs-meta);
+}
+table.axt th, table.axt td { padding: 2px 12px 2px 0; text-align: center; font-weight: 400; }
+table.axt th:first-child, table.axt td:first-child { text-align: left; }
+table.axt thead th {
   font-size: var(--fs-micro);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
-  min-width: 3.5em;
+  border-bottom: 1px solid var(--hairline-strong);
 }
-.axver { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.axenvs { display: inline-flex; gap: 6px; font-family: var(--mono); }
-.axenv { cursor: help; }
-.axenv i { font-style: normal; opacity: 0.7; margin-left: 1px; }
+table.axt tr.axband th {
+  padding-top: var(--sp-2);
+  text-align: left;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+}
+table.axt td.n { font-variant-numeric: tabular-nums; color: var(--text); cursor: help; }
+table.axt td.show a { font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: var(--tracking-label); }
 
 /* --- Views ---------------------------------------------------------------- */
 

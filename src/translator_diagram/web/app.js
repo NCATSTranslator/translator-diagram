@@ -152,27 +152,16 @@
       </div></details>`;
   }
 
-  /* --- The data releases strip ---------------------------------------------- */
+  /* --- The data releases summary -------------------------------------------- */
 
-  /* One line per data axis: each release seen, and the environments it is
-     in with how many components are on it there (hover for which). A
-     release moving dev → ci → test → prod is read off this line; the table
-     below is where to find the cell. Each version is a search: the search
-     box already matches data releases, so one click lists the rows on it.
-     Drawn once, from the whole payload: it describes the platform, not
-     the filter. */
-  function axesStripHtml() {
-    const strip = TD.summary.axes(DATA);
-    if (!strip.length) return "";
-    const env = (e) => `<span class="axenv" title="${esc(e.ids.join(", "))}">${esc(e.env)}${
-      e.ids.length > 1 ? `<i>${e.ids.length}</i>` : ""}</span>`;
-    const version = (v) => `<span class="axver"><a class="v data" href="?q=${
-      encodeURIComponent(v.version)}" data-q="${esc(v.version)}">${esc(v.version)}</a><span
-      class="axenvs">${v.envs.map(env).join("")}</span></span>`;
-    return `<div class="axes" aria-label="Data releases, and where each is running">${
-      strip.map((a) => `<div class="axis"><span class="axname">${esc(a.label)}</span>${
-        a.versions.map(version).join("")}</div>`).join("")}</div>`;
-  }
+  /* One line under the filters saying which releases are on each data axis
+     and where, opening into a table with a row per release and a column
+     per environment (TD.table.axesHtml). A release moving dev → ci → test →
+     prod is read off it; the table below is where to find the cell. Each
+     release is a search: the search box already matches data releases, so
+     one click lists the rows on it. Drawn once, from the whole payload: it
+     describes the platform, not the filter. */
+  const axesHtml = () => TD.table.axesHtml(TD.summary.axes(DATA), TD.ENVS);
 
   /* --- Shell ------------------------------------------------------------------ */
 
@@ -208,7 +197,7 @@
             <span class="count" id="count" aria-live="polite"></span>
           </span>
         </div>
-        ${axesStripHtml()}
+        ${axesHtml()}
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
         <div class="view" id="view-component"></div>
