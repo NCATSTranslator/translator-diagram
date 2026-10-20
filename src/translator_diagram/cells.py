@@ -23,7 +23,7 @@ from .components import (
 )
 from .deployments import deployments_from_smartapi
 from .files import PROBE_KINDS, endpoint_key
-from .payload_details import mapping, number, same_version, strings
+from .payload_details import mapping, number, same_version, strings, translator_info
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
@@ -279,7 +279,7 @@ def _openapi_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     if not document:
         return {}
     info = _blocks(document, "info")
-    translator = _blocks(info, "x-translator")
+    translator = translator_info(document)
     trapi = _blocks(info, "x-trapi")
     return {
         "version": info.get("version"),

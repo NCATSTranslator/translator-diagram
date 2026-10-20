@@ -955,3 +955,17 @@ class TestReleaseResolution:
     def test_no_refs_cached_means_no_claim(self, tmp_path):
         cell = self._ci(tmp_path, {"version": "1", "biolink_model": {"tag": "master"}}, refs=False)
         assert "findings" not in cell
+
+
+class TestUnderscoreBiolink:
+    def test_a_registration_spelling_biolink_version_with_an_underscore_reaches_the_cell(self, tmp_path):
+        # Retriever's record. Reading only the hyphen left its cell with no
+        # Biolink and its drift unmarked while the SmartAPI panel showed one
+        # (issue #79).
+        synced = _Probes(tmp_path).registry([{
+            "_id": "abc", "info": {"version": "1.0", "x-translator": {"biolink_version": "4.3.2"}},
+            "servers": [{"url": "https://svc/", "x-maturity": "production"}],
+        }]).build()
+        component = _comp("svc", identifiers={"smartapi": "abc"})
+        cell = build_rows([component], synced)[0]["environments"]["prod"]
+        assert (cell["biolink"], cell["biolink_source"]) == ("4.3.2", "smartapi")

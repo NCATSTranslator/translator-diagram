@@ -51,8 +51,13 @@ def reported_biolink(document: Any) -> list[str]:
         found.append(model["tag"])
     info = document.get("info")
     translator = info.get("x-translator") if isinstance(info, dict) else None
-    if isinstance(translator, dict) and isinstance(translator.get("biolink-version"), str):
-        found.append(translator["biolink-version"])
+    if isinstance(translator, dict):
+        # Both spellings, as `payload_details.translator_info` reads them:
+        # Retriever registers the underscore. This module cannot import that
+        # one, and tests/test_payload_details.py keeps the two in step.
+        value = translator.get("biolink-version") or translator.get("biolink_version")
+        if isinstance(value, str):
+            found.append(value)
     return found
 
 # Where an endpoint lives when the component file does not say. Only applied
