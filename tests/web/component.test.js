@@ -177,7 +177,7 @@ test("the page renders every section of a full row", (t) => {
   assert.match(html, /<h3 class="cv-fsev severe">severe<\/h3><ul class="cv-findings"><li>[^]*?<span\s+class="cv-fenv">ci<\/span><span>answers HTTP 500<\/span><\/li><\/ul><h3 class="cv-fsev warning">warning<\/h3>[^]*?<span\s+class="cv-fenv">component<\/span><span>hosted at ITRB with no chart<\/span>/);
   // The environment matrix carries the data pill and the glyph like the table.
   assert.match(html, /<span class="ax">Babel<\/span> 2025sep1/);
-  assert.match(html, /class="fg severe" data-tip="findings" data-id="arax" data-env="ci" data-about="reach"/);
+  assert.match(html, /class="dot down" data-tip="findings" data-id="arax" data-env="ci" data-about="reach" data-sev="all"/);
   assert.match(html, /<th scope="col">ci<\/th><th scope="col">prod<\/th>/);
   for (const url of ["https://arax.ci.transltr.io/openapi.json", "https://arax.ci.transltr.io/status",
     "https://smart-api.info/ui/abc", "catalog/components/arax.yaml"]) {

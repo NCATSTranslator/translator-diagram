@@ -102,11 +102,14 @@ test("a live cell links its version to the document it was read from", () => {
   // that names it, else to the document its source was read from.
   assert.deepEqual(m.data, [
     { axis: "babel", label: "Babel", version: "2025sep1", source: "status",
-      href: "https://example.org/babel/2025sep1", drift: false },
+      href: "https://example.org/babel/2025sep1", drift: false, status: "" },
+    // A moderate finding about the Biolink pill: its border goes amber.
     { axis: "biolink", label: "Biolink", version: "v4.4.3", source: "status",
-      href: "https://svc.ci.transltr.io/status", drift: false },
+      href: "https://svc.ci.transltr.io/status", drift: false, status: "warn" },
   ]);
   assert.deepEqual(m.findings.map((f) => f.key), ["biolink-mismatch"]);
+  assert.equal(m.versionStatus, "");
+  assert.deepEqual(m.host, { state: "up", findings: [] });
   assert.deepEqual(m.facts.map((f) => f.label), [
     "TRAPI", "Babel", "Biolink", "Host", "API document", "Root URL", "Paths",
     "Operations", "Async query", "Recent queries", "Telemetry",
@@ -128,6 +131,32 @@ test("the axes come from the payload, and an absent one is not drawn", () => {
   const m = cell({ environments: { ci: { deployed: true, babel: "x", drift: ["babel"] } } }, "ci");
   assert.deepEqual(m.data.map((d) => [d.axis, d.drift]), [["babel", true]]);
   assert.equal(m.facts.find((f) => f.label === "Babel").value, "x");
+});
+
+test("a pill's status is its own findings and drift; the host's state is the dot", () => {
+  boot({});
+  const severe = { key: "x", severity: "severe", about: "reach", text: "500" };
+  const warn = { key: "y", severity: "warning", about: "reach", text: "unconfirmed" };
+  const row = (extra) => ({ environments: { ci: { deployed: true, version: "1", ...extra } } });
+  // Drift alone is a warning border; a severe finding is a red one.
+  assert.equal(cell(row({ drift: ["version"] }), "ci").versionStatus, "warn");
+  assert.equal(cell(row({ drift: ["trapi"] }), "ci").versionStatus, "warn");
+  assert.equal(cell(row({ findings: [{ ...severe, about: "version" }] }), "ci").versionStatus, "bad");
+  assert.equal(TD.findings.status([warn], "version", false), "");
+  // The dot: down beats everything; a severe host finding is red even when
+  // the host answered; a lesser one is amber; nothing probed is no dot —
+  // unless a host finding exists, which is the rejected-address case.
+  assert.equal(cell(row({ reachable: false, findings: [warn] }), "ci").host.state, "down");
+  assert.equal(cell(row({ reachable: true, findings: [severe] }), "ci").host.state, "down");
+  assert.equal(cell(row({ reachable: true, findings: [warn] }), "ci").host.state, "warn");
+  assert.equal(cell(row({ reachable: true }), "ci").host.state, "up");
+  assert.equal(cell(row({}), "ci").host.state, "");
+  const rejected = cell({ environments: { prod: { deployed: false, findings: [warn] } } }, "prod");
+  assert.equal(rejected.host.state, "warn");
+  assert.deepEqual(rejected.host.findings, [warn]);
+  // A hash reported as a version is cut to eight characters for a pill.
+  assert.equal(TD.fmt.shortRef("0123abcdef0123abcdef"), "0123abcd");
+  assert.equal(TD.fmt.shortRef("v4.4.3"), "v4.4.3");
 });
 
 test("findings are drawn as one glyph per severity at an anchor, and listed worst first", () => {

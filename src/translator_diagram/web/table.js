@@ -119,11 +119,21 @@
       : cls ? `<span class="${cls}">${html}</span>` : html;
   };
 
-  /* The dot, with its word for a reader who is not looking at it. */
-  function reachDot(reach) {
-    if (!reach) return "";
-    return `<span class="dot ${reach}" aria-label="${
-      reach === "up" ? "reachable" : "not reachable"}"></span>`;
+  const REACH_WORDS = { up: "reachable", down: "not reachable", "": "not checked" };
+
+  /* The online light, with its word for a reader who is not looking at it.
+     With findings about the host it is a button: hover lists them, a click
+     opens the component's page. Its colour is the host's state (core.js
+     hostState), so a finding about what the host serves shows here and not
+     as a glyph beside the dot, which read as belonging to the version. */
+  function hostDot(row, env, m) {
+    const { state, findings } = m.host;
+    if (!findings.length) {
+      return state ? `<span class="dot ${state}" aria-label="${REACH_WORDS[m.reach]}"></span>` : "";
+    }
+    return `<button type="button" class="dot ${state}" data-tip="findings" data-id="${esc(row.id)}" data-env="${
+      esc(env)}" data-about="reach" data-sev="all" aria-label="${esc(REACH_WORDS[m.reach])}; ${
+      esc(TD.fmt.plural(findings.length, "finding"))}"></button>`;
   }
 
   /* Which of the board's states a cell is in. The tint carries this on
@@ -153,8 +163,8 @@
   function dataLine(row, env, m) {
     if (!m.data.length) return "";
     const pills = m.data.map((d) => {
-      const pill = link(d.href, `<span class="ax">${esc(d.label)}</span> ${esc(d.version)}`,
-        `v data${d.drift ? " drift" : ""}`);
+      const pill = link(d.href, `<span class="ax">${esc(d.label)}</span> ${esc(TD.fmt.shortRef(d.version))}`,
+        `v data${d.status ? ` ${d.status}` : ""}`);
       return `<span class="dpill">${pill}${d.drift ? neqHtml(d.label) : ""}${
         TD.findings.marks(m.findings, { id: row.id, env, about: d.axis })}</span>`;
     }).join("");
@@ -169,9 +179,12 @@
      green dot stays in front of it when the host itself answered.
 
      Finding glyphs sit beside the piece of information they are about —
-     the dot for the host, the version pill for the deployment, each data
-     pill for its release — so a reader scanning the column for a ✕ lands
-     on the thing that is wrong rather than on the cell. */
+     the version pill for the deployment, each data pill for its release —
+     and the host's are the dot itself, so a reader scanning the column for
+     a ✕ lands on the thing that is wrong rather than on the cell. Each
+     pill's border says how that one fact stands (its status), and the cell's
+     tint says how the cell does; a down cell no longer reddens a version it
+     read from the registry. */
   function envCell(row, env) {
     if (!cells(row)[env]) return `<td class="env absent">${DASH()}</td>`;
     const m = TD.cell(row, env);
@@ -183,12 +196,12 @@
     // positioning inside a table cell does not stay inside the scrollport.
     const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
     const tip = `data-tip="env" data-id="${esc(row.id)}" data-env="${esc(env)}"`;
-    const dot = reachDot(m.reach);
+    const dot = hostDot(row, env, m);
     const fg = (about) => TD.findings.marks(m.findings, { id: row.id, env, about });
 
     if (!m.version) {
       const why = m.reason ? `<span class="why">${esc(m.reason)}</span>` : DASH();
-      return `<td class="${classes}"${driftLabel} ${tip}>${dot}${fg("reach")}${why}${dataLine(row, env, m)}</td>`;
+      return `<td class="${classes}"${driftLabel} ${tip}>${dot}${why}${dataLine(row, env, m)}</td>`;
     }
 
     // The version links to the document it was read from, so a reader who
@@ -201,12 +214,13 @@
     // on anything with no pill of its own (TRAPI); each data pill carries
     // its own.
     const own = m.drift.filter((key) => !m.data.some((d) => d.axis === key));
-    const pill = link(m.href, esc(m.version), `v${m.live ? "" : " copied"}${own.length ? " drift" : ""}`);
+    const pill = link(m.href, esc(TD.fmt.shortRef(m.version)),
+      `v${m.live ? "" : " copied"}${m.versionStatus ? ` ${m.versionStatus}` : ""}`);
     const second = m.source
       ? `<span class="src" data-src="${esc(m.source)}" data-tip="src">${esc(m.sourceShort)}</span>`
       : "";
     return `<td class="${classes}"${driftLabel} ${tip}><span class="envline">${
-      dot}${fg("reach")}${pill}${own.length ? neqHtml(own.join(", ")) : ""}${fg("version")}</span>${
+      dot}${pill}${own.length ? neqHtml(own.join(", ")) : ""}${fg("version")}</span>${
       second ? `<span class="l2">${second}</span>` : ""}${dataLine(row, env, m)}</td>`;
   }
 
@@ -582,11 +596,23 @@
       const row = rowById(target.dataset.id);
       if (!row) return "";
       const env = target.dataset.env || "";
-      const source = env ? TD.cell(row, env).findings : (row.findings || []);
-      const found = TD.findings.at(source, target.dataset.about, target.dataset.sev);
+      const m = env ? TD.cell(row, env) : null;
+      const source = m ? m.findings : (row.findings || []);
+      // The dot lists everything about the host, worst first, under what
+      // the host answered; a glyph lists one severity at its anchor.
+      const all = target.dataset.sev === "all";
+      const found = all
+        ? TD.findings.SEVERITIES.flatMap((s) => TD.findings.at(source, target.dataset.about, s))
+        : TD.findings.at(source, target.dataset.about, target.dataset.sev);
       if (!found.length) return "";
-      return `<div class="title">${esc(target.dataset.sev)} · ${esc(row.id)}${env ? ` · ${esc(env)}` : ""}</div><ul class="fl">${
-        found.map((f) => `<li>${esc(f.text)}</li>`).join("")}</ul><div class="note">Click for every finding on this component's page.</div>`;
+      const title = all
+        ? `host · ${esc(row.id)} · ${esc(env)}`
+        : `${esc(target.dataset.sev)} · ${esc(row.id)}${env ? ` · ${esc(env)}` : ""}`;
+      const items = found.map((f) => `<li>${all
+        ? `<span class="fg ${f.severity}" aria-hidden="true">${TD.findings.SEVERITY[f.severity].glyph}</span> ` : ""}${
+        esc(f.text)}</li>`).join("");
+      return `<div class="title">${title}</div>${all && m ? `<div>${esc(REACH_WORDS[m.reach])}</div>` : ""}<ul class="fl">${
+        items}</ul><div class="note">Click for every finding on this component's page.</div>`;
     }
     if (kind === "env") {
       const row = rowById(target.dataset.id);

@@ -271,7 +271,12 @@ wherever the axis is reported) that fills the cell's `<axis>`,
 every axis in the list, the page draws a pill per axis the cell carries
 from the payload's `data_axes`, and `privacy` clears a withheld axis by the
 `_source` suffix. `graph` is in the list today with no reader, which is what
-"make room, read nothing yet" looks like. The one thing the page keeps per
+"make room, read nothing yet" looks like. To have a reported value *checked*
+against the repository it is released from, as Biolink's is, add the
+repository to `components.DATA_AXIS_REPOS` and a reader of its fields beside
+`components.reported_biolink`: `sync` then fetches that repository's tags and
+branches, and `cells.resolve_release` says whether a value is a tag, a
+branch, a commit or nothing. The one thing the page keeps per
 axis is a sentence for the (?) beside its fact, `AXIS_ABOUT` in `core.js`.
 
 **Add a finding** (an inconsistency between two sources, a host nothing can
@@ -384,6 +389,16 @@ rendering, and says something that is not true.
   schema, so the version is the first `*_version` key — with `babel_version`,
   `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a
   body that lists Biolink first would have that badged as its software.
+- **A branch as a version.** NameRes reports its Biolink Model as
+  `master`, which names a line of development and not a release. A reported
+  value is resolved against biolink-model's tags and branches (fetched by
+  `sync`), and a commit hash against their commits or a lookup: a tag is a
+  release; a branch is the moderate finding `release-is-branch`; a value
+  that is none of these is the severe `release-unresolved`. A tag beats a
+  branch of the same name — biolink-model has both a tag `v4.4.3` and a
+  branch `4.4.3` — and the `v` prefix is ignored. With no refs cached (an
+  older cache, a throttled run) the build says nothing rather than calling
+  every value unresolved.
 - **One Biolink where there are two.** The tag a deployment has *loaded*
   (`biolink_model.tag` in /status) and the version its API *declares*
   (`x-translator.biolink-version`) are two claims. The cell's `biolink` is

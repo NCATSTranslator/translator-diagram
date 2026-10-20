@@ -321,8 +321,22 @@ tbody tr.row.sel td { background-image: linear-gradient(var(--accent-soft), var(
   border-radius: var(--r-coin);
   background: var(--muted);
 }
-.dot.up { background: var(--ok); }
-.dot.down { background: var(--bad); }
+/* background-color, not the shorthand: the shorthand would reset the
+   background-clip the button form below relies on. */
+.dot.up { background-color: var(--ok); }
+.dot.warn { background-color: var(--diff-ink); }
+.dot.down { background-color: var(--bad); }
+/* With findings about the host the dot is a button: the same 7px light, on
+   a hit area a finger can find. */
+button.dot {
+  box-sizing: content-box;
+  padding: 5px;
+  margin: -5px;
+  border: 0;
+  background-clip: content-box;
+  cursor: pointer;
+}
+button.dot:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 50%; }
 
 /* The version is a pill, and a link to the document it was read from. A
    dashed pill is a copy — the registry's or the chart's word, not the
@@ -343,10 +357,11 @@ tbody tr.row.sel td { background-image: linear-gradient(var(--accent-soft), var(
 }
 a.v:hover { text-decoration: none; border-color: var(--accent); color: var(--accent); }
 .v.copied { border-style: dashed; color: var(--muted); font-weight: 500; }
-/* Only the pill that disagrees takes the ink: a cell tinted because its Babel
-   release differs leaves the software version looking as it does elsewhere. */
-td.env.diff .v.drift { border-color: var(--diff-ink); color: var(--diff-ink); }
-td.env.down .v { border-color: var(--down-ink); color: var(--down-ink); }
+/* A pill's border says how that one fact stands — a finding about it, or
+   drift on it — and nothing else does: the cell's tint is about the cell, so
+   a version read from the registry is not reddened by a host that is down. */
+.v.warn { border-color: var(--diff-ink); color: var(--diff-ink); }
+.v.bad { border-color: var(--bad); color: var(--bad); }
 .neq { color: var(--diff-ink); font-weight: 700; }
 
 /* The second line of a version cell: where it was read from. */
@@ -366,9 +381,10 @@ td.env .l2 .sep { opacity: 0.6; }
    Translator Graph once anything reports it — as pills of the version's own
    weight, under it. A release moves dev → ci → test → prod on its own
    schedule, and a discrepancy on this line is as telling as one on the
-   version's, so it gets the same ink: filled in the accent so the two kinds
-   of version cannot be read as one, with the axis's name inside the pill at
-   a lighter weight than the number. */
+   version's, so it gets the same ink: white like the version pill, so the
+   border can carry its status, with the axis's name inside the pill at a
+   lighter weight than the number and the accent on the text so the two
+   kinds of version cannot be read as one. */
 .dataline {
   display: flex;
   flex-wrap: wrap;
@@ -378,8 +394,6 @@ td.env .l2 .sep { opacity: 0.6; }
 }
 .dpill { display: inline-flex; align-items: center; gap: 4px; }
 .v.data {
-  border-color: transparent;
-  background: var(--accent-soft);
   color: var(--accent);
   white-space: nowrap;
 }
@@ -391,8 +405,8 @@ td.env .l2 .sep { opacity: 0.6; }
   .v.data { white-space: normal; border-radius: var(--r-control); line-height: 18px; padding: 1px 6px; }
 }
 .v.data .ax { font-weight: 500; opacity: 0.8; }
-a.v.data:hover { border-color: var(--accent); }
-td.env.diff .v.data.drift { background: var(--page); }
+.v.data.warn { color: var(--diff-ink); }
+.v.data.bad { color: var(--bad); }
 
 /* A finding's glyph: a button, because it opens the component's page at
    the full list, drawn as one of three shapes beside the thing it is about
@@ -415,6 +429,7 @@ td.env.diff .v.data.drift { background: var(--page); }
 .fg.warning { color: var(--muted); }
 .fg:hover, .fg:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 2px; }
 .cnamewrap .fg { margin-left: 2px; }
+.legend .dot { display: inline-block; margin-right: 4px; vertical-align: 1px; }
 
 /* What a cell says when it has no version: why not, in the payload's words. */
 .why {

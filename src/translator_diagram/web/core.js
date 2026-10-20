@@ -146,7 +146,12 @@
       .join("");
   }
 
-  TD.fmt = { esc, relativeAge, since, plural, host, href, prose, sourceLabel, DASH: '<span class="dash">—</span>' };
+  /* A bare commit hash reported as a version, cut to eight characters for a
+     pill; anything else as it is. The full value stays in the facts. */
+  const shortRef = (value) =>
+    (/^[0-9a-f]{7,40}$/i.test(String(value ?? "")) ? String(value).slice(0, 8) : String(value ?? ""));
+
+  TD.fmt = { esc, relativeAge, since, plural, host, href, prose, sourceLabel, shortRef, DASH: '<span class="dash">—</span>' };
 
   /* --- Motion ------------------------------------------------------------ */
 
@@ -298,12 +303,37 @@
       .map(([axis, label]) => {
         const source = cell[`${axis}_source`] || "";
         const doc = VERSION_DOC[source] ? VERSION_DOC[source](row || {}, cell) : "";
+        const drift = (cell.drift || []).includes(axis);
         return {
           axis, label, version: String(cell[axis]), source,
           href: href(cell[`${axis}_url`] || doc),
-          drift: (cell.drift || []).includes(axis),
+          drift,
+          status: findingStatus(cell.findings, axis, drift),
         };
       });
+  }
+
+  /* How one pill stands, from the findings about it and whether it drifts:
+     "bad" for a severe finding, "warn" for any other finding or for drift,
+     "" otherwise. The pill's border takes the colour; the glyph beside it
+     carries the shape and the words. */
+  function findingStatus(findings, about, drifting) {
+    const mine = (findings || []).filter((f) => f && f.about === about);
+    if (mine.some((f) => f.severity === "severe")) return "bad";
+    return mine.length || drifting ? "warn" : "";
+  }
+
+  /* The online light, which is also where the findings about the host live:
+     red when the host is down or something severe is wrong with what it
+     serves, amber when it answers but a finding says look closer, green
+     when it answers and nothing does, grey when nothing was probed. A cell
+     nothing probed can still carry a host finding — the conventional
+     address answered as another service — and then shows the light. */
+  function hostState(reach, findings) {
+    const mine = (findings || []).filter((f) => f && f.about === "reach");
+    if (reach === "down" || mine.some((f) => f.severity === "severe")) return "down";
+    if (mine.length) return "warn";
+    return reach === "up" ? "up" : "";
   }
 
   function cellModel(row, env) {
@@ -349,6 +379,12 @@
     return {
       deployed: !!cell.deployed,
       version: cell.version || "",
+      versionStatus: findingStatus(cell.findings, "version",
+        (cell.drift || []).some((key) => key === "version" || key === "trapi")),
+      host: {
+        state: hostState(reach(cell), cell.findings),
+        findings: (cell.findings || []).filter((f) => f && f.about === "reach"),
+      },
       source,
       sourceLabel: source ? sourceLabel(source) : "",
       sourceWord: SOURCE_WORDS[source] || source,
@@ -418,7 +454,7 @@
     return out;
   }
 
-  TD.findings = { SEVERITY, SEVERITIES, at: findingsAt, marks, all: allFindings };
+  TD.findings = { SEVERITY, SEVERITIES, at: findingsAt, marks, all: allFindings, status: findingStatus };
 
   /* --- Theme ------------------------------------------------------------- */
 
