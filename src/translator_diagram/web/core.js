@@ -280,9 +280,36 @@
     return parts.join(" · ");
   }
 
+  /* The data a deployment runs on, one entry per axis the cell carries, in
+     the payload's order (`data_axes`: Babel, Biolink, Translator Graph).
+     Each is `<axis>`, `<axis>_source`, `<axis>_url` on the cell, so a new
+     axis needs no change here; a sentence for its (?) is all it can want. */
+  const DEFAULT_AXES = { babel: "Babel", biolink: "Biolink", graph: "Translator Graph" };
+  const AXIS_ABOUT = {
+    babel: "The Babel release the deployment has loaded, from its /status page.",
+    biolink: "The Biolink Model version: the tag the deployment's /status page says it loaded, or failing that the version its API document declares (x-translator.biolink-version), or the registration's.",
+    graph: "The Translator Graph release the deployment serves, once anything reports one.",
+  };
+
+  function dataAxes(row, cell) {
+    const axes = (TD.DATA || {}).data_axes || DEFAULT_AXES;
+    return Object.entries(axes)
+      .filter(([axis]) => cell[axis] != null && cell[axis] !== "")
+      .map(([axis, label]) => {
+        const source = cell[`${axis}_source`] || "";
+        const doc = VERSION_DOC[source] ? VERSION_DOC[source](row || {}, cell) : "";
+        return {
+          axis, label, version: String(cell[axis]), source,
+          href: href(cell[`${axis}_url`] || doc),
+          drift: (cell.drift || []).includes(axis),
+        };
+      });
+  }
+
   function cellModel(row, env) {
     const cell = ((row || {}).environments || {})[env] || {};
     const source = cell.version_source || "";
+    const data = dataAxes(row, cell);
     const otel = ((row || {}).otel_presence || [])
       .filter((p) => (p.seen_in || []).includes(env)).map((p) => p.service);
     // Each fact says where it comes from (`about`): the (?) beside its label
@@ -290,10 +317,8 @@
     const facts = [
       { label: "TRAPI", value: cell.trapi, src: cell.trapi_source,
         about: "The TRAPI version the deployment's own API document declares (x-trapi.version), or failing that the SmartAPI registration's copy." },
-      { label: "Biolink", value: cell.biolink,
-        about: "The Biolink Model version the API document declares (x-translator.biolink-version), or failing that the registration's." },
-      { label: "Data release", value: cell.data_release, href: href(cell.status_url),
-        about: "From the deployment's /status page: the Babel release it has loaded, and the Biolink model tag where the page reports one." },
+      ...data.map((d) => ({ label: d.label, value: d.version, src: d.source, href: d.href,
+        about: AXIS_ABOUT[d.axis] || `The ${d.label} release this deployment reports.` })),
       { label: "Released", value: cell.released, href: href(cell.release_url), note: cell.release_tag,
         about: "The GitHub release whose tag matches the version running here, and the day it was published." },
       { label: "Host", value: cell.url ? host(cell.url) : "", href: href(cell.url), mono: true,
@@ -336,12 +361,64 @@
       reasonKey: cell.reason_key || "",
       knownAbsent: KNOWN_ABSENT.includes(cell.reason_key),
       dataRelease: cell.data_release || "",
+      data,
+      findings: Array.isArray(cell.findings) ? cell.findings : [],
       flags: { inferred: !!cell.inferred, unregistered: !!cell.unregistered },
       facts,
     };
   }
 
   TD.cell = cellModel;
+
+  /* --- Findings ---------------------------------------------------------- */
+
+  /* What the build noticed that is neither a version nor the lack of one:
+     two sources disagreeing about a deployment, a host nothing can vouch
+     for, a name no collector has heard. The payload's `findings` lists
+     carry key, severity, `about` (which piece of information the glyph sits
+     beside) and the sentence; this is the one place they are drawn.
+
+     Three shapes, worst first, and not three colours alone: a reader who
+     cannot tell the red from the amber still sees a cross against a
+     triangle. The colours are in table.css. */
+  const SEVERITY = {
+    severe: { glyph: "✕" },
+    moderate: { glyph: "▲" },
+    warning: { glyph: "◆" },
+  };
+  const SEVERITIES = Object.keys(SEVERITY);
+
+  /* The findings at one anchor, at one severity (or all of them). */
+  function findingsAt(findings, about, severity) {
+    return (findings || []).filter((f) =>
+      f && f.about === about && (!severity || f.severity === severity));
+  }
+
+  /* One glyph per severity present at this anchor: a button, because it
+     opens the component's page, carrying what the tooltip needs to say
+     which findings it stands for. `env` is "" for a finding about the row. */
+  function marks(findings, at) {
+    return SEVERITIES.map((severity) => {
+      const n = findingsAt(findings, at.about, severity).length;
+      if (!n) return "";
+      return `<button type="button" class="fg ${severity}" data-tip="findings" data-id="${
+        esc(at.id)}" data-env="${esc(at.env || "")}" data-about="${esc(at.about)}" data-sev="${
+        severity}" aria-label="${esc(plural(n, `${severity} finding`))}">${SEVERITY[severity].glyph}</button>`;
+    }).join("");
+  }
+
+  /* Every finding on a row, the row's own first and then each environment's
+     in column order, each stamped with where it was found. */
+  function allFindings(row, envs) {
+    const names = Array.isArray(envs) && envs.length ? envs : (TD.ENVS || DEFAULT_ENVS);
+    const out = (Array.isArray((row || {}).findings) ? row.findings : []).map((f) => ({ ...f, env: "" }));
+    for (const env of names) {
+      for (const f of cellModel(row, env).findings) out.push({ ...f, env });
+    }
+    return out;
+  }
+
+  TD.findings = { SEVERITY, SEVERITIES, at: findingsAt, marks, all: allFindings };
 
   /* --- Theme ------------------------------------------------------------- */
 
@@ -399,6 +476,8 @@
         share("components running the same version everywhere",
           rows.filter((r) => !envs.some((env) => cellModel(r, env).drift.length)).length,
           rows.length, "differ"),
+        share("components with no findings",
+          rows.filter((r) => !allFindings(r, envs).length).length, rows.length, "findings"),
       ].filter((s) => s.of > 0),
       otel: {
         total: data.otel_service_total ?? 0,
@@ -463,7 +542,7 @@
   /* --- URL state --------------------------------------------------------- */
 
   const VIEWS = ["overview", "map", "component"];
-  const VERSIONS = ["all", "differ", "known", "none", "unreachable", "unregistered", "no-smartapi"];
+  const VERSIONS = ["all", "differ", "known", "none", "unreachable", "unregistered", "no-smartapi", "findings"];
   const BASE_SORTS = ["name", "owner", "repo", "smartapi"];
   const EDGE_KINDS = ["results", "calls", "planned", "externals", "crosscutting", "catalog"];
 

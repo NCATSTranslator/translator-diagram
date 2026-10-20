@@ -150,11 +150,13 @@ const FULL = {
   releases_detail: [{ tag: "v1.6.2", url: "https://github.com/RTXteam/RTX/releases/tag/v1.6.2" }],
   helm_charts: [{ chart: "arax", source_url: "https://github.com/helxplatform/translator-devops" }],
   connections: { calls: ["ars"] },
+  findings: [{ key: "no-chart", severity: "warning", about: "row", text: "hosted at ITRB with no chart" }],
   environments: {
     ci: { deployed: true, version: "1.6.2", version_source: "openapi",
       url: "https://arax.ci.transltr.io", openapi_url: "https://arax.ci.transltr.io/openapi.json",
       status_url: "https://arax.ci.transltr.io/status", trapi: "1.5", reachable: true,
-      trapi_operations: ["lookup"] },
+      trapi_operations: ["lookup"], babel: "2025sep1", babel_source: "status",
+      findings: [{ key: "document-error", severity: "severe", about: "reach", text: "answers HTTP 500" }] },
     prod: { deployed: false, reason: "no such host", reason_key: "no-such-host" },
   },
 };
@@ -167,9 +169,15 @@ test("the page renders every section of a full row", (t) => {
   VIEW_TD.table.ensureColumns();
   const html = pageHtml("arax");
   assert.doesNotMatch(html, /could not be rendered/);
-  for (const id of ["environments", "overview", "smartapi", "releases", "helm", "connections", "recorded"]) {
+  for (const id of ["findings", "environments", "overview", "smartapi", "releases", "helm", "connections", "recorded"]) {
     assert.match(html, new RegExp(`id="cv-${id}"`), `no ${id} section`);
   }
+  // Findings first, worst first, each saying where it was found.
+  assert.ok(html.indexOf('id="cv-findings"') < html.indexOf('id="cv-environments"'));
+  assert.match(html, /<h3 class="cv-fsev severe">severe<\/h3><ul class="cv-findings"><li>[^]*?<span\s+class="cv-fenv">ci<\/span><span>answers HTTP 500<\/span><\/li><\/ul><h3 class="cv-fsev warning">warning<\/h3>[^]*?<span\s+class="cv-fenv">component<\/span><span>hosted at ITRB with no chart<\/span>/);
+  // The environment matrix carries the data pill and the glyph like the table.
+  assert.match(html, /<span class="ax">Babel<\/span> 2025sep1/);
+  assert.match(html, /class="fg severe" data-tip="findings" data-id="arax" data-env="ci" data-about="reach"/);
   assert.match(html, /<th scope="col">ci<\/th><th scope="col">prod<\/th>/);
   for (const url of ["https://arax.ci.transltr.io/openapi.json", "https://arax.ci.transltr.io/status",
     "https://smart-api.info/ui/abc", "catalog/components/arax.yaml"]) {
@@ -185,6 +193,15 @@ test("an unknown or empty selection shows the picker and says why", (t) => {
   assert.match(pageHtml("nope"), /No component has the id nope/);
   assert.match(pageHtml(""), /Choose a component above/);
   assert.match(pageHtml(""), /<option value="" selected disabled>/);
+});
+
+test("a component with nothing to report says so in its Findings section", (t) => {
+  const saved = { DATA: VIEW_TD.DATA, state: VIEW_TD.state };
+  t.after(() => { VIEW_TD.DATA = saved.DATA; VIEW_TD.state = saved.state; });
+  VIEW_TD.boot({ rows: [{ id: "ars", name: "ARS", environments: {} }], environments: ["ci"] });
+  VIEW_TD.state = { ...VIEW_TD.url.defaults(), view: "component", sel: "ars" };
+  VIEW_TD.table.ensureColumns();
+  assert.match(pageHtml("ars"), /id="cv-findings"[^]*?No findings: nothing this build checked disagrees/);
 });
 
 /* --- Recorded (from #51, 811826b) ------------------------------------------ */

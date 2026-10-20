@@ -29,7 +29,10 @@ const ROWS = [
     environments: { ci: cell("1.0"), prod: cell("1.0", { reachable: false }) } },
   { id: "arax", name: "ARAX", owner: "CATRAX", step: 2, step_label: "Step 2", step_title: "ARAs",
     smartapi_record: { id: "def" },
-    environments: { ci: cell("2.1", { drift: ["version"], unregistered: true }), prod: cell("2.0", { trapi: "1.5" }) } },
+    environments: {
+      ci: cell("2.1", { drift: ["version"], unregistered: true,
+        findings: [{ key: "unregistered", severity: "warning", about: "version", text: "deployed, but absent" }] }),
+      prod: cell("2.0", { trapi: "1.5" }) } },
   { id: "ui", name: "UI", owner: "UI", step: 3, step_label: "Step 3", step_title: "Front end",
     environments: { prod: { deployed: true, reachable: true, reason: "no version endpoint to read", reason_key: "no-endpoint" } } },
 ];
@@ -71,6 +74,8 @@ test("the owner filter and the version views narrow the rows", () => {
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
   reset({ versions: "no-smartapi" });
   assert.deepEqual(table.visibleRows().map((row) => row.id), ["ui"]);
+  reset({ versions: "findings" });
+  assert.deepEqual(table.visibleRows().map((row) => row.id), ["arax"]);
 });
 
 test("a header click cycles preferred direction, the other, then home", () => {
@@ -163,4 +168,44 @@ test("an environment cell says why it has no version, and marks drift", () => {
   assert.match(drifting, /≠/);
   assert.match(drifting, /aria-label="disagrees with the row"/);
   assert.doesNotMatch(table.envCell(ROWS[1], "prod"), /drift/);
+});
+
+test("a cell draws the data it runs on as pills, each with its own ≠ and glyphs", () => {
+  reset();
+  const row = { id: "nn", name: "NodeNorm", environments: {
+    ci: cell("1.0", { version_source: "status", status_url: "https://nn.ci/status",
+      babel: "2026jul22", babel_source: "status", babel_url: "https://babel/2026jul22",
+      biolink: "v4.4.3", biolink_source: "status", drift: ["babel"],
+      findings: [{ key: "biolink-mismatch", severity: "moderate", about: "biolink", text: "loads v4.4.3, declares 4.4.2" }] }),
+    prod: cell("1.0", { babel: "2025sep1", babel_source: "status", biolink: "v4.4.3", drift: ["babel"] }),
+  } };
+  const ci = table.envCell(row, "ci");
+  assert.match(ci, /class="env drift diff"/);
+  // The version pill agrees with the row, so it carries no ≠ and no drift ink.
+  assert.match(ci, /<a class="v" href="https:\/\/nn.ci\/status"[^>]*>1\.0<\/a><\/span>/);
+  // Babel differs: its pill is marked; Biolink does not, and carries its glyph.
+  assert.match(ci, /<a class="v data drift" href="https:\/\/babel\/2026jul22"[^>]*><span class="ax">Babel<\/span> 2026jul22<\/a><span class="neq"[^>]*on Babel">≠<\/span>/);
+  assert.match(ci, /<span class="ax">Biolink<\/span> v4\.4\.3<\/a><button type="button" class="fg moderate" data-tip="findings" data-id="nn" data-env="ci" data-about="biolink"/);
+  // The old captions are gone: a finding is a glyph, not a word in the cell.
+  const arax = table.envCell(ROWS[1], "ci");
+  assert.doesNotMatch(arax, /not in SmartAPI|inferred/);
+  assert.match(arax, /class="v copied drift">2\.1<\/span><span class="neq"[^>]*on version">≠<\/span><button type="button" class="fg warning"[^>]*data-about="version"/);
+  // A cell with no version still shows what data it has loaded.
+  const nov = table.envCell({ id: "x", environments: { ci: { deployed: true, reachable: true,
+    reason: "API document has no version", reason_key: "no-version-in-document", babel: "2025sep1" } } }, "ci");
+  assert.match(nov, /class="why">API document has no version<\/span><span class="dataline">/);
+  assert.match(nov, /<span class="ax">Babel<\/span> 2025sep1/);
+});
+
+test("row-level findings sit after the name, and the tooltip lists one anchor's findings", () => {
+  reset();
+  const row = { ...ROWS[0], findings: [
+    { key: "no-chart", severity: "warning", about: "row", text: "no chart" },
+    { key: "otel-missing", severity: "warning", about: "row", text: "ghost unseen" }] };
+  const html = table.bodyHtml([row]);
+  assert.match(html, /data-open="ars">ARS<\/button><button type="button" class="fg warning" data-tip="findings" data-id="ars" data-env="" data-about="row" data-sev="warning" aria-label="2 warning findings">/);
+  TD.boot({ rows: [row], environments: ["ci", "prod"] });
+  const tip = table.tipHtml({ dataset: { tip: "findings", id: "ars", env: "", about: "row", sev: "warning" } });
+  assert.match(tip, /<div class="title">warning · ars<\/div><ul class="fl"><li>no chart<\/li><li>ghost unseen<\/li><\/ul>/);
+  assert.equal(table.tipHtml({ dataset: { tip: "findings", id: "ars", env: "", about: "row", sev: "severe" } }), "");
 });
