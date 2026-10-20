@@ -97,6 +97,21 @@ class TestApply:
         # A version read from somewhere else is untouched.
         assert kept[0]["environments"]["prod"]["version"] == "2.0.0"
 
+    def test_a_data_axis_from_a_withheld_source_goes_with_it(self):
+        # The rule is the `_source` suffix, not a list of names, so the next
+        # axis added to cells.DATA_AXES is covered without this module
+        # importing it.
+        rows = [{
+            "id": "keep", "helm_version": "0.1.0",
+            "environments": {"ci": {
+                "deployed": True, "version": "1.0", "version_source": "openapi",
+                "babel": "2025sep1", "babel_source": "helm",
+            }},
+        }]
+        ci = apply(rows, _policy(fields=["helm_version"]))[0][0]["environments"]["ci"]
+        assert ci["babel"] is None and ci["babel_source"] is None
+        assert ci["version"] == "1.0"
+
     def test_nothing_happens_under_an_empty_policy(self):
         kept, report = apply(_rows(), Policy())
         assert [row["id"] for row in kept] == ["keep", "drop"]

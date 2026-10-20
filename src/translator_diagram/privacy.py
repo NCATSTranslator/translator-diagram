@@ -479,15 +479,18 @@ def _mentions(blob: str, name: str) -> bool:
 def _drop_withheld_versions(cell: dict[str, Any], sources: set[str]) -> None:
     """Empty a cell's version when it was read from a withheld origin.
 
-    Value and provenance go together in both directions: the pairs are
-    (`version`, `version_source`) and (`trapi`, `trapi_source`), and each pair
-    is cleared whole.
+    Value and provenance go together in both directions, and every pair in a
+    cell is spelled the same way — `version`/`version_source`,
+    `trapi`/`trapi_source`, and one such pair per data axis in
+    `cells.DATA_AXES` — so the rule is the suffix rather than a list of
+    names: a list here would miss the next axis, and this module may not
+    import `cells` to read theirs.
     """
     if not sources:
         return
-    for value_key, source_key in (("version", "version_source"), ("trapi", "trapi_source")):
+    for source_key in [key for key in cell if key.endswith("_source")]:
         if cell.get(source_key) in sources:
-            cell[value_key] = None
+            cell[source_key.removesuffix("_source")] = None
             cell[source_key] = None
 
 

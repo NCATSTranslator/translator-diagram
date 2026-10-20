@@ -744,3 +744,139 @@ class TestHelmStatus:
         # the component runs, and translator-devops would never have a chart.
         row = self._row(synced, hosted_at="Scripps")
         assert row["helm_status"] == "not-devops-hosted"
+
+
+class TestDataAxes:
+    """The data a deployment runs on, one axis at a time, beside its software."""
+
+    def _status(self, tmp_path, body, **openapi_extra):
+        synced = _Probes(tmp_path).body("status", "ci", body).build()
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        return build_rows([component], synced)[0]["environments"]["ci"]
+
+    def test_the_axes_are_exported_in_page_order(self, component, synced):
+        from translator_diagram.cells import DATA_AXES
+        assert list(DATA_AXES) == ["babel", "biolink", "graph"]
+        assert build_payload([component], synced)["data_axes"] == DATA_AXES
+
+    def test_status_facts_split_the_axes_out(self):
+        facts = _status_facts({
+            "babel_version": "2025sep1",
+            "babel_version_url": "https://github.com/ncatstranslator/Babel/blob/master/releases/2025sep1.md",
+            "biolink_model": {"tag": "v4.4.3", "url": "https://github.com/biolink/biolink-model/tree/v4.4.3"},
+        })
+        assert facts["babel"] == "2025sep1"
+        assert facts["babel_url"].endswith("/2025sep1.md")
+        assert facts["biolink_tag"] == "v4.4.3"
+        assert facts["biolink_url"].endswith("/v4.4.3")
+        # The joined string is still produced: it is a payload key.
+        assert facts["data_release"] == "babel 2025sep1 · biolink v4.4.3"
+
+    def test_a_url_that_is_not_one_is_dropped(self):
+        facts = _status_facts({"babel_version": "x", "babel_version_url": "releases/x.md",
+                               "biolink_model": {"tag": "t", "url": 7}})
+        assert facts["babel_url"] is None and facts["biolink_url"] is None
+
+    def test_each_axis_reaches_the_cell_with_its_source_and_document(self, tmp_path):
+        cell = self._status(tmp_path, {
+            "babel_version": "2025sep1",
+            "babel_version_url": "https://example.org/babel/2025sep1",
+            "biolink_model": {"tag": "v4.4.3", "url": "https://example.org/biolink/v4.4.3"},
+        })
+        assert (cell["babel"], cell["babel_source"]) == ("2025sep1", "status")
+        assert cell["babel_url"] == "https://example.org/babel/2025sep1"
+        assert (cell["biolink"], cell["biolink_source"]) == ("v4.4.3", "status")
+        assert cell["biolink_url"] == "https://example.org/biolink/v4.4.3"
+        # No reader yet, so no key: the page draws the axes a cell carries.
+        assert "graph" not in cell
+
+    def test_a_cell_without_status_carries_empty_axes(self, component, synced):
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert cell["babel"] is None and cell["babel_source"] is None
+        # The declared Biolink, from the API document, is the axis's fallback.
+        assert (cell["biolink"], cell["biolink_source"]) == ("4.2.5", "openapi")
+        assert cell["biolink_url"] is None
+        assert cell["biolink_declared"] == "4.2.5"
+
+
+class TestFindings:
+    """What the build noticed that is neither a version nor the lack of one."""
+
+    def test_every_finding_has_a_severity_the_page_draws(self):
+        from translator_diagram.cells import FINDINGS, SEVERITIES
+        assert SEVERITIES == ("severe", "moderate", "warning")
+        assert all(severity in SEVERITIES for severity, _, _ in FINDINGS.values())
+        anchors = {about for _, about, _ in FINDINGS.values()}
+        assert anchors <= {"version", "reach", "row", "babel", "biolink", "graph"}
+
+    def _ci(self, tmp_path, *, status=None, openapi=None, document_status=200):
+        probes = _Probes(tmp_path).probe("ci", 200)  # the host itself is up
+        if status is not None:
+            probes.body("status", "ci", status)
+        if openapi is not None:
+            probes.document("openapi", "ci", document_status, openapi, url="https://svc.ci/")
+        component = _comp(
+            "svc",
+            endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        return build_rows([component], probes.build())[0]["environments"]["ci"]
+
+    def test_loaded_biolink_beats_declared_and_a_difference_is_a_finding(self, tmp_path):
+        cell = self._ci(
+            tmp_path,
+            status={"version": "2.5.1", "biolink_model": {"tag": "v4.4.3"}},
+            openapi={"info": {"version": "2.5.1", "x-translator": {"biolink-version": "4.4.2"}}},
+        )
+        assert (cell["biolink"], cell["biolink_source"]) == ("v4.4.3", "status")
+        assert cell["biolink_declared"] == "4.4.2"
+        assert cell["findings"] == [{
+            "key": "biolink-mismatch", "severity": "moderate", "about": "biolink",
+            "text": "loads Biolink v4.4.3 but its API document declares 4.4.2",
+        }]
+
+    def test_a_v_prefix_is_not_a_mismatch(self, tmp_path):
+        cell = self._ci(
+            tmp_path,
+            status={"version": "2.5.1", "biolink_model": {"tag": "v4.4.3"}},
+            openapi={"info": {"version": "2.5.1", "x-translator": {"biolink-version": "4.4.3"}}},
+        )
+        assert "findings" not in cell
+
+    def test_a_broken_document_behind_a_status_version_is_a_finding(self, tmp_path):
+        # The host is up and /status gives a version, so the cell shows one;
+        # without the finding the 500 on openapi.json would be invisible.
+        cell = self._ci(tmp_path, status={"version": "1.0.0"}, openapi={}, document_status=500)
+        assert cell["version"] == "1.0.0"
+        assert [f["key"] for f in cell["findings"]] == ["document-error"]
+        assert cell["findings"][0]["severity"] == "severe"
+        assert cell["findings"][0]["about"] == "reach"
+        assert "HTTP 500" in cell["findings"][0]["text"]
+
+    def test_the_same_fault_with_no_version_is_the_reason_not_a_finding(self, tmp_path):
+        cell = self._ci(tmp_path, openapi={}, document_status=500)
+        assert cell["version"] is None
+        assert cell["reason_key"] == "http-error"
+        assert "findings" not in cell
+
+    def test_an_inferred_environment_is_a_finding(self, tmp_path):
+        synced = _Probes(tmp_path).registry([{
+            "_id": "abc", "info": {"version": "1.0"},
+            "servers": [{"url": "https://svc.ci/", "description": "Staging server"}],
+        }]).build()
+        component = _comp("svc", identifiers={"smartapi": "abc"})
+        cell = build_rows([component], synced)[0]["environments"]["ci"]
+        assert cell["inferred"] is True
+        assert [f["key"] for f in cell["findings"]] == ["inferred"]
+
+    def test_a_rejected_host_carries_its_finding_beside_the_reason(self, tmp_path):
+        synced = _Probes(tmp_path).rejected(
+            "prod", "https://svc.transltr.io/", status=200, checked="document"
+        ).build()
+        cell = build_rows([_comp("svc")], synced)[0]["environments"]["prod"]
+        assert cell["reason_key"] == "another-service"
+        assert [(f["key"], f["severity"]) for f in cell["findings"]] == [("another-service", "severe")]

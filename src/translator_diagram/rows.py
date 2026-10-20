@@ -13,7 +13,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
-from .cells import _helm_facts, _openapi_facts, build_cell
+from .cells import DATA_AXES, _finding, _helm_facts, _note, _openapi_facts, build_cell
 from .components import ENVIRONMENTS, ComponentFile, github_repo
 from .deployments import (
     deployments_from_smartapi,
@@ -105,7 +105,7 @@ def _last_updated(
 
 
 def _mark_running_release(
-    cells: dict[str, dict[str, Any]], chips: list[dict[str, Any]]
+    cells: dict[str, dict[str, Any]], chips: list[dict[str, Any]], repo: str | None
 ) -> None:
     """Date each environment by the release it is running, where one matches.
 
@@ -114,6 +114,10 @@ def _mark_running_release(
     fact read from the cell's side says how old what is running here is. Ten
     of twenty running versions match no release — a cell with no match simply
     has no `released` key, rather than a null that would sort as a date.
+
+    A version that matches nothing is a finding only where the repository
+    publishes releases at all: twelve of nineteen publish none, and flagging
+    every cell of theirs would teach the reader to ignore the glyph.
     """
     for cell in cells.values():
         version = cell.get("version")
@@ -125,6 +129,9 @@ def _mark_running_release(
                 cell["release_tag"] = chip["tag"]
                 cell["release_url"] = chip["url"]
                 break
+        else:
+            if chips:
+                _note(cell, _finding("unreleased", version=version, repo=repo))
 
 
 def _release_chips(detail: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -323,13 +330,14 @@ def _cells_for(
             and env not in registered
         ):
             cell["unregistered"] = True
-    for key in ("version", "trapi", "biolink"):
+            _note(cell, _finding("unregistered"))
+    for key in ("version", "trapi", *DATA_AXES):
         _mark_drift(cells, key)
     return cells
 
 
 def _releases_for(
-    releases: list[dict[str, Any]], cells: dict[str, dict[str, Any]]
+    releases: list[dict[str, Any]], cells: dict[str, dict[str, Any]], repo: str | None
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """The release detail and chips for one row, and the cells marked by them.
 
@@ -341,8 +349,34 @@ def _releases_for(
         {version for cell in cells.values() if (version := cell.get("version"))},
     )
     chips = _release_chips(detail)
-    _mark_running_release(cells, chips)
+    _mark_running_release(cells, chips, repo)
     return detail, chips
+
+
+def _row_findings(
+    component: ComponentFile,
+    candidates: list[dict[str, Any]],
+    presence: list[dict[str, Any]],
+    helm_status: str,
+) -> list[dict[str, Any]]:
+    """The findings about the component rather than about one environment.
+
+    Each is already on the row in its own shape — the candidate list, the
+    presence list, the chart status — and the Component view shows those in
+    full. This is the same facts as glyphs beside the name, for a reader of
+    the table who has not opened the page.
+    """
+    findings = []
+    if candidates:
+        findings.append(_finding(
+            "ambiguous-record", count=len(candidates), infores=component.infores or "its infores",
+        ))
+    for hit in presence:
+        if not hit["seen_in"]:
+            findings.append(_finding("otel-missing", service=hit["service"]))
+    if helm_status == "none-in-devops":
+        findings.append(_finding("no-chart"))
+    return findings
 
 
 # --- The assembler ---------------------------------------------------------
@@ -373,8 +407,17 @@ def build_rows(
         cells = _cells_for(component, record, helm, synced)
         source_repo = github_repo(component.repository("source"))
         releases = synced.releases(source_repo)
-        detail, chips = _releases_for(releases, cells)
+        detail, chips = _releases_for(releases, cells, source_repo)
         uptime = ((record.get("_status") or {}).get("uptime_status")) or None
+        presence = otel_presence(component.otel_services, synced.otel)
+        helm_status = (
+            "recorded"
+            if charts
+            else "not-devops-hosted"
+            if component.hosted_at not in (None, "ITRB")
+            else "none-in-devops"
+        )
+        findings = _row_findings(component, candidates, presence, helm_status)
         rows.append(
             {
                 "id": component.id,
@@ -465,13 +508,7 @@ def build_rows(
                 # or this component is not deployed from translator-devops at
                 # all. The third is not a gap in our data — it is where the
                 # component runs.
-                "helm_status": (
-                    "recorded"
-                    if charts
-                    else "not-devops-hosted"
-                    if component.hosted_at not in (None, "ITRB")
-                    else "none-in-devops"
-                ),
+                "helm_status": helm_status,
                 "releases_detail": detail,
                 # The source repository's own description, branch and activity.
                 # `pushed_at` in it is deliberately not fed into `last_updated`:
@@ -486,7 +523,7 @@ def build_rows(
                 "catalog": catalog_detail(
                     synced.catalog().get(component.infores or "")
                 ),
-                "otel_presence": otel_presence(component.otel_services, synced.otel),
+                "otel_presence": presence,
                 # Probed and not confirmed, which is not "down": the convention
                 # said a host would be here and what answered was not this
                 # component. In ladder order, so the list reads dev to prod like
@@ -502,6 +539,8 @@ def build_rows(
                 # it would let a published build edit the ComponentFile.
                 "recorded": copy.deepcopy(component.raw),
                 "environments": cells,
+                # Absent when there is nothing to say, like a cell's `drift`.
+                **({"findings": findings} if findings else {}),
             }
         )
     return rows

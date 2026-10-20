@@ -17,7 +17,7 @@ from .charts import CHART_META_FILES
 from .components import ComponentFile, Deployment, endpoint_url_in
 from .deployments import deployments_from_smartapi
 from .files import PROBE_KINDS, endpoint_key
-from .payload_details import mapping, number, strings
+from .payload_details import mapping, number, same_version, strings
 from .synced_data import SyncedData
 
 # Ordered best to worst, and the order `build_cell` actually asks in: two live
@@ -30,6 +30,25 @@ SOURCE_LABELS = {
     "status": "status",
     "smartapi": "SmartAPI",
     "helm": "Helm",
+}
+
+
+# The *data* a deployment runs on, as against the software it runs: a second
+# set of versions, each a release of something upstream that moves through
+# dev, ci, test and prod on its own schedule. A cell carries each axis as the
+# flat trio `<axis>`, `<axis>_source`, `<axis>_url`, the way `trapi` and
+# `trapi_source` are done, so `rows._mark_drift` compares an axis across the
+# row with no special case, and the page draws a pill per axis it finds.
+#
+# In page order. `graph` is the Translator Graph release that DINGO will
+# stamp on what it builds, KGX Storage will store, Retriever will serve and
+# every query response will eventually carry: nothing reports it yet, so no
+# cell carries the key. When a `/status` (or other) key for it is agreed,
+# the reader is one line in `_status_facts` and the page needs no change.
+DATA_AXES = {
+    "babel": "Babel",
+    "biolink": "Biolink",
+    "graph": "Translator Graph",
 }
 
 
@@ -75,6 +94,84 @@ def _reason(key: str, **fmt: Any) -> dict[str, Any]:
     """The two keys a cell with no version carries: the words, and the key
     they were formatted from."""
     return {"reason": CELL_REASONS[key].format(**fmt), "reason_key": key}
+
+
+# Things a reader should know about a deployment or a component that are not
+# its version and not why it has none: inconsistencies between two sources
+# that each claim to describe it. Each used to be shown its own way, as a
+# caption in the cell, a line in the expansion or a section of the Component
+# view, so a reader had to know where to look. Now each is one entry here.
+#
+# Three fields per key. The severity is one of SEVERITIES, which the page
+# draws as three shapes (not three colours: a reader who cannot tell red
+# from amber still sees the difference), worst first. `about` is the piece
+# of information the glyph sits beside: `version` (the software pill), a key
+# of DATA_AXES (that pill), `reach` (the dot, or the reason where there is no
+# version), or `row` (after the component's name: a finding about the
+# component rather than one environment). The text is a sentence fragment
+# in a reader's words, formatted by `_finding`.
+#
+# The severities are a first cut and are meant to be argued with here, in
+# one table, rather than in the renderers.
+SEVERITIES = ("severe", "moderate", "warning")
+
+FINDINGS = {
+    # In an environment cell.
+    "biolink-mismatch": (
+        "moderate", "biolink",
+        "loads Biolink {loaded} but its API document declares {declared}",
+    ),
+    "document-error": (
+        "severe", "reach", "the host is up but its API document answers HTTP {code}",
+    ),
+    "html-document": (
+        "moderate", "reach", "serves a web page where its API document should be",
+    ),
+    "inferred": (
+        "warning", "version",
+        ("this environment was not declared in the registry; it was inferred "
+         "from a server's description there, which is the weaker claim"),
+    ),
+    "unregistered": (
+        "warning", "version",
+        ("deployed, but absent from this component's SmartAPI record, which "
+         "lists other environments"),
+    ),
+    "unreleased": (
+        "warning", "version", "{version} matches no release of {repo}",
+    ),
+    "another-service": (
+        "severe", "reach", "the conventional address serves another component",
+    ),
+    "unverified-host": (
+        "warning", "reach",
+        ("a host answers at the conventional address, and nothing on file "
+         "can confirm it is this component"),
+    ),
+    # On the row.
+    "ambiguous-record": (
+        "moderate", "row", "{count} SmartAPI records claim {infores}; none is used",
+    ),
+    "otel-missing": (
+        "warning", "row", "telemetry name {service} has been seen by no collector",
+    ),
+    "no-chart": (
+        "warning", "row", "hosted at ITRB with no chart in translator-devops",
+    ),
+}
+
+
+def _finding(key: str, **fmt: Any) -> dict[str, Any]:
+    """One finding as the page receives it: key, severity, anchor and words."""
+    severity, about, text = FINDINGS[key]
+    return {"key": key, "severity": severity, "about": about, "text": text.format(**fmt)}
+
+
+def _note(target: dict[str, Any], finding: dict[str, Any]) -> None:
+    """Append a finding to a cell or a row. The list is absent until there is
+    one, like `drift`: a key that is always there is a key the page has to
+    render an answer for."""
+    target.setdefault("findings", []).append(finding)
 
 
 # A status the host itself answered with, however unhappily, still means
@@ -189,6 +286,12 @@ def _recent_queries(value: Any) -> dict[str, Any] | None:
     }
 
 
+def _http_url(value: Any) -> str | None:
+    """A web address out of a status body, or nothing: these documents are
+    other teams' and a field named `_url` has held a path before now."""
+    return value if isinstance(value, str) and value.startswith("http") else None
+
+
 def _tenth(value: Any) -> float | None:
     quantity = number(value)
     return None if quantity is None else round(float(quantity), 1)
@@ -224,14 +327,21 @@ def _status_facts(document: dict[str, Any] | None) -> dict[str, Any]:
     candidates = [("version", document.get("version"))] + [
         (key, value) for key, value in document.items() if key.endswith("_version")
     ]
-    biolink = document.get("biolink_model")
+    biolink = mapping(document.get("biolink_model"))
+    babel = document.get("babel_version")
     release = []
-    if babel := document.get("babel_version"):
+    if babel:
         release.append(f"babel {babel}")
-    if isinstance(biolink, dict) and biolink.get("tag"):
+    if biolink.get("tag"):
         release.append(f"biolink {biolink['tag']}")
     message = document.get("message")
     return {
+        # The data axes, one at a time, for the cells; `data_release` below
+        # is the same two joined, kept because it is a payload key.
+        "babel": babel if isinstance(babel, str) and babel.strip() else None,
+        "babel_url": _http_url(document.get("babel_version_url")),
+        "biolink_tag": biolink.get("tag") if isinstance(biolink.get("tag"), str) else None,
+        "biolink_url": _http_url(biolink.get("url")),
         "version": next(
             (
                 value
@@ -308,7 +418,14 @@ def _undeployed_reason(
         return _reason("not-hosted")
     verdict = synced.rejected.get(component.id, {}).get(env)
     if verdict is not None:
-        return _reason(_rejection_reason(verdict))
+        key = _rejection_reason(verdict)
+        reason = _reason(key)
+        # A live host under the conventional name is worth a glyph, not just a
+        # sentence: either it is somebody else's service at this component's
+        # address, or it is unconfirmed and a person should look.
+        if key in FINDINGS:
+            _note(reason, _finding(key))
+        return reason
     if deployments_from_smartapi(smartapi_record):
         return _reason("not-registered", env=env)
     return _reason("no-host")
@@ -456,8 +573,17 @@ def build_cell(
     trapi, trapi_source = _first(
         ("openapi", openapi.get("trapi")), ("smartapi", registered.get("trapi"))
     )
-    biolink, _ = _first(
+    # What the deployment has *loaded* beats what its API *declares*: the
+    # tag in /status is the model the data was built against, and the
+    # OpenAPI field is what the API says it speaks. Usually the same thing;
+    # where they differ, that is a finding rather than a choice.
+    declared, _ = _first(
         ("openapi", openapi.get("biolink")), ("smartapi", registered.get("biolink"))
+    )
+    biolink, biolink_source = _first(
+        ("status", status.get("biolink_tag")),
+        ("openapi", openapi.get("biolink")),
+        ("smartapi", registered.get("biolink")),
     )
 
     openapi_url = endpoint_url_in(component, deployment, "openapi")
@@ -476,7 +602,17 @@ def build_cell(
         "version_source": source,
         "trapi": trapi,
         "trapi_source": trapi_source,
+        # The data axes (DATA_AXES), each as value, source and the document
+        # that names it. `graph` has no reader yet, so no key.
+        "babel": status.get("babel"),
+        "babel_source": "status" if status.get("babel") else None,
+        "babel_url": status.get("babel_url"),
         "biolink": biolink,
+        "biolink_source": biolink_source,
+        "biolink_url": status.get("biolink_url") if biolink_source == "status" else None,
+        # The API's own claim, kept beside the loaded tag so the finding
+        # below can be checked by a reader and not only by this code.
+        "biolink_declared": declared,
         "data_release": status.get("data_release"),
         "http_status": http_status,
         # The document's status and the host's, kept apart. They answer two
@@ -523,4 +659,18 @@ def build_cell(
             http_status=http_status,
             openapi_url=openapi_url,
         ))
+    else:
+        # A broken API document behind a version read from somewhere else.
+        # With no version the reason already says this, so it is said once.
+        if reachable and http_status in DOCUMENT_ERROR_STATUSES:
+            _note(cell, _finding("document-error", code=http_status))
+        elif cell["document"] == "not-json":
+            _note(cell, _finding("html-document"))
+    if deployment.inferred:
+        _note(cell, _finding("inferred"))
+    if (
+        biolink_source == "status" and declared
+        and not same_version(biolink, declared)
+    ):
+        _note(cell, _finding("biolink-mismatch", loaded=biolink, declared=declared))
     return cell
