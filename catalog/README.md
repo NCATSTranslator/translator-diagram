@@ -84,7 +84,9 @@ shared schema, so the dashboard reads a plain `version` key from it as the
 software's own version, ahead of any `*_version` key, and badges it `status`.
 Before you record one, look at the body: if its bare `version` is a TRAPI,
 Biolink or data release instead, the cell would show that as the software,
-so say so in an issue rather than recording the endpoint.
+so say so in an issue rather than recording the endpoint. The same body's
+`babel_version` and `biolink_model.tag` are read as the data the deployment
+runs on, and drawn as pills under its version.
 
 **Environments are recorded only where SmartAPI cannot supply them.** For a
 registered component the block should be *absent*, and a fetcher fills it in.

@@ -268,6 +268,30 @@ components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
 
+**Finding glyphs sit beside the thing they are about, not one per cell.**
+A cell can carry a finding about its host (the dot), its deployment (the
+version pill) and each release it runs on (a data pill), and a reader
+scanning a column for a ✕ should land on the thing that is wrong. One glyph
+per cell would send them to the tooltip to find out which. The anchor is
+the payload's `about`, and `TD.findings.marks` draws one button per
+severity present at that anchor, so three warnings about one version are
+one ◆ whose tooltip lists three lines. The severities are three *shapes*
+(✕ ▲ ◆) and not three colours alone, for the same reason the drift tint
+comes with a ≠. A glyph is a `<button>` because it opens the component's
+page at its Findings section; in the Component view's own matrix the same
+click only scrolls.
+
+**The data pills are the version pill's size, and filled.** The data a
+deployment runs on used to be a micro-font caption, and read as a footnote
+to the version. A release of Babel or of the Biolink Model moves through
+the environments on its own schedule, and whether it has reached prod is
+read off this line as much as off the version's, so the pill is the same
+size and weight; it is filled in the accent, with the axis's name inside
+at a lighter weight, so the two kinds of version cannot be mistaken for
+each other. Below 1300px it may break between name and number — on one
+line it pushed the table past the window at 1000 and 1200px, which is
+issue #31's failure — and a broken pill is drawn as a box.
+
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a

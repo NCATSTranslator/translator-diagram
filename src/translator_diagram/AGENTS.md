@@ -263,6 +263,27 @@ widths, the sort value and the column count the empty row's colspan needs —
 they used to be written out separately, which is how a header ends up hidden
 without its column.
 
+**Add a data axis** (a release of something upstream that a deployment runs
+on, beside the software it runs: Babel, Biolink, the Translator Graph) → one
+entry in `DATA_AXES` in `cells.py`, and a reader in `_status_facts` (or
+wherever the axis is reported) that fills the cell's `<axis>`,
+`<axis>_source` and `<axis>_url`. Nothing else: `rows._mark_drift` compares
+every axis in the list, the page draws a pill per axis the cell carries
+from the payload's `data_axes`, and `privacy` clears a withheld axis by the
+`_source` suffix. `graph` is in the list today with no reader, which is what
+"make room, read nothing yet" looks like. The one thing the page keeps per
+axis is a sentence for the (?) beside its fact, `AXIS_ABOUT` in `core.js`.
+
+**Add a finding** (an inconsistency between two sources, a host nothing can
+vouch for, a name nothing reports) → one entry in `FINDINGS` in `cells.py`,
+with a severity, the anchor the glyph sits beside (`version`, `reach`, an
+axis, or `row`) and the sentence, then `_note(cell_or_row, _finding(key,
+...))` where the build can see it: `build_cell` for what one cell knows,
+`rows.py` for anything that compares a cell with its neighbours or the row
+with its registry. The page needs no change: the glyphs, the tooltip, the
+Show view and the Component view's Findings section all read the list.
+Severities are meant to be argued with in that one table.
+
 **Show a new per-environment fact** → one entry in the `facts` list of
 `TD.cell` in `web/core.js`. The expanded row and the cell's tooltip iterate
 that list, so the fact appears in both with no renderer change; only the cell
@@ -363,6 +384,20 @@ rendering, and says something that is not true.
   schema, so the version is the first `*_version` key — with `babel_version`,
   `biolink_version`, `biolink_model_version` and `trapi_version` excluded, or a
   body that lists Biolink first would have that badged as its software.
+- **One Biolink where there are two.** The tag a deployment has *loaded*
+  (`biolink_model.tag` in /status) and the version its API *declares*
+  (`x-translator.biolink-version`) are two claims. The cell's `biolink` is
+  the loaded tag first, then the declared version, then the registration's,
+  with `biolink_source` saying which; the declared one is kept as
+  `biolink_declared`, and when the two disagree the cell carries the
+  `biolink-mismatch` finding rather than silently preferring one.
+- **A finding it has not got the words for.** Every entry in a cell's or
+  row's `findings` list comes from `cells.FINDINGS`, which gives it a
+  severity and the anchor its glyph sits beside; the list is absent when
+  there is nothing to say, so the page never draws a glyph for an empty
+  finding. A version matching no release is a finding only where the
+  repository publishes releases at all: twelve of nineteen publish none,
+  and a glyph on every one of their cells is a glyph nobody reads.
 - **An odd one out where there is none.** A tie in a version split marks *every*
   reporting environment. `Counter.most_common` breaks ties by insertion order,
   which here is column order, so two-against-two used to tint whichever pair sat
