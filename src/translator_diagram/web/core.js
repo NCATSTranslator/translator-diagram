@@ -525,7 +525,37 @@
     };
   }
 
-  TD.summary = { figures };
+  /* Per data axis, every release seen on the platform and where it is: the
+     environments, and the components in each. This is the flow read
+     directly — a Babel release in dev alone has not moved yet; one in ci,
+     test and prod has arrived — where the table shows it one cell at a
+     time. Whole payload, not the filtered rows: it describes the platform.
+     Versions are in text order (numeric-aware), which puts 2025sep1 before
+     2026jul22 and 4.4.2 before 4.4.3; nothing here knows which is newer. */
+  function axes(data) {
+    const rows = data.rows || [];
+    const envs = Array.isArray(data.environments) && data.environments.length
+      ? data.environments : DEFAULT_ENVS;
+    const labels = data.data_axes || DEFAULT_AXES;
+    return Object.entries(labels).map(([axis, label]) => {
+      const byVersion = new Map();
+      for (const row of rows) {
+        for (const env of envs) {
+          const found = cellModel(row, env).data.find((d) => d.axis === axis);
+          if (!found) continue;
+          if (!byVersion.has(found.version)) byVersion.set(found.version, new Map(envs.map((e) => [e, []])));
+          byVersion.get(found.version).get(env).push(row.id);
+        }
+      }
+      const versions = [...byVersion].map(([version, perEnv]) => ({
+        version,
+        envs: envs.map((env) => ({ env, ids: perEnv.get(env) })).filter((e) => e.ids.length),
+      })).sort((a, b) => byText(a.version, b.version));
+      return { axis, label, versions };
+    }).filter((a) => a.versions.length);
+  }
+
+  TD.summary = { figures, axes };
 
   /* --- Sorting ----------------------------------------------------------- */
 

@@ -221,6 +221,22 @@ test("findings about the host are the dot itself, with every severity in its too
   assert.match(tip, /<div class="title">host · svc · ci<\/div><div>reachable<\/div><ul class="fl"><li><span class="fg severe"[^>]*>✕<\/span> HTTP 500<\/li><li><span class="fg warning"[^>]*>◆<\/span> unconfirmed<\/li><\/ul>/);
 });
 
+test("the releases summary is a line that opens into a releases × environments table", () => {
+  const strip = [
+    { axis: "babel", label: "Babel", versions: [
+      { version: "2025sep1", envs: [{ env: "ci", ids: ["nn", "nr"] }, { env: "prod", ids: ["nr"] }] },
+      { version: "2026jul22", envs: [{ env: "dev", ids: ["redis"] }] },
+    ] },
+    { axis: "biolink", label: "Biolink", versions: [{ version: "v4.4.3", envs: [{ env: "dev", ids: ["redis"] }] }] },
+  ];
+  const html = table.axesHtml(strip, ["dev", "ci", "prod"]);
+  assert.match(html, /<summary><span class="axsum"><b>Babel<\/b>: 2025sep1 \(ci, prod\), 2026jul22 \(dev\) · <b>Biolink<\/b>: v4\.4\.3 \(dev\)<\/span><\/summary>/);
+  assert.match(html, /<thead><tr><th>Release<\/th><th>dev<\/th><th>ci<\/th><th>prod<\/th><th><\/th><\/tr><\/thead>/);
+  assert.match(html, /<tr class="axband"><th colspan="5">Babel<\/th><\/tr>/);
+  assert.match(html, /<span class="ax">Babel<\/span> 2025sep1<\/span><\/th><td><span class="dash">—<\/span><\/td><td class="n" title="nn, nr">2<\/td><td class="n" title="nr">1<\/td><td class="show"><a href="\?q=2025sep1" data-q="2025sep1">Show<\/a><\/td>/);
+  assert.equal(table.axesHtml([], ["dev"]), "");
+});
+
 test("row-level findings sit after the name, and the tooltip lists one anchor's findings", () => {
   reset();
   const row = { ...ROWS[0], findings: [

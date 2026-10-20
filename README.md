@@ -222,11 +222,14 @@ A single self-contained HTML page with three views over the same payload:
   data it has loaded: the Babel release and the Biolink Model version, and
   the Translator Graph release once anything reports one. Each is compared
   across the row like the version, so a release moving dev → ci → test →
-  prod is read off that line. A glyph beside a version, a data pill or a
-  component's name marks a *finding* — something two sources disagree
-  about, in three severities (✕ ▲ ◆); a pill's border and the online
-  light's colour (green, amber, red) say how that one fact stands. Hover
-  for the words, click for the component's full list.
+  prod is read off that line, and off the one-line summary under the
+  filters, which opens into a table of every release seen on each axis and
+  how many components are on it in each environment; its Show links list
+  them. A glyph beside a version, a data pill or a component's name marks a
+  *finding* — something two sources disagree about, in three severities
+  (✕ ▲ ◆); a pill's border and the online light's colour (green, amber,
+  red) say how that one fact stands. Hover for the words, click for the
+  component's full list.
 - **Map** — an interactive SVG diagram of which component connects to what,
   laid out in the same stages, with pan/zoom, hover highlighting and SVG/PNG
   export.

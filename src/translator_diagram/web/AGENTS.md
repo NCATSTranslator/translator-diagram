@@ -311,6 +311,23 @@ and number — on one
 line it pushed the table past the window at 1000 and 1200px, which is
 issue #31's failure — and a broken pill is drawn as a box.
 
+**The data releases summary is one line, and a table on request.** It sits
+under the filters and says, per axis, which releases are on the platform
+and in which environments — the flow dev → ci → test → prod read in one
+line rather than down a column. The line is a native `<details>` summary
+clipped with an ellipsis so it never takes a second row; opening it shows
+the table, in the shape of babel-validation's "How failures fall across the
+pipeline": a row per release, a column per environment holding the number
+of components on it there, and a Show link. It began as a strip of pills
+and environment names, which was unreadable past two axes. It does not
+follow the filter: it describes the platform, and a line that shrank with
+the search would stop saying where a release *is not*. A release in it is a
+search for that release
+(`TD.commit({ q })`, with the search box set to match), because `haystack`
+already matches data releases and a second filter for the same rows is the
+mistake the "Drift only" toggle was. It is hidden on the other views the
+way the filters are, by `html[data-view]`.
+
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a
