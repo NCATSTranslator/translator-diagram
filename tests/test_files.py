@@ -6,6 +6,7 @@ from pathlib import Path
 from translator_diagram.files import (
     PROBE_KINDS,
     chart_commit_path,
+    commit_path,
     confirmed_hosts,
     derived_path,
     endpoint_key,
@@ -19,6 +20,8 @@ from translator_diagram.files import (
     otel_path,
     read_json,
     read_yaml,
+    ref_names,
+    refs_path,
     rejected_hosts,
     releases_path,
     repo_meta_path,
@@ -187,3 +190,18 @@ class TestCacheParsers:
         ):
             assert confirmed_hosts(probes) == {}
             assert rejected_hosts(probes) == {}
+
+
+class TestRefs:
+    def test_refs_and_commits_sit_under_the_repository(self, tmp_path):
+        assert refs_path(tmp_path, "a/b", "tags") == tmp_path / "refs" / "a" / "b" / "tags.json"
+        assert commit_path(tmp_path, "a/b", "abc") == tmp_path / "refs" / "a" / "b" / "commits" / "abc.json"
+
+    def test_ref_names_strips_the_refs_prefix_and_checks_shapes(self):
+        body = [
+            {"ref": "refs/tags/v4.4.3", "object": {"sha": "abc", "type": "commit"}},
+            {"ref": "refs/heads/feature/x", "object": {"sha": "def"}},
+            {"ref": "refs/tags/bad"}, "junk", {"ref": 7, "object": {"sha": "x"}},
+        ]
+        assert ref_names(body) == {"v4.4.3": "abc", "feature/x": "def"}
+        assert ref_names({"message": "throttled"}) == {}

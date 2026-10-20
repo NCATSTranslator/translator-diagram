@@ -129,6 +129,18 @@ def repo_meta_path(root: Path, repo: str) -> Path:
     return root / "repos" / f"{repo}.json"
 
 
+def refs_path(root: Path, repo: str, kind: str) -> Path:
+    """One repository's tags or branches (`kind` is `tags` or `heads`), as
+    GitHub's matching-refs endpoint lists them, each with its commit."""
+    return root / "refs" / repo / f"{kind}.json"
+
+
+def commit_path(root: Path, repo: str, sha: str) -> Path:
+    """One commit looked up by hash, because a deployment named it as a
+    version and no tag or branch head carried it."""
+    return root / "refs" / repo / "commits" / f"{sha}.json"
+
+
 def helm_file_path(root: Path, chart: str, name: str) -> Path:
     """One file out of one chart: `Chart.yaml`, `values.yaml` or the images list."""
     return root / "helm" / chart / name
@@ -146,6 +158,26 @@ def chart_commit_path(root: Path, chart: str) -> Path:
 # files are JSON we wrote ourselves, but an older run's shape, a hand edit or
 # a truncated write all reach the same readers, so every parser takes whatever
 # `read_json` returned and answers with an empty container rather than raising.
+
+
+def ref_names(payload: Any) -> dict[str, str]:
+    """`{name: sha}` out of a matching-refs body: `refs/tags/v4.4.3` → `v4.4.3`.
+
+    Shape-checked like every upstream body: a throttled call answers with an
+    object, and that is no refs rather than an error.
+    """
+    if not isinstance(payload, list):
+        return {}
+    names = {}
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        ref, obj = entry.get("ref"), entry.get("object")
+        if isinstance(ref, str) and ref.count("/") >= 2 and isinstance(obj, dict):
+            sha = obj.get("sha")
+            if isinstance(sha, str):
+                names[ref.split("/", 2)[2]] = sha
+    return names
 
 
 def smartapi_hits(payload: Any) -> dict[str, dict[str, Any]]:

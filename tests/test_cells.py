@@ -5,6 +5,8 @@ fact extractors directly, and the resolved cell that comes out of `build_rows`.
 `_Probes` builds the recorded-probe shapes `sync` actually writes.
 """
 
+from typing import ClassVar
+
 import pytest
 
 from tests.dashboard_helpers import _cell, _comp, _Probes
@@ -880,3 +882,76 @@ class TestFindings:
         cell = build_rows([_comp("svc")], synced)[0]["environments"]["prod"]
         assert cell["reason_key"] == "another-service"
         assert [(f["key"], f["severity"]) for f in cell["findings"]] == [("another-service", "severe")]
+
+
+class TestReleaseResolution:
+    """A reported data version checked against the repository it came from."""
+
+    REFS: ClassVar[dict] = {
+        "tags": {"v4.4.3": "aaaa1111" * 5, "v4.4.2": "bbbb2222" * 5},
+        "heads": {"master": "cccc3333" * 5, "4.4.3": "dddd4444" * 5},
+        "commits": {"eeee5555" * 5},
+    }
+
+    def test_a_tag_with_or_without_its_v(self):
+        from translator_diagram.cells import resolve_release
+        assert resolve_release("v4.4.3", self.REFS) == "tag"
+        assert resolve_release("4.4.2", self.REFS) == "tag"
+
+    def test_a_tag_beats_a_branch_of_the_same_name(self):
+        # biolink-model has both a tag v4.4.3 and a branch 4.4.3.
+        from translator_diagram.cells import resolve_release
+        assert resolve_release("4.4.3", self.REFS) == "tag"
+        assert resolve_release("master", self.REFS) == "branch"
+
+    def test_a_hash_resolves_through_a_ref_or_a_lookup(self):
+        from translator_diagram.cells import resolve_release
+        assert resolve_release("aaaa1111aaaa", self.REFS) == "commit"   # a tag's commit
+        assert resolve_release("EEEE5555", self.REFS) == "commit"       # looked up
+        assert resolve_release("0123abc", self.REFS) == "unresolved"
+        assert resolve_release("v9.9.9", self.REFS) == "unresolved"
+
+    def test_without_refs_there_is_no_verdict(self):
+        from translator_diagram.cells import resolve_release
+        assert resolve_release("master", None) is None
+        assert resolve_release("", self.REFS) is None
+
+    def _ci(self, tmp_path, status, openapi=None, refs=True):
+        probes = _Probes(tmp_path).probe("ci", 200).body("status", "ci", status)
+        if openapi is not None:
+            probes.document("openapi", "ci", 200, openapi, url="https://svc.ci/")
+        if refs:
+            probes.refs("biolink/biolink-model", tags={"v4.4.3": "a" * 40}, heads={"master": "b" * 40})
+        component = _comp(
+            "svc", endpoints={"status": "status"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        return build_rows([component], probes.build())[0]["environments"]["ci"]
+
+    def test_a_branch_is_a_moderate_finding_on_the_axis(self, tmp_path):
+        cell = self._ci(tmp_path, {"version": "1", "biolink_model": {"tag": "master"}})
+        assert cell["findings"] == [{
+            "key": "release-is-branch", "severity": "moderate", "about": "biolink",
+            "text": "loads Biolink master, a branch of biolink/biolink-model rather than a release",
+        }]
+
+    def test_an_unknown_value_is_severe_and_the_declared_one_is_checked_too(self, tmp_path):
+        cell = self._ci(
+            tmp_path, {"version": "1", "biolink_model": {"tag": "v4.4.3"}},
+            openapi={"info": {"version": "1", "x-translator": {"biolink-version": "9.9"}}},
+        )
+        keys = [(f["key"], f["severity"]) for f in cell["findings"]]
+        assert ("biolink-mismatch", "moderate") in keys
+        assert ("release-unresolved", "severe") in keys
+        assert any(f["text"].startswith("its API document declares Biolink 9.9,") for f in cell["findings"])
+
+    def test_a_value_is_checked_once_however_many_documents_claim_it(self, tmp_path):
+        cell = self._ci(
+            tmp_path, {"version": "1", "biolink_model": {"tag": "master"}},
+            openapi={"info": {"version": "1", "x-translator": {"biolink-version": "master"}}},
+        )
+        assert [f["key"] for f in cell["findings"]] == ["release-is-branch"]
+
+    def test_no_refs_cached_means_no_claim(self, tmp_path):
+        cell = self._ci(tmp_path, {"version": "1", "biolink_model": {"tag": "master"}}, refs=False)
+        assert "findings" not in cell

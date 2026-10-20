@@ -20,10 +20,13 @@ from typing import Any
 
 from .charts import CHART_META_FILES, chart_dirs, chart_meta, unclaimed_charts
 from .components import (
+    COMMIT_HASH,
+    DATA_AXIS_REPOS,
     ComponentFile,
     Deployment,
     endpoint_url_in,
     github_repo,
+    reported_biolink,
 )
 from .deployments import (
     deployments_from_smartapi,
@@ -44,6 +47,7 @@ from .fetch import (
 )
 from .files import (
     chart_commit_path,
+    commit_path,
     confirmed_hosts,
     derived_path,
     endpoint_path,
@@ -55,6 +59,8 @@ from .files import (
     otel_path,
     read_json,
     read_yaml,
+    ref_names,
+    refs_path,
     rejected_hosts,
     releases_path,
     repo_meta_path,
@@ -130,6 +136,21 @@ It dates the *intent* to deploy, not a deployment: a chart change that was
 never rolled out, and a rollout of an unchanged chart, both make it wrong.
 Whatever renders it has to say which of the two it is — see FUTURE.md.
 """
+
+GITHUB_MATCHING_REFS = "https://api.github.com/repos/{repo}/git/matching-refs/{kind}/"
+"""Every tag or branch of one repository with the commit each points at, in
+one response (unlike `/releases`, which pages). `kind` is `tags` or `heads`.
+Fetched for each repository in `components.DATA_AXIS_REPOS`, so what a
+deployment calls its Biolink Model version can be checked: a tag is a
+release, a branch (`master`) is not, and a value that is neither and no
+commit is not a version at all (`cells.resolve_release`)."""
+
+GITHUB_COMMIT = "https://api.github.com/repos/{repo}/commits/{sha}"
+"""One commit by hash. Looked up only for a bare hash some deployment reports
+as a version that no tag or branch head carries, so that a hash is never
+called unresolvable for want of asking. One call per distinct hash."""
+
+REF_KINDS = ("tags", "heads")
 
 GITHUB_REPO_META = "https://api.github.com/repos/{repo}"
 """One repository's own metadata — description, default branch, `pushed_at`,
@@ -275,7 +296,7 @@ def _confirmed_deployments(
 
 # What one sync spends from GitHub's API budget, and why it is close to the
 # floor: 1 chart index + ~19 repository descriptions + ~6 chart commits + ~20
-# release lists ≈ 46 calls. That fits under the 60-an-hour unauthenticated
+# release lists + 2 ref lists for biolink-model ≈ 48 calls. That fits under the 60-an-hour unauthenticated
 # ceiling once, and is nothing against the 5000 a GITHUB_TOKEN raises it to
 # (see `fetch._headers`). Every planner below is keyed by the thing being
 # fetched rather than by the component asking for it, which is what keeps the
@@ -312,6 +333,53 @@ def _plan_release_fetches(
         (GITHUB_RELEASES.format(repo=repo), releases_path(root, repo))
         for repo in _source_repos(components)
     ]
+
+
+def _plan_ref_fetches(root: Path) -> list[tuple[str, Path]]:
+    """The tag and branch lists of every repository a data axis is released
+    from: two calls per repository, however many deployments report it."""
+    return [
+        (GITHUB_MATCHING_REFS.format(repo=repo, kind=kind), refs_path(root, repo, kind))
+        for repo in DATA_AXIS_REPOS.values()
+        for kind in REF_KINDS
+    ]
+
+
+def _reported_hashes(root: Path, by_smartapi: dict[str, dict[str, Any]]) -> set[str]:
+    """Every bare commit hash some document reports as its Biolink version:
+    the cached /status and OpenAPI bodies, and the registry's records."""
+    documents: list[Any] = list(by_smartapi.values())
+    for kind in ("status", "openapi"):
+        documents += [read_json(path) for path in sorted((root / kind).rglob("*.json"))]
+    return {
+        value.lower()
+        for document in documents
+        for value in reported_biolink(document)
+        if COMMIT_HASH.match(value)
+    }
+
+
+def _plan_commit_lookups(
+    root: Path, by_smartapi: dict[str, dict[str, Any]]
+) -> list[tuple[str, Path]]:
+    """A commit lookup for each reported hash no tag or branch head carries.
+
+    Almost always empty: nothing reports a hash today. Planned after wave two
+    because the bodies it reads are wave two's, and against the ref lists
+    wave one just fetched, so a hash that *is* a tag's commit costs nothing.
+    """
+    hashes = _reported_hashes(root, by_smartapi)
+    if not hashes:
+        return []
+    jobs = []
+    for repo in DATA_AXIS_REPOS.values():
+        known = set()
+        for kind in REF_KINDS:
+            known |= set(ref_names(read_json(refs_path(root, repo, kind))).values())
+        for sha in sorted(hashes):
+            if not any(full.startswith(sha) for full in known):
+                jobs.append((GITHUB_COMMIT.format(repo=repo, sha=sha), commit_path(root, repo, sha)))
+    return jobs
 
 
 def _plan_chart_fetches(
@@ -799,10 +867,12 @@ def sync(
     repo_jobs = _plan_repo_meta(components, root)
     chart_jobs = _plan_chart_fetches(components, root)
     commit_jobs = _plan_chart_commits(components, root)
+    ref_jobs = _plan_ref_fetches(root)
     echo(
         "Fetching the SmartAPI registry, the OpenTelemetry collectors, the "
         f"infores catalog, the chart index, {len(release_jobs)} GitHub release "
-        f"lists and {len(repo_jobs)} repository descriptions ..."
+        f"lists, {len(repo_jobs)} repository descriptions and the tags and "
+        f"branches of {len(DATA_AXIS_REPOS)} data repositories ..."
     )
     registry_jobs = [(SMARTAPI_QUERY, smartapi_path(root))]
     registry_jobs += [
@@ -818,6 +888,7 @@ def sync(
         + commit_jobs
         + repo_jobs
         + release_jobs
+        + ref_jobs
     )
     throttled = sum(
         1
@@ -893,6 +964,13 @@ def sync(
             for (component, env, candidate), future in zip(pending, probing)
         ]
     report.fetches.extend(_record_derived(confirmed, rejected, previous, root, echo))
+
+    # Wave three, usually empty: a commit lookup for any bare hash a
+    # deployment reports as its Biolink version that no tag or branch carries.
+    lookup_jobs = _plan_commit_lookups(root, by_smartapi)
+    if lookup_jobs:
+        echo(f"Looking up {len(lookup_jobs)} commit hashes reported as Biolink versions ...")
+        run(lookup_jobs)
 
     # How much of the chart repository the component files account for. Two
     # numbers rather than a list of names: naming the unclaimed charts is a

@@ -25,6 +25,36 @@ ENVIRONMENTS = ("dev", "ci", "test", "prod")
 # names one per entry, and `SyncedData.otel` reads one file per entry.
 OTEL_ENVIRONMENTS = ("ci", "test", "prod")
 
+# Where a data axis (`cells.DATA_AXES`) is released from, for the axes whose
+# reported "version" can be checked against a repository: `sync` fetches the
+# repository's tags and branches, and `cells.resolve_release` says whether a
+# value is a tag, a branch, a commit or nothing. Here rather than in `cells`
+# because `sync` may not import `cells`. Babel joins when its releases are
+# worth checking the same way.
+DATA_AXIS_REPOS = {"biolink": "biolink/biolink-model"}
+
+# A bare commit hash reported where a version was expected: seven to forty
+# hex digits and nothing else.
+COMMIT_HASH = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
+
+
+def reported_biolink(document: Any) -> list[str]:
+    """Every Biolink Model version one fetched document claims: the tag a
+    /status body says it loaded, and the version an OpenAPI document or a
+    registry record declares. What `sync` scans for bare hashes to look up,
+    and the same two fields `cells` reads for the axis."""
+    if not isinstance(document, dict):
+        return []
+    found = []
+    model = document.get("biolink_model")
+    if isinstance(model, dict) and isinstance(model.get("tag"), str):
+        found.append(model["tag"])
+    info = document.get("info")
+    translator = info.get("x-translator") if isinstance(info, dict) else None
+    if isinstance(translator, dict) and isinstance(translator.get("biolink-version"), str):
+        found.append(translator["biolink-version"])
+    return found
+
 # Where an endpoint lives when the component file does not say. Only applied
 # when the key is *absent*: an explicit null means someone checked and this
 # component has no endpoint of that kind, and defaulting over that would send

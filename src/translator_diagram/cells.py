@@ -14,7 +14,13 @@ there" are different answers, and an empty cell gives neither.
 from typing import Any
 
 from .charts import CHART_META_FILES
-from .components import ComponentFile, Deployment, endpoint_url_in
+from .components import (
+    COMMIT_HASH,
+    DATA_AXIS_REPOS,
+    ComponentFile,
+    Deployment,
+    endpoint_url_in,
+)
 from .deployments import deployments_from_smartapi
 from .files import PROBE_KINDS, endpoint_key
 from .payload_details import mapping, number, same_version, strings
@@ -143,6 +149,18 @@ FINDINGS = {
     "another-service": (
         "severe", "reach", "the conventional address serves another component",
     ),
+    # A reported data version checked against the repository it is released
+    # from (components.DATA_AXIS_REPOS). A branch name says which line of
+    # development, never which release; a value that is no tag, branch or
+    # commit says nothing at all.
+    "release-is-branch": (
+        "moderate", "biolink",
+        "{claim} {label} {value}, a branch of {repo} rather than a release",
+    ),
+    "release-unresolved": (
+        "severe", "biolink",
+        "{claim} {label} {value}, which is no tag, branch or commit of {repo}",
+    ),
     "unverified-host": (
         "warning", "reach",
         ("a host answers at the conventional address, and nothing on file "
@@ -159,6 +177,57 @@ FINDINGS = {
         "warning", "row", "hosted at ITRB with no chart in translator-devops",
     ),
 }
+
+
+def resolve_release(value: str | None, refs: dict[str, Any] | None) -> str | None:
+    """What a reported version is to its repository: "tag", "branch",
+    "commit" or "unresolved" — or None when there are no refs to ask.
+
+    A tag wins over a branch of the same name (biolink-model has both a tag
+    `v4.4.3` and a branch `4.4.3`), and the `v` prefix is ignored on either
+    side, the way release tags are matched to versions everywhere here. A
+    commit is a hash that is a prefix of some tag's or branch's commit, or
+    of one `sync` looked up because nothing else carried it.
+    """
+    if refs is None or not value or not value.strip():
+        return None
+    value = value.strip()
+    if any(same_version(tag, value) for tag in refs.get("tags", {})):
+        return "tag"
+    if value in refs.get("heads", {}):
+        return "branch"
+    if COMMIT_HASH.match(value):
+        prefix = value.lower()
+        known = (
+            set(refs.get("tags", {}).values())
+            | set(refs.get("heads", {}).values())
+            | set(refs.get("commits", ()))
+        )
+        if any(full.lower().startswith(prefix) for full in known):
+            return "commit"
+    return "unresolved"
+
+
+def _release_findings(
+    axis: str, claims: list[tuple[str, str | None]], synced: SyncedData
+) -> list[dict[str, Any]]:
+    """The findings for one axis's reported versions: each distinct value
+    once, with the words of the first claim that made it."""
+    repo = DATA_AXIS_REPOS.get(axis)
+    refs = synced.refs(repo)
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for claim, value in claims:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        kind = resolve_release(value, refs)
+        key = {"branch": "release-is-branch", "unresolved": "release-unresolved"}.get(kind or "")
+        if key:
+            found.append(_finding(
+                key, claim=claim, label=DATA_AXES[axis], value=value, repo=repo,
+            ))
+    return found
 
 
 def _finding(key: str, **fmt: Any) -> dict[str, Any]:
@@ -577,7 +646,7 @@ def build_cell(
     # tag in /status is the model the data was built against, and the
     # OpenAPI field is what the API says it speaks. Usually the same thing;
     # where they differ, that is a finding rather than a choice.
-    declared, _ = _first(
+    declared, declared_source = _first(
         ("openapi", openapi.get("biolink")), ("smartapi", registered.get("biolink"))
     )
     biolink, biolink_source = _first(
@@ -673,4 +742,10 @@ def build_cell(
         and not same_version(biolink, declared)
     ):
         _note(cell, _finding("biolink-mismatch", loaded=biolink, declared=declared))
+    for finding in _release_findings("biolink", [
+        ("loads", status.get("biolink_tag")),
+        ("its API document declares" if declared_source == "openapi"
+         else "its registration declares", declared),
+    ], synced):
+        _note(cell, finding)
     return cell
