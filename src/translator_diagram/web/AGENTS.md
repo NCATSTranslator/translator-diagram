@@ -10,10 +10,34 @@ the payload this code reads, and which module builds which part of it — is in
 ## Looking at the page
 
 `CONTRIBUTING.md` says to render the page and look before calling it fine, in
-both views and both themes. This is how.
+every view and both themes. This is how.
 
-Either browser works. Chromium's headless shell runs from the command line
-with no Python package; Firefox runs through Playwright's API, which also
+**The short way is `tools/shoot.py`.** It serves a build over HTTP on a
+free port, drives headless Chromium through Playwright with the theme and
+reduced motion set on the browser context, and writes one PNG per surface,
+named so two builds shot with the same arguments compare by name:
+
+```bash
+uv run --group shots playwright install chromium          # once
+uv run build-dashboard --output-dir data/dashboard-mine   # not under a --watch
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine --measure
+uv run --group shots python tools/shoot.py --path '?expand=name-lookup' \
+  --hover 'button.fg' --theme dark --width 1200
+```
+
+The defaults are the Overview, the Map and a Component page, both themes,
+at 1700, 1200 and 760px; `--full` shoots the whole page, `--hover` opens a
+tooltip first, and `--measure` reports the table's `scrollWidth` against
+its `clientWidth` per width and exits 1 on an overflow at 1000px or wider
+(issue #31's failure, which no screenshot shows). The docstring has the
+rest. Build to a directory of your own while a `build-dashboard --watch`
+is running: the watcher rewrites `data/dashboard/` with the published
+policy on every code change, and a shot of it is a shot of that build.
+
+**The long way**, for a machine without Playwright, is below: either
+browser works. Chromium's headless shell runs from the command line with
+no Python package; Firefox runs through Playwright's API, which also
 handles the theme and the reduced motion itself (see *Firefox* below).
 Playwright's bundled headless shell needs no install. From the repo root:
 
