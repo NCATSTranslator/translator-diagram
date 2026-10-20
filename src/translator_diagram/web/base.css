@@ -240,6 +240,34 @@ code {
 }
 .order #unsort:hover { color: var(--text); }
 
+/* --- The data releases strip ---------------------------------------------- */
+
+/* One line per data axis, under the filters: each release as the same pill
+   the cells draw, then the environments it is in. The Overview's, like the
+   filters: the map and the Component view have their own ways of saying
+   where a thing is. */
+.axes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-5);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+html:not([data-view="overview"]) .axes { display: none; }
+.axis { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); }
+.axname {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  min-width: 3.5em;
+}
+.axver { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.axenvs { display: inline-flex; gap: 6px; font-family: var(--mono); }
+.axenv { cursor: help; }
+.axenv i { font-style: normal; opacity: 0.7; margin-left: 1px; }
+
 /* --- Views ---------------------------------------------------------------- */
 
 .view { display: none; }

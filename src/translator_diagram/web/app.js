@@ -152,6 +152,28 @@
       </div></details>`;
   }
 
+  /* --- The data releases strip ---------------------------------------------- */
+
+  /* One line per data axis: each release seen, and the environments it is
+     in with how many components are on it there (hover for which). A
+     release moving dev → ci → test → prod is read off this line; the table
+     below is where to find the cell. Each version is a search: the search
+     box already matches data releases, so one click lists the rows on it.
+     Drawn once, from the whole payload: it describes the platform, not
+     the filter. */
+  function axesStripHtml() {
+    const strip = TD.summary.axes(DATA);
+    if (!strip.length) return "";
+    const env = (e) => `<span class="axenv" title="${esc(e.ids.join(", "))}">${esc(e.env)}${
+      e.ids.length > 1 ? `<i>${e.ids.length}</i>` : ""}</span>`;
+    const version = (v) => `<span class="axver"><a class="v data" href="?q=${
+      encodeURIComponent(v.version)}" data-q="${esc(v.version)}">${esc(v.version)}</a><span
+      class="axenvs">${v.envs.map(env).join("")}</span></span>`;
+    return `<div class="axes" aria-label="Data releases, and where each is running">${
+      strip.map((a) => `<div class="axis"><span class="axname">${esc(a.label)}</span>${
+        a.versions.map(version).join("")}</div>`).join("")}</div>`;
+  }
+
   /* --- Shell ------------------------------------------------------------------ */
 
   function shell() {
@@ -186,6 +208,7 @@
             <span class="count" id="count" aria-live="polite"></span>
           </span>
         </div>
+        ${axesStripHtml()}
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
         <div class="view" id="view-component"></div>
@@ -290,6 +313,19 @@
     document.addEventListener("click", (event) => {
       if (sync.open && !sync.contains(event.target)) sync.open = false;
     });
+
+    // A release in the strip is a search for it. The href is real too, so a
+    // middle-click opens the same list in a new tab.
+    const axes = document.querySelector(".axes");
+    if (axes) {
+      axes.addEventListener("click", (event) => {
+        const link = event.target.closest("a[data-q]");
+        if (!link) return;
+        event.preventDefault();
+        search.value = link.dataset.q;
+        TD.commit({ q: link.dataset.q });
+      });
+    }
 
     // The order label's ✕ is the only way back to stage order when a narrow
     // window has hidden the column whose header would complete the cycle.
