@@ -176,6 +176,9 @@
             <span><i class="sw down"></i>down</span>
             <span><i class="sw off"></i>no address on file</span>
             <span><i class="sw copied"></i>copied from a registry or chart</span>
+            <span><span class="dot up"></span>host answers</span>
+            <span><span class="dot warn"></span>answers, with a finding</span>
+            <span><span class="dot down"></span>down, or a severe finding</span>
           </span>
           <span class="spacer"></span>
           <span class="status">

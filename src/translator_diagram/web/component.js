@@ -921,6 +921,24 @@
         <th>Field</th><th>State</th><th>Value</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
+  /* Every finding on the component, worst first, each saying which
+     environment it is about. The table shows these as glyphs beside the
+     thing each is about and opens this section on a click; this is the
+     full list, which is mostly of use to whoever maintains the component. */
+  function panelFindings(row) {
+    const all = TD.findings.all(row, envs());
+    if (!all.length) return muted("No findings: nothing this build checked disagrees about this component.");
+    return TD.findings.SEVERITIES.filter((severity) => all.some((f) => f.severity === severity))
+      .map((severity) => {
+        const items = all.filter((f) => f.severity === severity).map((f) =>
+          `<li><span class="fg ${severity}" aria-hidden="true">${TD.findings.SEVERITY[severity].glyph}</span><span
+            class="cv-fenv">${f.env ? esc(f.env) : "component"}</span><span>${esc(f.text)}</span></li>`).join("");
+        return `<h3 class="cv-fsev ${severity}">${esc(severity)}</h3><ul class="cv-findings">${items}</ul>`;
+      }).join("");
+  }
+
+  const FINDINGS = { id: "findings", label: "Findings", render: panelFindings };
+
   /* The sections under the environments, in reading order: what it is, how
      it is registered, what it has released, what should be deployed, and
      what it talks to. */
@@ -993,6 +1011,7 @@
         : "Choose a component above, or click a component's name in the Overview or a node on the Map.");
     }
     return `${bar}<header class="cv-head">${headerHtml(row)}</header>
+      ${panelHtml(row, FINDINGS, true)}
       <section class="cv-panel wide" id="cv-environments" aria-labelledby="cv-environments-h">
         <h2 class="cv-ph" id="cv-environments-h">Environments</h2>${envMatrix(row)}</section>
       <div class="cv-cols">${PANELS.map((panel) => panelHtml(row, panel)).join("")}</div>
@@ -1017,6 +1036,7 @@
         if (rowById(go.dataset.go)) TD.navigate({ sel: go.dataset.go });
         return;
       }
+      if (event.target.closest('button[data-tip="findings"]')) { view.reveal("findings"); return; }
       if (event.target.closest("#cv-map")) { TD.navigate({ view: "map" }); return; }
       const copy = event.target.closest("#cv-copy");
       if (copy) copyLink(copy);
@@ -1060,6 +1080,13 @@
     shown = id;
     container.innerHTML = pageHtml(id);
     container.scrollTop = 0;
+  };
+
+  /* Scroll one of the page's sections into view: what a finding glyph's
+     click lands on, after the page has been drawn. */
+  view.reveal = function reveal(panelId) {
+    const target = host && host.querySelector(`#cv-${panelId}`);
+    if (target) target.scrollIntoView({ block: "start", behavior: TD.motion.enabled ? "smooth" : "auto" });
   };
 
   // For tests/web/component.test.js; nothing on the page calls these from outside.

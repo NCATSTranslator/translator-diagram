@@ -218,8 +218,15 @@ A single self-contained HTML page with three views over the same payload:
   the people who use it at the bottom), with a cell per environment tinted by
   its state: the same version as the rest of the row, a different one, up
   with no version to read, down, or nothing on file. The version links to the
-  document it was read from, and the data release it has loaded (`babel
-  2025sep1`) sits under it.
+  document it was read from, and under it, as pills of the same weight, the
+  data it has loaded: the Babel release and the Biolink Model version, and
+  the Translator Graph release once anything reports one. Each is compared
+  across the row like the version, so a release moving dev → ci → test →
+  prod is read off that line. A glyph beside a version, a data pill or a
+  component's name marks a *finding* — something two sources disagree
+  about, in three severities (✕ ▲ ◆); a pill's border and the online
+  light's colour (green, amber, red) say how that one fact stands. Hover
+  for the words, click for the component's full list.
 - **Map** — an interactive SVG diagram of which component connects to what,
   laid out in the same stages, with pan/zoom, hover highlighting and SVG/PNG
   export.

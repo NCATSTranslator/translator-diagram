@@ -99,6 +99,9 @@ table.cv-envs thead th {
   letter-spacing: var(--tracking-label);
 }
 table.cv-envs thead th:first-child { width: 11rem; }
+/* The matrix is left-aligned where the table centres, and the data pills
+   under a version follow the version. */
+table.cv-envs .dataline { justify-content: flex-start; }
 table.cv-envs tbody th {
   font-size: var(--fs-label);
   font-weight: 500;
@@ -295,6 +298,27 @@ table.cv-envs td.env { text-align: left; }
   font-size: 0.94em;
   font-variant-numeric: tabular-nums;
 }
+/* The Findings section: worst first, each line a glyph, where it was found
+   and the sentence. */
+.cv-fsev {
+  margin: var(--sp-2) 0 var(--sp-1);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+.cv-fsev:first-child { margin-top: 0; }
+.cv-findings { list-style: none; margin: 0; padding: 0; }
+.cv-findings li { display: flex; gap: 8px; align-items: baseline; line-height: 1.5; }
+.cv-findings .fg { cursor: default; }
+.cv-fenv {
+  flex: none;
+  min-width: 5.5em;
+  font-family: var(--mono);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
 .cv-note {
   color: var(--muted);
   font-size: var(--fs-micro);

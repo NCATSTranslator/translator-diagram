@@ -12,6 +12,7 @@ from translator_diagram.charts import CHART_META_FILES
 from translator_diagram.components import ComponentFile, Deployment, parse_component
 from translator_diagram.files import (
     chart_commit_path,
+    commit_path,
     derived_path,
     endpoint_key,
     endpoint_path,
@@ -20,6 +21,7 @@ from translator_diagram.files import (
     infores_catalog_path,
     manifest_path,
     otel_path,
+    refs_path,
     releases_path,
     repo_meta_path,
     smartapi_path,
@@ -188,6 +190,18 @@ class _Probes:
 
     def repo_meta(self, repo, body):
         self._write(repo_meta_path(self.root, repo), body)
+        return self
+
+    def refs(self, repo, tags=None, heads=None, commits=()):
+        """One repository's tags and branches as matching-refs bodies
+        (`{name: sha}` each), plus any looked-up commits by hash."""
+        for kind, names in (("tags", tags), ("heads", heads)):
+            self._write(refs_path(self.root, repo, kind), [
+                {"ref": f"refs/{kind}/{name}", "object": {"sha": sha, "type": "commit"}}
+                for name, sha in (names or {}).items()
+            ])
+        for sha in commits:
+            self._write(commit_path(self.root, repo, sha), {"sha": sha})
         return self
 
     def file(self, relative, text):

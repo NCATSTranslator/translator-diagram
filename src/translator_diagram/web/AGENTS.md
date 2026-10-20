@@ -268,6 +268,49 @@ components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
 
+**Finding glyphs sit beside the thing they are about, not one per cell.**
+A cell can carry a finding about its deployment (the version pill) and each
+release it runs on (a data pill), and a reader scanning a column for a ✕
+should land on the thing that is wrong. One glyph
+per cell would send them to the tooltip to find out which. The anchor is
+the payload's `about`, and `TD.findings.marks` draws one button per
+severity present at that anchor, so three warnings about one version are
+one ◆ whose tooltip lists three lines. The severities are three *shapes*
+(✕ ▲ ◆) and not three colours alone, for the same reason the drift tint
+comes with a ≠. A glyph is a `<button>` because it opens the component's
+page at its Findings section; in the Component view's own matrix the same
+click only scrolls.
+
+**Findings about the host are the dot, not a glyph beside it.** A glyph
+after the green light read as belonging to the version pill next to it.
+So the online light itself carries them (`hostState` in core.js): red when
+the host is down or something severe is wrong with what it serves, amber
+when it answers but a finding says look closer, green when it answers and
+nothing does, and no dot when nothing was probed — unless a host finding
+exists anyway, which is the undeployed cell whose conventional address
+answered as another service. With findings the dot is a button whose
+tooltip lists every severity, worst first.
+
+**A pill's border is its own status; the cell's tint is the cell's.** The
+version pill used to take the down ink whenever its cell was down, so a
+version copied from the registry turned red for a host that had nothing to
+do with it, and the Biolink pill with it. Now `TD.findings.status` colours a
+pill's border amber for a finding about *that* pill or drift on it and red
+for a severe one, and nothing else reaches the border.
+
+**The data pills are the version pill's size, and white.** The data a
+deployment runs on used to be a micro-font caption, and read as a footnote
+to the version. A release of Babel or of the Biolink Model moves through
+the environments on its own schedule, and whether it has reached prod is
+read off this line as much as off the version's, so the pill is the same
+size and weight, with the axis's name inside at a lighter weight and the
+accent on the text so the two kinds of version cannot be mistaken for each
+other. It was filled in the accent at first, and went white because a fill
+leaves the border nothing to say. Below 1300px it may break between name
+and number — on one
+line it pushed the table past the window at 1000 and 1200px, which is
+issue #31's failure — and a broken pill is drawn as a box.
+
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`
 would spend the first click repainting a light machine light and read as a
