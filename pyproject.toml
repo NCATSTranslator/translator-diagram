@@ -24,6 +24,12 @@ dev = [
     "rumdl>=0.2.62",
     "jsonschema>=4.0",
 ]
+# tools/shoot.py's browser. Its own group, not dev: CI runs the tests and
+# never needs a 150MB Chromium, and a developer opts in with
+# `uv run --group shots ...` plus one `playwright install chromium`.
+shots = [
+    "playwright>=1.64",
+]
 
 [build-system]
 requires = ["hatchling"]
