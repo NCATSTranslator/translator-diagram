@@ -37,6 +37,7 @@ component_type: Utility
 # and `nodenorm-loader`); it has since been removed from ci, test and prod.
 refactor_status: Already removed
 layer: Shared services
+kind: service
 hosted_at: RENCI
 
 identifiers:

@@ -40,6 +40,7 @@ description: |-
   - PMC ids take no prefix (`PMC6365303`).
 owner: CoCoWG
 refactor_status: Removed after Refactor
+kind: service
 hosted_at: ITRB
 
 itrb:

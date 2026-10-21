@@ -101,6 +101,18 @@ claim it, none is. That is usually what you want, and it is why a stale
 registration matters: `nodenorm-redis` has its infores commented out until its
 record stops listing a host it no longer runs on.
 
+**`kind` says what sort of thing a component is**, whatever its Translator
+role: `service` (an HTTP API, what SmartAPI registers), `web-app`,
+`datastore`, `pipeline`, `job`, `library` or `cli`. The schema defines each.
+Leave it absent when the component is several at once or you cannot tell;
+`dogpark-ranger` and `cam-pipeline` are absent today for those reasons.
+
+**`smartapi: null` is for a component with no API to register**: a library, a
+web interface, a file server, a cron job. Leave the field absent for an API
+that simply has no registration yet, such as `nodenorm-es`, so the dashboard
+keeps listing it as not registered. A `null` tells it there is nothing to
+chase.
+
 **`summary`, `description` and `notes` answer different questions.**
 
 - `summary` — *what is this?* One line, plain text, that makes sense on its

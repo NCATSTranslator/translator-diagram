@@ -13,6 +13,7 @@ name: DINGO Ingests
 owner: DINGO
 refactor_status: New in Refactor
 layer: DINGO Ingests
+kind: pipeline
 hosted_at: ITRB
 
 connections:

@@ -13,9 +13,13 @@ name: Translator SDK
 owner: CoCoWG
 refactor_status: New in Refactor
 layer: TSDK/TCT
+kind: library
 hosted_at: Local
 
 identifiers:
+  # Checked 2026-10-21: a library people build against, run locally; there is no
+  # service to register.
+  smartapi: null
   helm_chart: null
 
 itrb:

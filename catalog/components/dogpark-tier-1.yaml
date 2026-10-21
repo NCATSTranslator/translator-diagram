@@ -16,6 +16,7 @@ owner: DOGSURF
 refactor_status: New in Refactor
 layer: DogPark and Retriever
 part_of: Dog Park
+kind: datastore
 hosted_at: ITRB
 
 itrb:
