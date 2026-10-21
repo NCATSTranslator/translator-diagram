@@ -18,6 +18,11 @@ refactor_status: New in Refactor
 layer: KGX Storage
 hosted_at: ITRB
 
+identifiers:
+  # Checked 2026-10-21: a file server with no OpenAPI document (see endpoints),
+  # so nothing to register.
+  smartapi: null
+
 itrb:
   app: kgx-storage-pipeline
   group: KGX

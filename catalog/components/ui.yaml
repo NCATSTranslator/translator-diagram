@@ -15,6 +15,11 @@ refactor_status: Continues into Refactor
 layer: ARS and UI
 hosted_at: ITRB
 
+identifiers:
+  # Checked 2026-10-21: the web interface, which serves pages rather than an
+  # API.
+  smartapi: null
+
 itrb:
   app: translator-ui-ci-pipeline
   group: UI

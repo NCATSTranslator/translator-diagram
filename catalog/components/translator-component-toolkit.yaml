@@ -16,6 +16,8 @@ layer: TSDK/TCT
 hosted_at: Local
 
 identifiers:
+  # Checked 2026-10-21: a toolkit run locally; there is no service to register.
+  smartapi: null
   helm_chart: null
 
 itrb:

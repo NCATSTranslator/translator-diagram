@@ -16,6 +16,11 @@ refactor_status: Continues into Refactor
 layer: ARS and UI
 hosted_at: ITRB
 
+identifiers:
+  # Checked 2026-10-21: a cron job that runs performance tests; it serves no
+  # API.
+  smartapi: null
+
 itrb:
   app: Utility
   group: NCATS
