@@ -233,3 +233,9 @@ test("an expanded row's Component column holds the connections, in one cell span
   assert.doesNotMatch(narrow, /dk-conn|spanned/);
   assert.equal((narrow.match(/class="dk dk-name "/g) || []).length, trs);
 });
+
+test("a detail label keeps its last word with its (?), so a narrow column never strands the (?)", () => {
+  reset();
+  const html = table.detailRowsHtml({ ...ROWS[1], environments: { prod: cell("2.0", { asyncquery: true }) } }, "Step 2");
+  assert.match(html, /<span class="dkl">Async <span class="dkw">query<button type="button" class="help"/);
+});

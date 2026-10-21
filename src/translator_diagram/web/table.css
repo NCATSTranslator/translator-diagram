@@ -444,6 +444,11 @@ td.dk-smartapi .dkl { display: inline; }
 @media (max-width: 1150px) {
   td.dk-smartapi .dkl { display: none; }
   td.dk-owner .dkl { display: inline; }
+  /* Owner is a narrow column, and a label that cannot wrap widens it: ARAX's
+     "API DOCUMENT" pushed the table 22px past a 1000px window. */
+  tbody tr.detail > td.dk-owner { white-space: normal; padding-right: var(--sp-2); }
+  td.dk-owner .help { margin-left: 3px; }
+  td.dk-owner .dkw { white-space: nowrap; }
 }
 /* 800px is also NARROW in table.js, which draws the detail rows without the
    connections cell from there down: change the two together. */
@@ -483,7 +488,10 @@ td.dk-conn .conn {
   background: none;
   font: inherit;
   color: var(--text);
-  white-space: nowrap;
+  /* A long name wraps inside its button rather than set the column's minimum:
+     "Tier 1: ElasticSearch (KGX split out by data source)" on one line pushed
+     the table past a 1200px window once every row was open. */
+  text-align: left;
   cursor: pointer;
   text-decoration: underline;
   text-decoration-color: var(--hairline-strong);
@@ -528,6 +536,13 @@ td.dk-conn .conn.planned { color: var(--muted); text-decoration-style: dashed; }
 /* Hosts break only where table.js put a <wbr> — after a dot — so a narrow
    column wraps "shepherd.test." / "transltr.io" rather than "…transltr.i / o". */
 .dv.mono { font-size: var(--fs-label); overflow-wrap: normal; word-break: normal; }
+/* Where the environment columns are at their minimum, a host label longer
+   than the column (answerappraiser., 16 characters) may break inside itself
+   rather than widen the table past the window. Only a chunk that cannot fit
+   breaks: "transltr.io" still wraps at its dot. */
+@media (min-width: 801px) and (max-width: 1150px) {
+  .dv.mono { overflow-wrap: anywhere; }
+}
 .rel:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 /* Running in one of the environments on this row: the link between this
    column and the four to its right, and the only release worth the ink. */

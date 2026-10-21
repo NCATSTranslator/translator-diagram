@@ -125,8 +125,11 @@ breakpoints. Measured at fourteen widths from 760 to 1700px on the redrawn
 table, `div.tablewrap` never overflows from 1000px up (`scrollWidth` equals
 `clientWidth` at every step) with every row collapsed; at 900px and below
 the environment columns run past the window and the wrap scrolls, so nothing
-is unreachable. An open row can widen it: ARAX's, whose titles and hosts are
-long, overflows by 22px at 1000px and is clean again by 1050px (4bf47a2). The
+is unreachable. With every row open it holds too, measured at nine widths from
+1000 to 1700px; three rules in `table.css` keep it so, each written where it
+applies: the Owner column's labels wrap between 800 and 1150px, a host label
+longer than its column may break inside itself there, and a long connection
+name wraps inside its button. Each was a measured overflow first. The
 earlier table overflowed between about 1490 and 1535px (issue #31) because a
 wide-window rule widened the environment columns and the names and
 repository slugs could not wrap; both are gone. The overflow is not visible

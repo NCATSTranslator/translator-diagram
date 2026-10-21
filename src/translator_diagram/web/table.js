@@ -374,6 +374,15 @@
 
      `skipName` leaves out the Component column's cell, for the rows a
      connections cell spans (connectionsCell). */
+  /* Where a narrow column wraps a label, its last word and the (?) wrap
+     together (`.dkw`), so the (?) is never on a line alone. A word joiner
+     before the button was tried first: Chrome still breaks before a button. */
+  function labelHtml(label, help) {
+    if (!help) return esc(label);
+    const at = label.lastIndexOf(" ") + 1;
+    return `${esc(label.slice(0, at))}<span class="dkw">${esc(label.slice(at))}${help}</span>`;
+  }
+
   function labelCells(row, label, about, skipName) {
     const help = about
       ? `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
@@ -382,7 +391,7 @@
     return COLUMNS
       .filter((column) => !column.env && !(skipName && column.key === "name"))
       .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${
-        esc(label)}${help}</span></td>`)
+        labelHtml(label, help)}</span></td>`)
       .join("");
   }
 
