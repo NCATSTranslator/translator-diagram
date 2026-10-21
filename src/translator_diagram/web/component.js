@@ -726,10 +726,9 @@
   /* The chips of a connections group, or nothing. */
   const conns = (items) => (items.length ? `<div class="cv-conns">${items.join("")}</div>` : "");
 
-  function connGroup(title, ids, plannedIds) {
-    const items = list(ids).map((id) => connButton(id, false))
-      .concat(list(plannedIds).map((id) => connButton(id, true)));
-    return heading(title) + (conns(items) || muted("None recorded."));
+  function connGroup(group) {
+    const items = group.items.map((item) => connButton(item.id, item.planned));
+    return heading(group.title) + (conns(items) || muted("None recorded."));
   }
 
   /* Catalog edges follow the data (`build_catalog_edges`): what this
@@ -748,27 +747,12 @@
   }
 
   function panelConnections(row) {
-    const connections = row.connections || {};
-    const all = rows();
-
-    const reverse = (key) => all
-      .filter((other) => other.id !== row.id
-        && list((other.connections || {})[key]).indexOf(row.id) >= 0)
-      .map((other) => other.id);
-
     const externalsHtml = conns(list(row.externals).map((entry) =>
       `<span class="cv-conn static">${TD.row.arrow(entry.direction)}
           <span class="cv-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
 
-    const parts = [
-      connGroup("Gets results from",
-        connections.gets_results_from, connections.planned_gets_results_from),
-      connGroup("Provides results to",
-        reverse("gets_results_from"), reverse("planned_gets_results_from")),
-      connGroup("Calls", connections.calls, connections.planned_calls),
-      connGroup("Called by", reverse("calls"), reverse("planned_calls")),
-      heading("Externals") + externalsHtml,
-    ];
+    const parts = TD.row.connections(row).map(connGroup)
+      .concat([heading("Externals") + externalsHtml]);
 
     // A second opinion, kept separate from the hand-recorded graph rather than
     // merged into it: the catalog is a different claim by a different group.

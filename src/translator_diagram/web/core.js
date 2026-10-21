@@ -226,7 +226,41 @@
   const reach = (cell) =>
     (typeof (cell || {}).reachable === "boolean" ? (cell.reachable ? "up" : "down") : "");
 
-  TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach };
+  /* A component's recorded connections, in four groups in data-flow order:
+     what it gets results from, what it provides them to, what it calls and
+     what calls it. The second and fourth are read off the other rows, since
+     a component file records only its own outgoing edges. In each group the
+     planned ones follow the implemented ones. The Component view and the
+     table's expanded row both draw these. */
+  const CONNECTION_GROUPS = [
+    { key: "gets_results_from", title: "Gets results from", own: "gets_results_from" },
+    { key: "provides_results_to", title: "Provides results to", reverse: "gets_results_from" },
+    { key: "calls", title: "Calls", own: "calls" },
+    { key: "called_by", title: "Called by", reverse: "calls" },
+  ];
+
+  function connections(row) {
+    const id = (row || {}).id;
+    const own = (row || {}).connections || {};
+    const all = (TD.DATA || {}).rows || [];
+    const ids = (field) => (Array.isArray(own[field]) ? own[field] : []);
+    const pointingHere = (field) => all
+      .filter((other) => other.id !== id
+        && ((other.connections || {})[field] || []).indexOf(id) >= 0)
+      .map((other) => other.id);
+    return CONNECTION_GROUPS.map((group) => {
+      const pick = group.own ? ids : pointingHere;
+      const field = group.own || group.reverse;
+      return {
+        key: group.key,
+        title: group.title,
+        items: pick(field).map((other) => ({ id: other, planned: false }))
+          .concat(pick(`planned_${field}`).map((other) => ({ id: other, planned: true }))),
+      };
+    });
+  }
+
+  TD.row = { byId: rowById, ownerLabel, repoLabel, updatedLabel, arrow, reach, connections };
 
   /* --- The cell model ---------------------------------------------------- */
 

@@ -151,3 +151,24 @@ test("a helm-sourced version links to the chart, and a non-http host never links
   assert.equal(m.href, "https://github.com/x/devops/tree/develop/helm/svc");
   assert.equal(m.facts.find((f) => f.label === "Host").href, "");
 });
+
+test("connections are four groups in data-flow order, the reverse ones read off the other rows", () => {
+  boot({ rows: [
+    { id: "ars", connections: { gets_results_from: ["arax"], planned_gets_results_from: ["bte"], calls: ["nn"] } },
+    { id: "arax", connections: {} },
+    { id: "ui", connections: { gets_results_from: ["ars"], planned_calls: ["ars"] } },
+    { id: "kit", connections: { calls: ["ars"] } },
+  ] });
+  const groups = row.connections(row.byId("ars"));
+  assert.deepEqual(groups.map((g) => g.title),
+    ["Gets results from", "Provides results to", "Calls", "Called by"]);
+  assert.deepEqual(groups.map((g) => g.items), [
+    [{ id: "arax", planned: false }, { id: "bte", planned: true }],
+    [{ id: "ui", planned: false }],
+    [{ id: "nn", planned: false }],
+    // Implemented first, then planned, whatever order the rows come in.
+    [{ id: "kit", planned: false }, { id: "ui", planned: true }],
+  ]);
+  assert.deepEqual(row.connections(row.byId("arax"))[1].items, [{ id: "ars", planned: false }]);
+  assert.ok(row.connections(null).every((g) => g.items.length === 0));
+});
