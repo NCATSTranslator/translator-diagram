@@ -14,6 +14,7 @@ summary: A small server that periodically runs performance tests on a cron job
 owner: NCATS
 refactor_status: Continues into Refactor
 layer: ARS and UI
+kind: job
 hosted_at: ITRB
 
 identifiers:

@@ -16,6 +16,7 @@ summary: >-
 owner: DINGO
 refactor_status: New in Refactor
 layer: KGX Storage
+kind: web-app
 hosted_at: ITRB
 
 identifiers:

@@ -13,6 +13,7 @@ name: NameRes ES
 owner: CoCoWG
 refactor_status: In development
 layer: Shared services
+kind: service
 hosted_at: ITRB
 
 itrb:

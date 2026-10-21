@@ -13,6 +13,7 @@ name: NodeNorm ES
 owner: CoCoWG
 refactor_status: New in Refactor
 layer: Shared services
+kind: service
 hosted_at: ITRB
 
 identifiers:

@@ -16,6 +16,7 @@ owner: NCATS
 component_type: ARS
 refactor_status: Continues into Refactor
 layer: ARS and UI
+kind: service
 hosted_at: ITRB
 
 identifiers:

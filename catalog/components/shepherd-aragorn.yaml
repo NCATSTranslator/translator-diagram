@@ -15,6 +15,7 @@ component_type: ARA
 refactor_status: New in Refactor
 layer: Shepherd
 part_of: Shepherd
+kind: service
 hosted_at: ITRB
 
 identifiers:

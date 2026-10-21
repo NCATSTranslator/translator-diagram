@@ -17,6 +17,7 @@ description: |-
 owner: DOGSLED
 refactor_status: Continues into Refactor
 layer: Shared services
+kind: job
 hosted_at: RENCI
 
 identifiers:

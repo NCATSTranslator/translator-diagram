@@ -13,6 +13,7 @@ name: Translator SDK
 owner: CoCoWG
 refactor_status: New in Refactor
 layer: TSDK/TCT
+kind: library
 hosted_at: Local
 
 identifiers:

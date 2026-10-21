@@ -13,6 +13,7 @@ name: Translator Component Toolkit
 owner: CATRAX
 refactor_status: Continues into Refactor
 layer: TSDK/TCT
+kind: library
 hosted_at: Local
 
 identifiers:

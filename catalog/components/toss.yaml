@@ -28,6 +28,7 @@ owner: DOGSLED
 # None of the enum's values fits a service that was never deployed to
 # Translator; this is the nearest, pending #69.
 refactor_status: Continues into Refactor
+kind: web-app
 hosted_at: RENCI
 
 identifiers:

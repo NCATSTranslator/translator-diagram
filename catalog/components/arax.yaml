@@ -13,6 +13,7 @@ name: RTX/ARAX
 owner: CATRAX
 component_type: ARA
 refactor_status: Continues into Refactor
+kind: service
 hosted_at: ITRB
 
 identifiers:
