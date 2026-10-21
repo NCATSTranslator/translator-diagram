@@ -230,7 +230,10 @@ Click a component's name in the table, or a node on the map, to open its
 Component page; Back returns to where you were. Click anywhere else on a row,
 or its chevron, to expand it inline for a side-by-side environment read
 without leaving the table: one line per fact, each with a (?) that says where
-its values come from, and the component's releases under its repository. A
+its values come from, the component's releases under its repository, and,
+under its name, what it gets results from, provides them to, calls and is
+called by, each opening that component's page. (Below 800px wide that column
+holds the labels instead, and the connections are on the Component page.) A
 legend beside the filters says what the cell colours mean.
 
 ```bash

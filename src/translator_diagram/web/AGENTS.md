@@ -238,6 +238,19 @@ in `table.css`). The first-column
 label was tried in #90 and read as detached from the numbers it named; the
 ladder is more rules, and the right answer.
 
+**An expanded row's connections are decided in JS, at render time.** They
+fill the Component column of the detail rows, which is empty above 800px
+because the labels sit in the rightmost non-environment column (the ladder).
+They are one cell with a `rowspan`, and a rowspan cannot be undone in CSS:
+hiding that cell at 800px, where the Component column becomes the label
+column, would move every later row's cells one column left. So
+`detailRowsHtml` takes `narrow` as an argument, `isNarrow` reads `NARROW` in
+`table.js`, a `change` listener on it redraws the open rows, and the 800px
+there and in the ladder must change together. The rows the cell spans start
+at Owner, so `tr.detail.spanned` stops that cell being sticky or drawing the
+group spine. The grouping is `TD.row.connections`, which the Component view
+reads too.
+
 **A component has a view of its own, not a drawer beside the table.** The
 440px side drawer this replaced could not fit its six tabs on one row, could
 not show two environments side by side, and needed its own column ladder in

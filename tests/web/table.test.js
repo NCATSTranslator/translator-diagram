@@ -121,8 +121,10 @@ test("an expanded row shows only the fields some environment answered", () => {
   assert.doesNotMatch(arax, /Biolink/);
   // The label is written into every non-environment cell, each with its
   // column's drop class, so CSS can show the one beside the first environment.
+  // At narrow widths that includes the Component column.
   assert.match(arax, /class="dk dk-smartapi drop-sm"/);
-  assert.match(arax, /class="dk dk-name "/);
+  assert.doesNotMatch(arax, /class="dk dk-name "/);
+  assert.match(table.detailRowsHtml(ROWS[1], "Step 2", { narrow: true }), /class="dk dk-name "/);
   // And a (?) that says where the row comes from.
   assert.match(arax, /class="help" data-tip="fact" data-id="arax"\s+data-fact="TRAPI"/);
   const ars = table.detailRowsHtml(ROWS[0], "Step 1");
@@ -195,4 +197,39 @@ test("an environment cell says why it has no version, and marks drift", () => {
   assert.match(drifting, /≠/);
   assert.match(drifting, /aria-label="disagrees with the row"/);
   assert.doesNotMatch(table.envCell(ROWS[1], "prod"), /drift/);
+});
+
+test("an expanded row's Component column holds the connections, in one cell spanning the detail", () => {
+  const rows = [
+    { ...ROWS[0], connections: { gets_results_from: ["arax"], calls: ["ui"], planned_calls: ["nope"] } },
+    { ...ROWS[1], connections: {},
+      environments: { ...ROWS[1].environments, prod: cell("2.0", { trapi: "1.5", biolink: "4.2", location: "ITRB" }) } },
+    ROWS[2],
+    { ...ROWS[2], id: "lone", name: "Lone" },
+  ];
+  TD.boot({ rows, environments: ["ci", "prod"] });
+  TD.state = { ...TD.url.defaults() };
+  table.ensureColumns();
+  const html = table.detailRowsHtml(rows[1], "Step 2");
+  const trs = html.match(/<tr /g).length;
+  // One cell, in the first row, spanning every detail row; the rest start at
+  // Owner, marked so CSS does not make that cell sticky or draw the spine on it.
+  assert.equal(trs, 3);
+  assert.match(html, new RegExp(`^<tr class="detail grp detail-first"[^>]*><td class="dk-conn" rowspan="${trs}">`));
+  assert.equal((html.match(/class="dk-conn"/g) || []).length, 1);
+  assert.equal((html.match(/class="detail grp[^"]*spanned"/g) || []).length, trs - 1);
+  // arax is what ars gets results from, so ars is what arax provides them to.
+  assert.match(html, /<span class="cgl">Provides results to<\/span><button type="button" class="conn" data-open="ars"/);
+  assert.doesNotMatch(html, /Gets results from/);
+  // ars's own: an unknown id keeps its id as its name, and planned is marked.
+  const ars = table.detailRowsHtml(rows[0], "Step 1");
+  assert.match(ars, /Gets results from<\/span><button[^>]*data-open="arax"[^>]*>.*ARAX<\/button>/s);
+  assert.match(ars, /class="conn planned" data-open="nope" title="Open nope \(planned, not yet implemented\)">nope</);
+  // Nothing recorded either way says so.
+  assert.match(table.detailRowsHtml(rows[3], "Step 3"), /No connections recorded/);
+  assert.match(table.detailRowsHtml(rows[2], "Step 3"), /Called by<\/span><button[^>]*data-open="ars"/);
+  // Narrow: today's rows, no connections, every row with its own label cell.
+  const narrow = table.detailRowsHtml(rows[1], "Step 2", { narrow: true });
+  assert.doesNotMatch(narrow, /dk-conn|spanned/);
+  assert.equal((narrow.match(/class="dk dk-name "/g) || []).length, trs);
 });

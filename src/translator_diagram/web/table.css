@@ -445,10 +445,55 @@ td.dk-smartapi .dkl { display: inline; }
   td.dk-smartapi .dkl { display: none; }
   td.dk-owner .dkl { display: inline; }
 }
+/* 800px is also NARROW in table.js, which draws the detail rows without the
+   connections cell from there down: change the two together. */
 @media (max-width: 800px) {
   td.dk-owner .dkl { display: none; }
   td.dk-name .dkl { display: inline; }
 }
+
+/* The connections, in one cell spanning the detail rows' Component column
+   (connectionsCell). It is the first cell of the first detail row, so it is
+   the sticky one and draws the group's spine down its whole height. The
+   rows it spans start at the Owner column instead, and that cell must be
+   neither sticky nor spined. */
+tbody tr.detail.spanned > td:first-child { position: relative; left: auto; z-index: auto; }
+tbody tr.detail.spanned > td:first-child::before { content: none; }
+tbody tr.detail > td.dk-conn {
+  padding: var(--sp-1) var(--cell-pad-x) var(--sp-2) calc(var(--cell-pad-left) + 24px);
+  border-bottom: 1px solid var(--hairline);
+  line-height: 1.5;
+}
+td.dk-conn .cg + .cg { margin-top: var(--sp-1); }
+td.dk-conn .cgl {
+  display: block;
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--muted);
+}
+/* The name in its own row is the same button; these are its quieter copy. */
+td.dk-conn .conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 12px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--hairline-strong);
+  text-underline-offset: 2px;
+}
+td.dk-conn .conn:hover, td.dk-conn .conn:focus-visible {
+  color: var(--accent);
+  text-decoration-color: var(--accent);
+}
+td.dk-conn .conn.planned { color: var(--muted); text-decoration-style: dashed; }
 /* The (?) beside a label: where this row's values come from, on hover, on
    focus and so on a click. */
 .help {

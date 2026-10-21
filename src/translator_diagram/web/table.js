@@ -370,14 +370,17 @@
      once put in the first column instead, and read as detached from the
      numbers it named.
 
-     Version is deliberately absent: it is the row directly above. */
-  function labelCells(row, label, about) {
+     Version is deliberately absent: it is the row directly above.
+
+     `skipName` leaves out the Component column's cell, for the rows a
+     connections cell spans (connectionsCell). */
+  function labelCells(row, label, about, skipName) {
     const help = about
       ? `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
            data-fact="${esc(label)}" aria-label="Where ${esc(label)} comes from">?</button>`
       : "";
     return COLUMNS
-      .filter((column) => !column.env)
+      .filter((column) => !column.env && !(skipName && column.key === "name"))
       .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${
         esc(label)}${help}</span></td>`)
       .join("");
@@ -388,6 +391,7 @@
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
+      flags.spanned ? ["spanned"] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
@@ -406,10 +410,42 @@
     return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
+  /* One connection: the component's coin and name, as a button that opens its
+     page, exactly as the name in its own row does (the body's click handler
+     answers both). */
+  function connectionButton(item) {
+    const other = rowById(item.id);
+    const name = other ? other.name : item.id;
+    const title = `Open ${name}${item.planned ? " (planned, not yet implemented)" : ""}`;
+    return `<button type="button" class="conn${item.planned ? " planned" : ""}" data-open="${
+      esc(item.id)}" title="${esc(title)}">${other ? TD.owner.coin(other.owner) : ""}${esc(name)}</button>`;
+  }
+
+  /* The connections, in the Component column of the detail rows, which is
+     otherwise empty above the narrow breakpoint: the labels sit in the
+     rightmost non-environment column, and that is never this one there. One
+     cell spanning every detail row, in TD.row.connections' groups and order;
+     the externals and the catalog's view stay on the Component page. */
+  function connectionsCell(row, span) {
+    const groups = TD.row.connections(row).filter((group) => group.items.length);
+    const body = groups.length
+      ? groups.map((group) => `<div class="cg"><span class="cgl">${esc(group.title)}</span>${
+        group.items.map(connectionButton).join("")}</div>`).join("")
+      : '<span class="why">No connections recorded</span>';
+    return `<td class="dk-conn" rowspan="${span}">${body}</td>`;
+  }
+
   /* Only the facts some environment answered, each in its environment's
      column. The releases are not here: they are in the Repository cell of
-     the row above, shown once it is open. */
-  function detailRowsHtml(row, group) {
+     the row above, shown once it is open.
+
+     `narrow` is whether the window is at or under NARROW. There the
+     Component column is the label column, so the rows are drawn without the
+     connections cell. It is an argument rather than a CSS rule because a
+     rowspan cannot be undone in CSS: hiding the spanning cell would move
+     every later row's cells one column left. */
+  function detailRowsHtml(row, group, options) {
+    const narrow = !!(options && options.narrow);
     const models = Object.fromEntries(TD.ENVS.map((env) => [env, TD.cell(row, env)]));
     const facts = [];
     for (const env of TD.ENVS) {
@@ -417,17 +453,36 @@
         if (!facts.some((f) => f.label === fact.label)) facts.push(fact);
       }
     }
+    const lead = (flags) => (narrow || flags.index > 0 ? "" : connectionsCell(row, flags.count));
     const make = facts.map((fact) => (flags) =>
-      `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, fact.label, fact.about)}${
+      `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, fact.label, fact.about, !narrow)}${
         TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === fact.label))).join("")
       }</tr>`);
     if (!make.length) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, "", "")}<td
+      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, "", "", !narrow)}<td
         class="dv note" colspan="${TD.ENVS.length}">Nothing else is recorded for this component.</td></tr>`);
     }
     return make
-      .map((build, index) => build({ first: index === 0, last: index === make.length - 1 }))
+      .map((build, index) => build({
+        index,
+        count: make.length,
+        first: index === 0,
+        last: index === make.length - 1,
+        spanned: !narrow && index > 0,
+      }))
       .join("");
+  }
+
+  /* At and under this width the Component column holds the detail rows'
+     labels: the last step of the label ladder in table.css, which must change
+     with it. */
+  const NARROW = "(max-width: 800px)";
+  function isNarrow() {
+    try {
+      return typeof matchMedia === "function" && matchMedia(NARROW).matches;
+    } catch {
+      return false;
+    }
   }
 
   /* Everything the chevron opened, in document order. Walked rather than
@@ -447,7 +502,7 @@
 
   /* `group` is the band this row sits under, or null in an order that has no
      bands (by date, by environment). */
-  function rowHtml(row, group) {
+  function rowHtml(row, group, options) {
     const open = (state().expand || []).indexOf(row.id) >= 0;
     const classes = ["row"];
     if (group != null) classes.push("grp");
@@ -457,16 +512,16 @@
     const step = group == null ? "" : ` data-step="${esc(group)}"`;
     const body = `<tr class="${classes.join(" ")}" id="c-${esc(row.id)}" data-id="${esc(row.id)}"${
       step}>${COLUMNS.map((column) => column.cell(row)).join("")}</tr>`;
-    return open ? body + detailRowsHtml(row, group) : body;
+    return open ? body + detailRowsHtml(row, group, options) : body;
   }
 
-  function bodyHtml(rows) {
+  function bodyHtml(rows, options) {
     if (!rows.length) {
       return `<tr><td class="empty" colspan="${COLUMNS.length}"
         >No components match these filters.</td></tr>`;
     }
     const label = bandKey();
-    if (!label) return rows.map((row) => rowHtml(row, null)).join("");
+    if (!label) return rows.map((row) => rowHtml(row, null, options)).join("");
     // Grouped as they come, so a step filtered down to nothing leaves no empty
     // band, and a visible gap — Step 1, Step 2, Step 8 — reports honestly what
     // the filter took out.
@@ -479,7 +534,7 @@
     }
     return groups
       .map((group) =>
-        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label)).join(""))
+        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label, options)).join(""))
       .join("");
   }
 
@@ -608,7 +663,7 @@
     // The band this row is under, read back off the row rather than passed in:
     // the click handler knows the id, not the grouping.
     const group = tr.classList.contains("grp") ? tr.dataset.step ?? "" : null;
-    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group));
+    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group, { narrow: isNarrow() }));
     tr.classList.add("open");
   }
 
@@ -666,6 +721,15 @@
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
+
+    // An open row's detail is drawn for one side of NARROW (detailRowsHtml),
+    // so crossing it redraws the body. Only then: nothing else depends on it.
+    if (typeof matchMedia === "function") {
+      matchMedia(NARROW).addEventListener("change", () => {
+        if (!(state().expand || []).length) return;
+        body.innerHTML = bodyHtml(TD.sort.rows(visibleRows(), sortColumn(), state().dir), { narrow: isNarrow() });
+      });
+    }
   }
 
   table.render = function render(container) {
@@ -675,7 +739,7 @@
     const rows = TD.sort.rows(visibleRows(), sortColumn(), state().dir);
     TD.ui.tooltip.hide();
     head.innerHTML = headHtml();
-    body.innerHTML = bodyHtml(rows);
+    body.innerHTML = bodyHtml(rows, { narrow: isNarrow() });
     return { shown: rows.length, total: (TD.DATA.rows || []).length };
   };
 
