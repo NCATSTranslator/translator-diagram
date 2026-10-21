@@ -123,8 +123,10 @@ render.
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured at fourteen widths from 760 to 1700px on the redrawn
 table, `div.tablewrap` never overflows from 1000px up (`scrollWidth` equals
-`clientWidth` at every step); at 900px and below the environment columns
-run past the window and the wrap scrolls, so nothing is unreachable. The
+`clientWidth` at every step) with every row collapsed; at 900px and below
+the environment columns run past the window and the wrap scrolls, so nothing
+is unreachable. An open row can widen it: ARAX's, whose titles and hosts are
+long, overflows by 22px at 1000px and is clean again by 1050px (4bf47a2). The
 earlier table overflowed between about 1490 and 1535px (issue #31) because a
 wide-window rule widened the environment columns and the names and
 repository slugs could not wrap; both are gone. The overflow is not visible
