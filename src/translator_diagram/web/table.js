@@ -241,7 +241,13 @@
 
   /* The name on the first line and, under it, the summary; the id joins the
      second line only when the row is open, because it is the key a link or a
-     search uses rather than a thing to read down a column. */
+     search uses rather than a thing to read down a column.
+
+     The name is text, not a link: a click on it opens the row like a click
+     anywhere else on it, since the open row is where the connections are.
+     The arrow at the cell's right edge opens the component's page, and the
+     arrows line up down the table, so they read as a column without costing
+     one. */
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
@@ -252,8 +258,9 @@
     return `<td><span class="cnamewrap"><button type="button" class="chev"
         aria-expanded="${open}" data-expand="${esc(row.id)}"
         aria-label="Environment detail for ${esc(row.name)}">${TD.ui.CHEVRON}</button>${
-      TD.owner.coin(row.owner, "narrow")}<button type="button" class="cname"
-        data-open="${esc(row.id)}">${esc(row.name)}</button>${externals}</span>
+      TD.owner.coin(row.owner, "narrow")}<span class="cname">${esc(row.name)}</span>${externals}<button
+        type="button" class="openpage" data-open="${esc(row.id)}" title="Open the ${esc(row.name)} page"
+        aria-label="Open the ${esc(row.name)} page">${TD.ui.OPEN}</button></span>
       <span class="csub"><span class="cid">${esc(row.id)}</span>${summary}</span></td>`;
   }
 
@@ -441,7 +448,11 @@
       ? groups.map((group) => `<div class="cg"><span class="cgl">${esc(group.title)}</span>${
         group.items.map(connectionButton).join("")}</div>`).join("")
       : '<span class="why">No connections recorded</span>';
-    return `<td class="dk-conn" rowspan="${span}">${body}</td>`;
+    // Words as well as the arrow on the row: someone who has opened the row
+    // and read it is deciding whether to go further.
+    const open = `<button type="button" class="openlink" data-open="${esc(row.id)}">Open the ${
+      esc(row.name)} page ${TD.ui.OPEN}</button>`;
+    return `<td class="dk-conn" rowspan="${span}">${open}${body}</td>`;
   }
 
   /* Only the facts some environment answered, each in its environment's
@@ -713,7 +724,7 @@
 
     /* A click anywhere on a row toggles it, so a reader looking at the
        environment columns need not travel back to the chevron. Links and
-       buttons in the row keep their own job (the name opens the component's page), a
+       buttons in the row keep their own job (the arrow opens the component's page), a
        drag that selected text to copy is not a click, and the detail rows
        never collapse their row: they hold the values people copy. The chevron
        stays the keyboard and screen-reader control; the <tr> is not made a

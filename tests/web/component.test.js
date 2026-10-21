@@ -20,7 +20,7 @@ const WEB = path.join(__dirname, "..", "..", "src", "translator_diagram", "web")
 
 globalThis.TD = {};
 vm.runInThisContext(fs.readFileSync(path.join(WEB, "core.js"), "utf8"), { filename: "core.js" });
-globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", CARET_DOWN: "", tooltip: { bind() {}, hide() {} } };
+globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", CARET_DOWN: "", OPEN: "", tooltip: { bind() {}, hide() {} } };
 for (const file of ["table.js", "component.js"]) {
   vm.runInThisContext(fs.readFileSync(path.join(WEB, file), "utf8"), { filename: file });
 }

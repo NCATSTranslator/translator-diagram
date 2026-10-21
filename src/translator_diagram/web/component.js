@@ -974,7 +974,7 @@
     if (!row) {
       return bar + muted(id
         ? `No component has the id ${id}. Choose one above.`
-        : "Choose a component above, or click a component's name in the Overview or a node on the Map.");
+        : "Choose a component above, or use the arrow beside a component in the Overview, or click a node on the Map.");
     }
     return `${bar}<header class="cv-head">${headerHtml(row)}</header>
       <section class="cv-panel wide" id="cv-environments" aria-labelledby="cv-environments-h">

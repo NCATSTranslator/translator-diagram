@@ -37,6 +37,10 @@
   ui.CHEVRON = `<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"
     fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
     stroke-linejoin="round"><path d="M4.5 2.5 8.5 6l-4 3.5"/></svg>`;
+  // "Open this component's page": an arrow, not the chevron, which opens a row.
+  ui.OPEN = `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"
+    fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+    stroke-linejoin="round"><path d="M2 6h7.5M6.5 2.5 10 6 6.5 9.5"/></svg>`;
 
   const el = (tag, cls, html) => {
     const node = document.createElement(tag);

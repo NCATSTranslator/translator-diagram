@@ -195,8 +195,8 @@ tbody tr.band:first-child td { padding-top: var(--sp-2); }
 /* --- Component cell ------------------------------------------------------- */
 
 .cnamewrap {
-  display: inline-flex;
-  vertical-align: middle;
+  /* A block, so the page arrow at its end sits at the cell's right edge. */
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -218,17 +218,25 @@ tbody tr.row:hover .chev { color: var(--text); }
 .coin.narrow { display: none; }
 
 .cname {
-  font: inherit;
   font-size: var(--fs-name);
   font-weight: 600;
   color: var(--text);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
 }
-.cname:hover { color: var(--accent); text-decoration: underline; }
+/* The way to a component's page from its row. Quiet until the row is
+   hovered or open, so a column of arrows does not compete with the names. */
+.openpage {
+  flex: none;
+  margin-left: auto;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; background: none; padding: 0;
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: pointer;
+  border-radius: var(--r-control);
+}
+tbody tr.row:hover .openpage, tbody tr.row.open .openpage, .openpage:focus-visible { opacity: 1; }
+.openpage:hover { color: var(--accent); background: var(--raised-2); }
 .chip { margin-left: 4px; white-space: nowrap; }
 
 /* The second line: the summary, one line of it, and the id only once the row
@@ -469,6 +477,21 @@ tbody tr.detail > td.dk-conn {
   border-bottom: 1px solid var(--hairline);
   line-height: 1.5;
 }
+td.dk-conn .openlink {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: var(--sp-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+td.dk-conn .openlink:hover, td.dk-conn .openlink:focus-visible { text-decoration: underline; }
 td.dk-conn .cg + .cg { margin-top: var(--sp-1); }
 td.dk-conn .cgl {
   display: block;

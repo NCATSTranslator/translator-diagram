@@ -262,6 +262,14 @@ at Owner, so `tr.detail.spanned` stops that cell being sticky or drawing the
 group spine. The grouping is `TD.row.connections`, which the Component view
 reads too.
 
+**A component's name in the table is not a link.** A click on it opens the
+row, like a click anywhere else on the row, because the open row is where the
+connections are and it is the better first click. The page is behind the
+arrow at the cell's right edge, which sits in the same place on every row so
+the arrows read as a column without costing one, and behind a labelled button
+at the top of the open row. A new column for it would have had to take width
+from the environment columns.
+
 **A component has a view of its own, not a drawer beside the table.** The
 440px side drawer this replaced could not fit its six tabs on one row, could
 not show two environments side by side, and needed its own column ladder in

@@ -16,7 +16,7 @@ const WEB = path.join(__dirname, "..", "..", "src", "translator_diagram", "web")
 
 globalThis.TD = {};
 vm.runInThisContext(fs.readFileSync(path.join(WEB, "core.js"), "utf8"), { filename: "core.js" });
-globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", tooltip: { bind() {}, hide() {} } };
+globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", OPEN: "", tooltip: { bind() {}, hide() {} } };
 vm.runInThisContext(fs.readFileSync(path.join(WEB, "table.js"), "utf8"), { filename: "table.js" });
 const TD = globalThis.TD;
 const { table } = TD;
@@ -232,6 +232,17 @@ test("an expanded row's Component column holds the connections, in one cell span
   const narrow = table.detailRowsHtml(rows[1], "Step 2", { narrow: true });
   assert.doesNotMatch(narrow, /dk-conn|spanned/);
   assert.equal((narrow.match(/class="dk dk-name "/g) || []).length, trs);
+});
+
+test("the name opens the row; the arrow and the open row's button open the page", () => {
+  reset();
+  const html = table.bodyHtml([ROWS[0]]);
+  // The name is text, so a click on it falls through to the row and expands it.
+  assert.match(html, /<span class="cname">ARS<\/span>/);
+  assert.doesNotMatch(html, /class="cname"[^>]*data-open/);
+  assert.match(html, /<button\s+type="button" class="openpage" data-open="ars" title="Open the ARS page"/);
+  assert.match(table.detailRowsHtml(ROWS[0], "Step 1"),
+    /<td class="dk-conn" rowspan="1"><button type="button" class="openlink" data-open="ars">Open the ARS page /);
 });
 
 test("a detail label keeps its last word with its (?), so a narrow column never strands the (?)", () => {
