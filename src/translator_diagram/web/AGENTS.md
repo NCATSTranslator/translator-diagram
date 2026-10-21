@@ -195,6 +195,12 @@ a row is said once for every view.
 another; the only shared name is `TD`, which each file publishes its half of
 the page on (`TD.fmt`, `TD.table`, `TD.map`, …) and reads the others' from.
 
+The CSS has no such scope: `CSS_FILES` are concatenated into one stylesheet,
+so a class name in `table.css` shares one namespace with `controls.css` and
+the rest. Search `web/*.css` for a class before using it. A `.seg` in the
+SmartAPI cell once picked up the segmented control's flex layout and
+swallowed the space in "changed 5 months ago".
+
 ES modules were considered and not adopted. The page has to open from
 `file://`, where `import` across files is blocked, so modules would mean a
 bundler and a Node toolchain inside a build that otherwise needs only Python,
