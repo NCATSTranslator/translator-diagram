@@ -33,6 +33,15 @@ test("a record whose probe passes and lists every deployment is registered, with
   assert.equal(got.changed, "2026-05-24T00:00:00+00:00");
 });
 
+test("a record the registry has not probed is registered, but not green", () => {
+  boot({ environments: ["prod"] });
+  const got = smartapi.status({ smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc" } });
+  assert.equal(got.key, "ok");
+  assert.equal(got.dot, null);
+  assert.equal(got.changed, "");
+  assert.deepEqual(got.failures, []);
+});
+
 test("unknown is grey, not red: the registry skipped the paths, nothing failed", () => {
   boot({ environments: ["prod"] });
   const got = smartapi.status({ smartapi_record: record({ uptime_status: "unknown",
