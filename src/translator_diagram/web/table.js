@@ -6,14 +6,15 @@
   at narrow widths, and how it sorts — and three of them used to be written
   out twice, which is how a header ends up hidden without its column.
 
-  Two ideas are inherited from the page this replaces because they are what
-  make a table like this usable rather than merely correct: every filter
-  round-trips through the URL, so a view can be pasted into Slack and arrive
-  as the sender saw it; and a value in the minority across environments is
-  marked, so drift is visible without reading every cell. The mark is the
-  tint; issue #28's point — that colour alone excludes readers who cannot see
-  it — is answered by a visually-hidden sentence in the cell and by the
-  tooltip, not by a glyph printed over the version.
+  Every fact about an environment cell comes from TD.cell (core.js): the cell,
+  its tooltip and the expanded row read one model, so they cannot disagree
+  about a version or a reason. What this file decides is presentation — which
+  state a cell is in, and so which tint it gets — and the two ideas inherited
+  from the page this replaces: every filter round-trips through the URL, so a
+  view can be pasted into Slack and arrive as the sender saw it; and a value
+  in the minority across environments is marked, with a ≠ and an aria-label
+  as well as a tint, so drift is visible to a reader who cannot see colour
+  (issue #28).
 */
 
 (() => {
@@ -48,12 +49,26 @@
 
      "Environments disagree" is any of the three tinted axes, not versions
      alone: a component whose version matches everywhere while its TRAPI
-     version does not is exactly as interesting. */
-  const VERSION_VIEWS = {
+     version does not is exactly as interesting.
+
+     The last three are the complements of the sync panel's shares: each
+     share says how much of the platform has a property, and links here to
+     list the rows that do not. The URL parameter is still `versions`, for
+     the links already in the wild. */
+  const SHOW_VIEWS = {
     all: { label: "All components", test: () => true },
     differ: { label: "Environments disagree", test: hasDrift },
     known: { label: "Any version known", test: (row) => knownVersions(row).size > 0 },
     none: { label: "No version known", test: (row) => knownVersions(row).size === 0 },
+    unreachable: {
+      label: "Not reachable",
+      test: (row) => TD.ENVS.some((env) => TD.cell(row, env).reach === "down"),
+    },
+    unregistered: {
+      label: "Absent from SmartAPI record",
+      test: (row) => TD.ENVS.some((env) => TD.cell(row, env).flags.unregistered),
+    },
+    "no-smartapi": { label: "No SmartAPI record", test: (row) => !row.smartapi_record },
   };
   const DEFAULT_VIEW = "all";
 
@@ -72,10 +87,11 @@
     let text = haystacks.get(row);
     if (text === undefined) {
       text = [
-        row.id, row.name, row.owner, row.infores,
+        row.id, row.name, row.owner, row.infores, row.summary,
         row.helm_chart, (row.last_updated || {}).date, ...(row.otel_services || []),
         ...(row.releases || []).map((release) => release.tag),
         ...TD.ENVS.map((env) => (cells(row)[env] || {}).version),
+        ...TD.ENVS.map((env) => (cells(row)[env] || {}).data_release),
       ].map((value) => String(value ?? "").toLowerCase()).join("\n");
       haystacks.set(row, text);
     }
@@ -88,64 +104,84 @@
     const owners = s.owner || [];
     return (TD.DATA.rows || [])
       .filter((row) => !owners.length || owners.indexOf(row.owner) >= 0)
-      .filter((VERSION_VIEWS[s.versions] || VERSION_VIEWS[DEFAULT_VIEW]).test)
+      .filter((SHOW_VIEWS[s.versions] || SHOW_VIEWS[DEFAULT_VIEW]).test)
       .filter((row) => !needle || haystack(row).includes(needle));
   }
 
   /* --- Cells --------------------------------------------------------------- */
 
-  const sourceLabel = TD.fmt.sourceLabel;
+  const link = (url, html, cls) => {
+    const safe = TD.fmt.href(url);
+    return safe
+      ? `<a${cls ? ` class="${cls}"` : ""} href="${esc(safe)}" target="_blank" rel="noopener">${html}</a>`
+      : cls ? `<span class="${cls}">${html}</span>` : html;
+  };
 
   /* The dot, with its word for a reader who is not looking at it. */
-  function reachDot(cell) {
-    const state = TD.row.reach(cell);
-    if (!state) return "";
-    return `<span class="dot ${state}" aria-label="${
-      state === "up" ? "reachable" : "not reachable"}"></span>`;
+  function reachDot(reach) {
+    if (!reach) return "";
+    return `<span class="dot ${reach}" aria-label="${
+      reach === "up" ? "reachable" : "not reachable"}"></span>`;
+  }
+
+  /* Which of the board's states a cell is in. The tint carries this on
+     screen; the words in the cell carry it everywhere else.
+
+     "same" needs company: a component deployed in one environment agrees
+     with nobody, and tinting it green read as a claim the row never made.
+     "off" is the page's own gap (no address on file); an absence the page is
+     sure of — no such host, no server listed, not a hosted service — is
+     left white, because there is nothing to look at there. */
+  function cellState(m, peers) {
+    if (!m.deployed) return m.knownAbsent ? "none" : "off";
+    if (m.reach === "down") return "down";
+    if (!m.version) return "nov";
+    if (m.drift.length) return "diff";
+    return peers > 1 ? "same" : "one";
   }
 
   /* A cell with no version used to print a dash, which is the one thing this
      page exists not to do: a dash says "we have nothing" where the payload
-     now says *why* we have nothing — no host recorded, no such host, up but
-     no version endpoint, not in the registry for this environment. The reason
-     goes where the version would have been, in the payload's own words, and
-     the green dot stays in front of it when the host itself answered, because
-     "up · no version endpoint" is a claim about a host that is up. */
+     says *why* we have nothing — no address on file, no such host, no version
+     endpoint to read, no server listed for this environment. The reason goes
+     where the version would have been, in the payload's own words, and the
+     green dot stays in front of it when the host itself answered. */
   function envCell(row, env) {
-    const cell = cells(row)[env];
-    if (!cell) return `<td class="env absent">${DASH()}</td>`;
-
-    const drift = (cell.drift || []).length ? " drift" : "";
-    const unregistered = cell.unregistered ? " unregistered" : "";
+    if (!cells(row)[env]) return `<td class="env absent">${DASH()}</td>`;
+    const m = TD.cell(row, env);
+    const peers = TD.ENVS.filter((e) => TD.cell(row, e).version).length;
+    const drift = m.drift.length ? " drift" : "";
+    const classes = `env${drift} ${cellState(m, peers)}${m.flags.unregistered ? " unregistered" : ""}`;
     // The tint carries the signal on screen; aria-label carries it to a reader
     // who is not looking at one. A child span would extend the document: abs
     // positioning inside a table cell does not stay inside the scrollport.
     const driftLabel = drift ? ' aria-label="disagrees with the row"' : "";
-    const dot = reachDot(cell);
-    // Weaker than the rest of the row and it says so: this environment was
-    // read off a server description in the registry, not recorded anywhere.
-    const inferred = cell.inferred
-      ? '<span class="inf" data-tip="inferred">inferred</span>'
-      : "";
     const tip = `data-tip="env" data-id="${esc(row.id)}" data-env="${esc(env)}"`;
+    const dot = reachDot(m.reach);
 
-    if (!cell.version) {
-      const why = cell.reason
-        ? `<span class="why clamp-2">${esc(cell.reason)}</span>`
-        : `<span class="version dash">—</span>`;
-      const up = cell.reachable === true ? reachDot(cell) : "";
-      return `<td class="env absent${drift}"${driftLabel} ${tip}><span class="envline">${
-        up}${why}</span>${inferred}</td>`;
+    if (!m.version) {
+      const why = m.reason ? `<span class="why">${esc(m.reason)}</span>` : DASH();
+      return `<td class="${classes}"${driftLabel} ${tip}>${dot}${why}</td>`;
     }
 
-    const version = `<span class="version">${esc(cell.version)}</span>`;
-    const source = cell.version_source
-      ? `<span class="src" data-src="${esc(cell.version_source)}" data-tip="src"
-           >${esc(sourceLabel(cell.version_source))}</span>`
+    // The version links to the document it was read from, so a reader who
+    // doubts it can open that document in a new tab. A copied value — from
+    // the registry or the chart, not the running service — is drawn as a
+    // dashed pill, so four identical registry values no longer read as four
+    // services agreeing (issue #30).
+    const pill = link(m.href, esc(m.version), `v${m.live ? "" : " copied"}`);
+    const neq = drift
+      ? `<span class="neq" aria-hidden="true" title="differs from the rest of this row on ${
+          esc(m.drift.join(", "))}">≠</span>`
       : "";
-
-    return `<td class="env${drift}${unregistered}"${driftLabel} ${tip}><span class="envline">${
-      version}${dot}</span>${source}${inferred}</td>`;
+    const second = [
+      m.source ? `<span class="src" data-src="${esc(m.source)}" data-tip="src">${esc(m.sourceShort)}</span>` : "",
+      m.dataRelease ? `<span class="data">${esc(m.dataRelease)}</span>` : "",
+      m.flags.inferred ? '<span class="inf">inferred</span>' : "",
+      m.flags.unregistered ? '<span class="inf">not in SmartAPI</span>' : "",
+    ].filter(Boolean).join('<span class="sep"> · </span>');
+    return `<td class="${classes}"${driftLabel} ${tip}><span class="envline">${
+      dot}${pill}${neq}</span><span class="l2">${second}</span></td>`;
   }
 
   /* A release as a chip, for the expanded row's strip and the tooltips. A
@@ -153,47 +189,88 @@
      is the link between the strip and the four environment columns. */
   function releaseChip(row, release) {
     return `<a class="rel${release.deployed ? " deployed" : ""}${release.prerelease ? " pre" : ""}"
-      href="${esc(TD.fmt.href(release.url) || "#")}" data-tip="rel" data-id="${esc(row.id)}"
-      data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
+      href="${esc(TD.fmt.href(release.url) || "#")}" target="_blank" rel="noopener"
+      data-tip="rel" data-id="${esc(row.id)}" data-tag="${esc(release.tag)}">${esc(release.tag)}</a>`;
   }
 
+  /* The repository, and under it the newest release and when: that date used
+     to be a column of its own, and it belongs beside the thing it dates.
+
+     The newest release itself, not `last_updated`: that is the newer of the
+     release and the registration, and when it showed here only when the
+     release won, a registration edited last week took the release date off
+     Name Lookup's row. `releases_detail` is newest first. */
   function repoCell(row) {
-    if (!row.repository) return `<td class="repo meta drop-md">${DASH()}</td>`;
-    const label = TD.row.repoLabel(row.repository);
-    return `<td class="repo meta drop-md"><a href="${esc(TD.fmt.href(row.repository) || "#")}">${
-      esc(label)}</a></td>`;
+    if (!row.repository) return `<td class="repo drop-md">${DASH()}</td>`;
+    const newest = (row.releases_detail || [])[0];
+    const released = newest && newest.published
+      ? `<span class="l2" data-tip="rel" data-id="${esc(row.id)}" data-tag="${esc(newest.tag)}"><span class="age">${
+          esc(TD.fmt.relativeAge(newest.published))}</span> · ${esc(newest.tag)}</span>`
+      : "";
+    // The release chips sit here too, shown only once the row is open: this is
+    // the column they come from, so they need no label of their own.
+    const chips = releaseChipsAll(row);
+    return `<td class="repo drop-md">${link(row.repository, esc(TD.row.repoLabel(row.repository)))}${
+      released}${chips ? `<span class="rels">${chips}</span>` : ""}</td>`;
   }
 
-  function updatedCell(row) {
-    const updated = row.last_updated;
-    // Null for half the components — no releases, and in no registry. A dash
-    // is the honest reading, not a failure.
-    if (!updated) return `<td class="updated meta drop-sm">${DASH()}</td>`;
-    const label = TD.row.updatedLabel(updated);
-    return `<td class="updated meta drop-sm" data-tip="upd" data-id="${esc(row.id)}"
-      ><span class="age">${esc(TD.fmt.relativeAge(updated.at))}</span>
-      <span class="src" data-src="${esc(updated.source)}">${esc(label)}</span></td>`;
+  /* One registration usually covers every environment, so it is a column of
+     its own rather than four facts. It says what to do about the record, in
+     TD.smartapi's words: the worst problem first, any others under it, then
+     when the record last changed, and everything in the tooltip. The date has
+     a line of its own: run on after the problems it wrapped, and left a "·"
+     hanging at the end of the line above.
+
+     The dot sits in a gutter of its own, kept empty on rows with no dot, so
+     every first line starts at the same x and the lines under it start under
+     the first rather than under the dot. */
+  function smartapiCell(row) {
+    const status = TD.smartapi.status(row);
+    const dot = status.dot != null
+      ? `<span class="dot ${status.dot}" aria-label="${esc(status.group)}"></span>`
+      : "";
+    const word = link(status.href, esc(status.word), status.href ? "" : "why");
+    const others = status.problems.slice(1).map((problem) => esc(problem.word));
+    const lines = [
+      others.length ? others.join('<span class="sep"> · </span>') : "",
+      status.changed ? `changed <span class="age">${esc(TD.fmt.relativeAge(status.changed))}</span>` : "",
+    ].filter(Boolean).map((line) => `<span class="l2">${line}</span>`).join("");
+    return `<td class="sapi drop-sm" data-tip="sapi" data-id="${esc(row.id)}"><span class="sapil">${
+      dot}<span class="sapiw">${word}</span>${lines}</span></td>`;
   }
 
+  /* The name on the first line and, under it, the summary; the id joins the
+     second line only when the row is open, because it is the key a link or a
+     search uses rather than a thing to read down a column.
+
+     The name is text, not a link: a click on it opens the row like a click
+     anywhere else on it, since the open row is where the connections are.
+     The arrow at the cell's right edge opens the component's page, and the
+     arrows line up down the table, so they read as a column without costing
+     one. */
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
         `<span class="chip">${TD.row.arrow(external.direction)} ${esc(external.name)}</span>`)
       .join("");
     const open = (state().expand || []).indexOf(row.id) >= 0;
+    const summary = row.summary ? `<span class="csum">${esc(row.summary)}</span>` : "";
     return `<td><span class="cnamewrap"><button type="button" class="chev"
         aria-expanded="${open}" data-expand="${esc(row.id)}"
         aria-label="Environment detail for ${esc(row.name)}">${TD.ui.CHEVRON}</button>${
-      TD.owner.coin(row.owner, "narrow")}<button type="button" class="cname"
-        data-open="${esc(row.id)}">${esc(row.name)}</button>${externals}</span>
-      <span class="cid">${esc(row.id)}</span></td>`;
+      TD.owner.coin(row.owner, "narrow")}<span class="cname">${esc(row.name)}</span>${externals}<button
+        type="button" class="openpage" data-open="${esc(row.id)}" title="Open the ${esc(row.name)} page"
+        aria-label="Open the ${esc(row.name)} page">${TD.ui.OPEN}</button></span>
+      <span class="csub"><span class="cid">${esc(row.id)}</span>${summary}</span></td>`;
   }
 
   function ownerCell(row) {
-    return `<td class="drop-xs">${TD.row.ownerLabel(row.owner)}</td>`;
+    return `<td class="drop-xs quiet">${TD.row.ownerLabel(row.owner)}</td>`;
   }
 
   /* --- Columns -------------------------------------------------------------- */
+
+  const registryDate = (row) => TD.smartapi.status(row).changed;
 
   const COLUMNS = [
     { key: "name", label: "Component", cell: componentCell, value: (row) => row.name },
@@ -206,10 +283,15 @@
       value: (row) => TD.row.repoLabel(row.repository),
     },
     {
-      key: "updated", label: "Last updated", drop: "drop-sm", cell: updatedCell,
-      value: (row) => (row.last_updated || {}).date || "",
-      compare: TD.sort.byDate, prefer: "asc", words: ["oldest first", "newest first"],
-      hint: "Sort by when this component last changed",
+      key: "smartapi", label: "SmartAPI", drop: "drop-sm", cell: smartapiCell,
+      // What needs a look first, in either direction: the state is a tier,
+      // compared before the flip, and the date orders each band.
+      rank: (row) => TD.smartapi.status(row).rank,
+      band: (row) => TD.smartapi.status(row).group,
+      value: registryDate,
+      compare: TD.sort.byDate, prefer: "asc",
+      words: ["problems first", "problems first, newest first"],
+      hint: "Sort by what needs a look in the SmartAPI registration, problems first",
     },
   ];
 
@@ -256,11 +338,9 @@
      The number alone was true and useless: "Step 6" tells a reader where the
      rows sit, not what they do. Both come from catalog/flow-steps.yaml.
 
-     It is a header, not a row, and everything in it is on the left: a count
-     pushed to the right edge landed under the `prod` column and read as a
-     value in it. The whole header is pinned to the left of the scrollport, so
-     a table scrolled sideways keeps it. The group's rows carry the same
-     `data-step`, which is what the spine in table.css is hung on. */
+     It is a section row, not a data row, and everything in it is on the
+     left: a count pushed to the right edge landed under the `prod` column and
+     read as a value in it. The group's rows carry the same `data-step`. */
   function bandHtml(group) {
     const first = group.rows[0];
     const flow = !sortColumn();
@@ -281,74 +361,44 @@
   /* --- Row expansion --------------------------------------------------------- */
 
   /* The expansion is not a panel under the row: it is more rows of the same
-     table, one per field, and every value sits in the column of the
+     table, one per fact, and every value sits in the column of the
      environment it belongs to. That column alignment is the whole point — a
      free-standing grid made a reader match "ci" to "ci" by eye, four times,
      for every field.
 
-     Version is deliberately absent: it is the row directly above. So is the
-     operations list, which belongs in the drawer; the count is enough here. */
-  const DETAIL_FIELDS = [
-    { label: "TRAPI", read: (cell) => esc(cell.trapi || "") },
-    { label: "Biolink", read: (cell) => esc(cell.biolink || "") },
-    { label: "Data release", read: (cell) => esc(cell.data_release || "") },
-    { label: "Released", read: (cell) => esc(cell.released || ""), num: true },
-    {
-      // A hostname has no spaces, so a narrow column either clips it or
-      // breaks it mid-label as "…transltr.i / o". A <wbr> after each dot
-      // gives the browser the only break points a reader would accept.
-      label: "Host",
-      mono: true,
-      read: (cell) => {
-        const href = TD.fmt.href(cell.openapi_url || cell.url);
-        const name = esc(TD.fmt.host(cell.url)).replace(/\./g, ".<wbr>");
-        return href ? `<a href="${esc(href)}">${name}</a>` : name;
-      },
-    },
-    {
-      // The document's status when there is one, the root's when there is
-      // not: a component with no OpenAPI document still answered something,
-      // and "no status at all" and "404 on the document" are different facts.
-      label: "HTTP", num: true,
-      read: (cell) => {
-        const status = cell.http_status == null ? cell.root_status : cell.http_status;
-        return status == null ? "" : esc(status);
-      },
-    },
-    {
-      label: "Reachable",
-      read: (cell) => (typeof cell.reachable === "boolean" ? (cell.reachable ? "yes" : "no") : ""),
-    },
-    {
-      label: "Paths", num: true,
-      read: (cell) => (cell.paths_count == null ? "" : esc(cell.paths_count)),
-    },
-    {
-      label: "Operations", num: true,
-      read: (cell) => {
-        const count = (cell.trapi_operations || []).length;
-        return count ? String(count) : "";
-      },
-    },
-  ];
+     The label sits immediately left of the first environment column, so the
+     word and the values it names touch. Which cell that is depends on the
+     width — SmartAPI, Owner and the rest drop out at the breakpoints — so
+     the label is written into every non-environment cell, each carrying its
+     column's drop class, and CSS shows the rightmost one still on screen
+     (the ladder in table.css). A colspan cannot do this: a
+     hidden cell generates no box, so a colspan row keeps claiming the
+     columns that have gone and shifts every value one column right. It was
+     once put in the first column instead, and read as detached from the
+     numbers it named.
 
-  /* The label sits immediately left of the first environment column, so the
-     word and the numbers it names touch. Which cell that is depends on the
-     width — Repository, Last updated and Owner drop out in that order — so
-     the label is written into every non-environment cell and CSS shows the
-     rightmost one still on screen. A colspan cannot do this: it is a fixed
-     number, the columns it covers come and go, and the first mismatch shifts
-     every value one column left. */
-  /* Every cell of a detail row wraps its content twice: `.dg` is a one-row
-     grid that goes 0fr → 1fr, `.dw` clips. That is the only way a <tr> can
-     change height on a curve, and it is why opening a row no longer shoves
-     everything under it down in a single step. */
-  const fold = (html) => `<div class="dg"><div class="dw">${html}</div></div>`;
+     Version is deliberately absent: it is the row directly above.
 
-  function detailLabelCells(label) {
+     `skipName` leaves out the Component column's cell, for the rows a
+     connections cell spans (connectionsCell). */
+  /* Where a narrow column wraps a label, its last word and the (?) wrap
+     together (`.dkw`), so the (?) is never on a line alone. A word joiner
+     before the button was tried first: Chrome still breaks before a button. */
+  function labelHtml(label, help) {
+    if (!help) return esc(label);
+    const at = label.lastIndexOf(" ") + 1;
+    return `${esc(label.slice(0, at))}<span class="dkw">${esc(label.slice(at))}${help}</span>`;
+  }
+
+  function labelCells(row, label, about, skipName) {
+    const help = about
+      ? `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
+           data-fact="${esc(label)}" aria-label="Where ${esc(label)} comes from">?</button>`
+      : "";
     return COLUMNS
-      .filter((column) => !column.env)
-      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}">${fold(`<span class="dkl">${esc(label)}</span>`)}</td>`)
+      .filter((column) => !column.env && !(skipName && column.key === "name"))
+      .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${
+        labelHtml(label, help)}</span></td>`)
       .join("");
   }
 
@@ -357,24 +407,17 @@
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
-      // Rendered straight into the table — a shared link that already names
-      // this component in `expand` — so it opens unfolded rather than
-      // animating on first paint. The chevron path adds `on` a frame later.
-      flags.on ? ["on"] : [],
+      flags.spanned ? ["spanned"] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
   }
 
-  /* An environment with nothing to say gets an empty cell, not a dash: the
-     version row directly above has already said "not deployed" once, and
-     saying it nine more times underneath is what made the expansion read as a
-     field of blanks. */
-  function detailFieldRow(row, field, values, group, flags) {
-    const kind = `dv${field.mono ? " mono" : ""}`;
-    const cells_ = values.map((value) => `<td class="${kind}">${fold(value)}</td>`).join("");
-    return `<tr ${detailAttrs(row, group, flags)}>${
-      detailLabelCells(field.label)}${cells_}</tr>`;
+  function factCell(fact) {
+    if (!fact) return `<td class="dv"></td>`;
+    const text = fact.mono ? esc(fact.value).replace(/\./g, ".<wbr>") : esc(fact.value);
+    const note = fact.note ? `<span class="n">${esc(fact.note)}</span>` : "";
+    return `<td class="dv${fact.mono ? " mono" : ""}">${link(fact.href, text)}${note}</td>`;
   }
 
   /* `releases` is a slice of `releases_detail` (see `_release_chips`), so the
@@ -383,39 +426,83 @@
     return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
-  function detailReleasesRow(row, chips, group, flags) {
-    return `<tr ${detailAttrs(row, group, flags)}>${detailLabelCells("Releases")}<td
-      class="dv rels" colspan="${TD.ENVS.length}">${fold(chips)}</td></tr>`;
+  /* One connection: the component's coin and name, as a button that opens its
+     page, exactly as the name in its own row does (the body's click handler
+     answers both). */
+  function connectionButton(item) {
+    const other = rowById(item.id);
+    const name = other ? other.name : item.id;
+    const title = `Open ${name}${item.planned ? " (planned, not yet implemented)" : ""}`;
+    return `<button type="button" class="conn${item.planned ? " planned" : ""}" data-open="${
+      esc(item.id)}" title="${esc(title)}">${other ? TD.owner.coin(other.owner) : ""}${esc(name)}</button>`;
   }
 
-  /* Only the fields somebody answered. Nine rows of which six were empty is
-     the shape the owner sent back; this builds the rows first and drops the
-     ones no environment filled in. */
-  function detailRowsHtml(row, group, unfolded) {
-    const deployed = TD.ENVS.map((env) => {
-      const cell = cells(row)[env];
-      return cell && cell.deployed ? cell : null;
-    });
-    const make = [];
-    for (const field of DETAIL_FIELDS) {
-      const values = deployed.map((cell) => (cell ? field.read(cell) : ""));
-      if (!values.some(Boolean)) continue;
-      make.push((flags) => detailFieldRow(row, field, values, group, flags));
+  /* The connections, in the Component column of the detail rows, which is
+     otherwise empty above the narrow breakpoint: the labels sit in the
+     rightmost non-environment column, and that is never this one there. One
+     cell spanning every detail row, in TD.row.connections' groups and order;
+     the externals and the catalog's view stay on the Component page. */
+  function connectionsCell(row, span) {
+    const groups = TD.row.connections(row).filter((group) => group.items.length);
+    const body = groups.length
+      ? groups.map((group) => `<div class="cg"><span class="cgl">${esc(group.title)}</span>${
+        group.items.map(connectionButton).join("")}</div>`).join("")
+      : '<span class="why">No connections recorded</span>';
+    // Words as well as the arrow on the row: someone who has opened the row
+    // and read it is deciding whether to go further.
+    const open = `<button type="button" class="openlink" data-open="${esc(row.id)}">Open the ${
+      esc(row.name)} page ${TD.ui.OPEN}</button>`;
+    return `<td class="dk-conn" rowspan="${span}">${open}${body}</td>`;
+  }
+
+  /* Only the facts some environment answered, each in its environment's
+     column. The releases are not here: they are in the Repository cell of
+     the row above, shown once it is open.
+
+     `narrow` is whether the window is at or under NARROW. There the
+     Component column is the label column, so the rows are drawn without the
+     connections cell. It is an argument rather than a CSS rule because a
+     rowspan cannot be undone in CSS: hiding the spanning cell would move
+     every later row's cells one column left. */
+  function detailRowsHtml(row, group, options) {
+    const narrow = !!(options && options.narrow);
+    const models = Object.fromEntries(TD.ENVS.map((env) => [env, TD.cell(row, env)]));
+    const facts = [];
+    for (const env of TD.ENVS) {
+      for (const fact of models[env].facts) {
+        if (!facts.some((f) => f.label === fact.label)) facts.push(fact);
+      }
     }
-    const chips = releaseChipsAll(row);
-    if (chips) make.push((flags) => detailReleasesRow(row, chips, group, flags));
+    const lead = (flags) => (narrow || flags.index > 0 ? "" : connectionsCell(row, flags.count));
+    const make = facts.map((fact) => (flags) =>
+      `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, fact.label, fact.about, !narrow)}${
+        TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === fact.label))).join("")
+      }</tr>`);
     if (!make.length) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${
-        detailLabelCells("")}<td class="dv rels" colspan="${TD.ENVS.length}">${fold('<span class="dash">Nothing else is recorded for this component.</span>')
-        }</td></tr>`);
+      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, "", "", !narrow)}<td
+        class="dv note" colspan="${TD.ENVS.length}">Nothing else is recorded for this component.</td></tr>`);
     }
     return make
       .map((build, index) => build({
+        index,
+        count: make.length,
         first: index === 0,
         last: index === make.length - 1,
-        on: unfolded !== false,
+        spanned: !narrow && index > 0,
       }))
       .join("");
+  }
+
+  /* At and under this width the Component column holds the detail rows'
+     labels: the last step of the label ladder in table.css, which must change
+     with it. */
+  const NARROW = "(max-width: 800px)";
+  function isNarrow() {
+    try {
+      return typeof matchMedia === "function" && matchMedia(NARROW).matches;
+    } catch {
+      return false;
+    }
   }
 
   /* Everything the chevron opened, in document order. Walked rather than
@@ -434,9 +521,8 @@
   /* --- Table body ------------------------------------------------------------ */
 
   /* `group` is the band this row sits under, or null in an order that has no
-     bands (by date, by environment). It is what puts the spine on the row and
-     the indent under it, so "no bands, no spine" needs no second rule. */
-  function rowHtml(row, group) {
+     bands (by date, by environment). */
+  function rowHtml(row, group, options) {
     const open = (state().expand || []).indexOf(row.id) >= 0;
     const classes = ["row"];
     if (group != null) classes.push("grp");
@@ -446,16 +532,16 @@
     const step = group == null ? "" : ` data-step="${esc(group)}"`;
     const body = `<tr class="${classes.join(" ")}" id="c-${esc(row.id)}" data-id="${esc(row.id)}"${
       step}>${COLUMNS.map((column) => column.cell(row)).join("")}</tr>`;
-    return open ? body + detailRowsHtml(row, group, true) : body;
+    return open ? body + detailRowsHtml(row, group, options) : body;
   }
 
-  function bodyHtml(rows) {
+  function bodyHtml(rows, options) {
     if (!rows.length) {
       return `<tr><td class="empty" colspan="${COLUMNS.length}"
         >No components match these filters.</td></tr>`;
     }
     const label = bandKey();
-    if (!label) return rows.map((row) => rowHtml(row, null)).join("");
+    if (!label) return rows.map((row) => rowHtml(row, null, options)).join("");
     // Grouped as they come, so a step filtered down to nothing leaves no empty
     // band, and a visible gap — Step 1, Step 2, Step 8 — reports honestly what
     // the filter took out.
@@ -468,7 +554,7 @@
     }
     return groups
       .map((group) =>
-        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label)).join(""))
+        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label, options)).join(""))
       .join("");
   }
 
@@ -506,16 +592,22 @@
     status: "Read live from the deployment's /status endpoint.",
     smartapi: "Copied from the SmartAPI registry, not from the running service.",
     helm: "From the Helm chart — what should be deployed, not what is.",
-    release: "The newest GitHub release on this component's repository.",
-    registry: "When this component's SmartAPI registration last changed.",
   };
 
   function tipHtml(target) {
     const kind = target.dataset.tip;
     if (kind === "src") {
       const key = target.dataset.src;
-      return `<div><b>${esc(sourceLabel(key))}</b></div><div class="note">${
+      return `<div><b>${esc(TD.fmt.sourceLabel(key))}</b></div><div class="note">${
         esc(SOURCE_NOTES[key] || "Where this value was read from.")}</div>`;
+    }
+    if (kind === "fact") {
+      const row = rowById(target.dataset.id);
+      const label = target.dataset.fact;
+      const fact = row && TD.ENVS
+        .map((env) => TD.cell(row, env).facts.find((f) => f.label === label)).find(Boolean);
+      if (!fact) return "";
+      return `<div><b>${esc(fact.label)}</b></div><div class="note">${esc(fact.about)}</div>`;
     }
     if (kind === "rel") {
       const row = rowById(target.dataset.id);
@@ -531,140 +623,59 @@
         where ? `<div class="note">${esc(where)}</div>` : ""}${
         release.body_excerpt ? `<div class="note">${esc(release.body_excerpt)}</div>` : ""}`;
     }
-    if (kind === "upd") {
+    if (kind === "sapi") {
       const row = rowById(target.dataset.id);
-      const updated = row && row.last_updated;
-      if (!updated) return "";
-      // The three shepherds share one repository, so one release date lands on
-      // three rows: without the tag that reads as three coincidental deploys.
-      const what = updated.source === "release"
-        ? `${updated.tag} released ${updated.date}`
-        : `SmartAPI registration last changed ${updated.date}`;
-      return `<div><b>${esc(what)}</b></div><div class="note">${
-        esc(SOURCE_NOTES[updated.source] || "")}</div>`;
+      if (!row) return "";
+      const status = TD.smartapi.status(row);
+      const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
+      const day = (iso) => String(iso).slice(0, 10);
+      // The registry writes one line per path; the failures are the ones to
+      // read, and three is enough to say which.
+      const failures = status.failures.slice(0, 3);
+      return `<div class="title">SmartAPI · ${esc(status.group)}</div><dl>${
+        pair("record", row.smartapi || "")}${
+        pair("changed", status.changed ? day(status.changed) : "")}${
+        pair("probed", status.probed ? day(status.probed) : "")}</dl>${
+        status.problems.map((problem) => `<div class="note">${esc(problem.note)}</div>`).join("")}${
+        failures.map((line) => `<div class="note">${esc(line)}</div>`).join("")}${
+        status.failures.length > failures.length
+          ? `<div class="note">and ${status.failures.length - failures.length} more</div>` : ""}`;
     }
     if (kind === "env") {
       const row = rowById(target.dataset.id);
       const env = target.dataset.env;
-      const cell = row && cells(row)[env];
-      if (!cell || !cell.deployed) return "";
+      if (!row) return "";
+      const m = TD.cell(row, env);
+      if (!m.deployed) return "";
       const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
-      const note = cell.unregistered
-        ? "Deployed, but absent from this component's SmartAPI record, which lists other environments."
-        : "";
+      const notes = [
+        m.flags.inferred
+          ? "This environment was not declared in the registry; it was inferred from a server's description there, which is the weaker claim."
+          : "",
+        m.flags.unregistered
+          ? "Deployed, but absent from this component's SmartAPI record, which lists other environments."
+          : "",
+      ].filter(Boolean);
       return `<div class="title">${esc(row.id)} · ${esc(env)}</div><dl>${
-        pair("version", cell.version)}${
-        pair("source", cell.version_source ? sourceLabel(cell.version_source) : "")}${
-        pair("trapi", cell.trapi)}${
-        pair("biolink", cell.biolink)}${
-        pair("data release", cell.data_release)}${
-        pair("released", cell.released)}${
-        pair("http", cell.http_status)}${
-        pair("location", cell.location)}${
-        pair("url", cell.url)}</dl>${
-        (cell.drift || []).length
-          ? `<div class="note">Disagrees with the rest of this row on ${
-              esc((cell.drift || []).join(", "))}.</div>` : ""}${
-        note ? `<div class="note">${esc(note)}</div>` : ""}`;
+        pair("version", m.version)}${
+        pair("read from", m.version ? m.sourceWord : "")}${
+        pair("status", m.reason)}${
+        m.facts.map((f) => pair(f.label, f.note ? `${f.value} (${f.note})` : f.value)).join("")}</dl>${
+        m.drift.length
+          ? `<div class="note">Disagrees with the rest of this row on ${esc(m.drift.join(", "))}.</div>` : ""}${
+        notes.map((note) => `<div class="note">${esc(note)}</div>`).join("")}`;
     }
     return "";
   }
 
-  /* --- Motion ---------------------------------------------------------------- */
-
-  /* FLIP: measure every row before the re-render, measure again after, apply
-     the inverse transform and let it transition to none. Capped, because past
-     sixty rows the glide is a screenful of movement nobody reads. */
-  function positions(body) {
-    const map = new Map();
-    for (const row of body.querySelectorAll("tr.row")) {
-      map.set(row.dataset.id, row.getBoundingClientRect().top);
-    }
-    return map;
-  }
-
-  function flip(body, before) {
-    if (!TD.motion.enabled || !before) return;
-    const rows = [...body.querySelectorAll("tr.row")];
-    if (rows.length > 60) return;
-    const moved = [];
-    for (const row of rows) {
-      const from = before.get(row.dataset.id);
-      if (from == null) continue;
-      const delta = from - row.getBoundingClientRect().top;
-      if (!delta) continue;
-      row.style.transform = `translateY(${delta}px)`;
-      moved.push(row);
-    }
-    if (!moved.length) return;
-    void body.offsetHeight;   // one forced reflow, so the inverse is painted
-    for (const row of moved) {
-      row.classList.add("flip");
-      row.style.transform = "";
-      row.addEventListener("transitionend", () => {
-        row.classList.remove("flip");
-      }, { once: true });
-    }
-  }
-
-  function fadeIn(body) {
-    if (!TD.motion.enabled) return;
-    let index = 0;
-    for (const row of body.querySelectorAll("tr.row")) {
-      row.style.animationDelay = `calc(${Math.min(index, 20)} * var(--stagger))`;
-      row.classList.add("fade");
-      index += 1;
-    }
-  }
-
-  /* --- Expansion, animated --------------------------------------------------- */
+  /* --- Expansion ------------------------------------------------------------- */
 
   function findRow(body, id) {
     return [...body.querySelectorAll("tr.row")].find((row) => row.dataset.id === id);
   }
 
-  /* The gutter between rows, in pixels: the open item's measured height has to
-     stop at the last detail row's surface rather than at the six transparent
-     pixels under it, or the shadow sits six pixels low. */
-  let gap = null;
-  function rowGap() {
-    if (gap === null) {
-      const raw = getComputedStyle(document.documentElement).getPropertyValue("--row-gap");
-      gap = parseFloat(raw) || 0;
-    }
-    return gap;
-  }
-
-  /* The item's outer box, for the one shadow drawn round it. Width comes from
-     the cells rather than from the row: `offsetWidth` on a <tr> is not worth
-     trusting across engines, and the two cells share an offset parent. */
-  function sizeOpen(tr, rows) {
-    const first = tr.firstElementChild;
-    const last = tr.lastElementChild;
-    if (first && last) {
-      tr.style.setProperty(
-        "--open-w", `${Math.round(last.offsetLeft + last.offsetWidth - first.offsetLeft)}px`);
-    }
-    if (!rows.length) return tr.offsetHeight;
-    const tail = rows[rows.length - 1];
-    return Math.round(tail.offsetTop + tail.offsetHeight - tr.offsetTop - rowGap());
-  }
-
-  /* A row that arrived open — `?expand=` in a shared link, or a re-render
-     while one was open — has no measurements yet, and the shadow is sized
-     from them. Run after every render, not just after a click. */
-  function settleOpen(container) {
-    for (const tr of container.querySelectorAll("tr.row.open")) {
-      const rows = detailRowsAfter(tr);
-      tr.style.setProperty("--open-h", `${sizeOpen(tr, rows)}px`);
-    }
-  }
-
-  /* Opening does not re-render the table. It inserts this component's detail
-     rows and nothing else, then unfolds them: measure their natural height in
-     one frame with transitions off, collapse, and let the grid rows go
-     0fr → 1fr on the next. Two forced layouts on a click, and every row below
-     moves on the same curve instead of jumping once when the rows appear. */
+  /* Opening does not re-render the table: it inserts this component's detail
+     rows after its own and nothing else, so the chevron keeps focus. */
   function openExpansion(body, id) {
     const tr = findRow(body, id);
     const row = rowById(id);
@@ -672,58 +683,14 @@
     // The band this row is under, read back off the row rather than passed in:
     // the click handler knows the id, not the grouping.
     const group = tr.classList.contains("grp") ? tr.dataset.step ?? "" : null;
-    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group, false));
-    const rows = detailRowsAfter(tr);
-    const folds = rows.flatMap((detail) => [...detail.querySelectorAll(".dg")]);
-
-    // `open` is what squares the row's bottom corners and draws the lift: the
-    // detail rows are not a second item, they are this one, taller.
-    tr.style.setProperty("--open-h", `${sizeOpen(tr, [])}px`);
+    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group, { narrow: isNarrow() }));
     tr.classList.add("open");
-
-    if (!TD.motion.enabled) {
-      for (const detail of rows) detail.classList.add("on");
-      tr.style.setProperty("--open-h", `${sizeOpen(tr, rows)}px`);
-      return;
-    }
-
-    // Unfolded, measured, folded again — all before the browser paints, and
-    // with transitions off so none of it is animated.
-    for (const fold of folds) fold.classList.add("still");
-    for (const detail of rows) detail.classList.add("on");
-    const full = sizeOpen(tr, rows);
-    for (const detail of rows) detail.classList.remove("on");
-    void body.offsetHeight;
-    for (const fold of folds) fold.classList.remove("still");
-    requestAnimationFrame(() => {
-      for (const detail of rows) detail.classList.add("on");
-      tr.style.setProperty("--open-h", `${full}px`);
-    });
   }
 
-  /* Symmetrical: fold to nothing on the same curve, and only then take the
-     rows out. Removing them first is what made the page jump. */
   function closeExpansion(body, id) {
     const tr = findRow(body, id);
-    const rows = detailRowsAfter(tr);
-    if (!rows.length) return;
-    const finish = () => {
-      for (const detail of rows) detail.remove();
-      tr.classList.remove("open", "closing");
-      tr.style.removeProperty("--open-h");
-      tr.style.removeProperty("--open-w");
-    };
-    if (!TD.motion.enabled) { finish(); return; }
-    tr.classList.add("closing");
-    tr.style.setProperty("--open-h", `${sizeOpen(tr, [])}px`);
-    for (const detail of rows) detail.classList.remove("on");
-    let done = false;
-    const once = () => { if (done) return; done = true; finish(); };
-    // transitionend on the first fold, and a timer in case the row is scrolled
-    // out of view and the transition never fires.
-    const first = rows[0].querySelector(".dg");
-    if (first) first.addEventListener("transitionend", once, { once: true });
-    setTimeout(once, 600);
+    for (const detail of detailRowsAfter(tr)) detail.remove();
+    if (tr) tr.classList.remove("open");
   }
 
   /* --- Render ----------------------------------------------------------------- */
@@ -731,7 +698,6 @@
   let wrap = null;
   let head = null;
   let body = null;
-  let last = null;
 
   function build(container) {
     container.innerHTML = `<div class="tablewrap"><table class="grid">
@@ -746,50 +712,54 @@
       TD.commit(nextSort(state(), COLUMNS.find((entry) => entry.key === button.dataset.col)));
     });
 
+    function toggleExpansion(tr) {
+      const id = tr.dataset.id;
+      const expand = (state().expand || []).slice();
+      const at = expand.indexOf(id);
+      if (at >= 0) { expand.splice(at, 1); closeExpansion(body, id); }
+      else { expand.push(id); openExpansion(body, id); }
+      tr.querySelector("button[data-expand]").setAttribute("aria-expanded", at < 0);
+      TD.commit({ expand }, { silent: true });
+    }
+
+    /* A click anywhere on a row toggles it, so a reader looking at the
+       environment columns need not travel back to the chevron. Links and
+       buttons in the row keep their own job (the arrow opens the component's page), a
+       drag that selected text to copy is not a click, and the detail rows
+       never collapse their row: they hold the values people copy. The chevron
+       stays the keyboard and screen-reader control; the <tr> is not made a
+       button, because it contains links and buttons. */
     body.addEventListener("click", (event) => {
-      const chevron = event.target.closest("button[data-expand]");
-      if (chevron) {
-        const id = chevron.dataset.expand;
-        const expand = (state().expand || []).slice();
-        const at = expand.indexOf(id);
-        if (at >= 0) { expand.splice(at, 1); closeExpansion(body, id); }
-        else { expand.push(id); openExpansion(body, id); }
-        chevron.setAttribute("aria-expanded", at < 0);
-        TD.commit({ expand }, { silent: true });
-        return;
-      }
       const name = event.target.closest("button[data-open]");
-      if (name) TD.drawer.open(name.dataset.open);
+      if (name) { TD.navigate({ view: "component", sel: name.dataset.open }); return; }
+      const tr = event.target.closest("tr.row");
+      if (!tr) return;
+      if (event.target.closest("button[data-expand]")) { toggleExpansion(tr); return; }
+      if (event.target.closest("a, button")) return;
+      if (!(window.getSelection()?.isCollapsed ?? true)) return;
+      toggleExpansion(tr);
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
+
+    // An open row's detail is drawn for one side of NARROW (detailRowsHtml),
+    // so crossing it redraws the body. Only then: nothing else depends on it.
+    if (typeof matchMedia === "function") {
+      matchMedia(NARROW).addEventListener("change", () => {
+        if (!(state().expand || []).length) return;
+        body.innerHTML = bodyHtml(TD.sort.rows(visibleRows(), sortColumn(), state().dir), { narrow: isNarrow() });
+      });
+    }
   }
 
   table.render = function render(container) {
     table.ensureColumns();
-    if (!wrap || !container.contains(wrap)) { last = null; build(container); }
+    if (!wrap || !container.contains(wrap)) build(container);
 
-    const s = state();
-    const signature = {
-      q: (s.q || "").trim(), owner: (s.owner || []).join(","), versions: s.versions,
-      sort: s.sort, dir: s.dir,
-    };
-    const filtered = last && (last.q !== signature.q || last.owner !== signature.owner
-      || last.versions !== signature.versions);
-    const sorted = last && (last.sort !== signature.sort || last.dir !== signature.dir);
-
-    const before = sorted ? positions(body) : null;
-    const rows = TD.sort.rows(visibleRows(), sortColumn(), s.dir);
-
+    const rows = TD.sort.rows(visibleRows(), sortColumn(), state().dir);
     TD.ui.tooltip.hide();
     head.innerHTML = headHtml();
-    body.innerHTML = bodyHtml(rows);
-
-    settleOpen(body);
-    if (sorted) flip(body, before);
-    else if (filtered) fadeIn(body);
-
-    last = signature;
+    body.innerHTML = bodyHtml(rows, { narrow: isNarrow() });
     return { shown: rows.length, total: (TD.DATA.rows || []).length };
   };
 
@@ -797,36 +767,29 @@
     if (!COLUMNS.some((column) => column.env)) buildColumns();
   };
   table.COLUMNS = COLUMNS;
-  table.VERSION_VIEWS = VERSION_VIEWS;
+  table.SHOW_VIEWS = SHOW_VIEWS;
   table.DEFAULT_VIEW = DEFAULT_VIEW;
   table.orderHtml = orderHtml;
   table.visibleRows = visibleRows;
   table.hasDrift = hasDrift;
   // Pure given TD.state and TD.DATA, for tests/web/table.test.js.
   table.nextSort = nextSort;
+  table.cellState = cellState;
   table.envCell = envCell;
   table.bodyHtml = bodyHtml;
   table.detailRowsHtml = detailRowsHtml;
+  // The Component view's environment matrix shows the same tooltips.
+  table.tipHtml = tipHtml;
   table.scrollTo = function scrollTo(id) {
     if (!body) return;
     const tr = findRow(body, id);
     if (tr) tr.scrollIntoView({ block: "center", behavior: TD.motion.enabled ? "smooth" : "auto" });
   };
 
-  /* The selected row's highlight, moved by hand: the drawer's commits are
-     silent (a full re-render for a tab change is a lot of work for nothing),
-     and the table paints `.sel` from TD.state only at render time. */
-  table.markSelected = function markSelected(id) {
-    if (!body) return;
-    for (const row of body.querySelectorAll("tr.row")) {
-      row.classList.toggle("sel", row.dataset.id === id);
-    }
-  };
-
   /* Scroll the table's own scrollport so the row sits just under the sticky
      header. Not scrollTo: scrollIntoView scrolls *every* ancestor scroller,
-     the document included, and with the drawer open as a sheet that slid the
-     whole page down and put the table behind the sheet. */
+     the document included, which once slid the whole page down under a
+     bottom sheet. */
   table.revealRow = function revealRow(id) {
     if (!body || !wrap) return;
     const tr = findRow(body, id);

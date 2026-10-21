@@ -785,6 +785,8 @@
   const pointers = new Map();
   let pinchStart = 0;
   let dragged = false;
+  // The node a press began on; see the click handler.
+  let pressed = null;
 
   function localPoint(event) {
     const rect = box.getBoundingClientRect();
@@ -802,6 +804,7 @@
     root.addEventListener("pointerdown", (event) => {
       if (event.button !== 0 && event.pointerType === "mouse") return;
       pointers.set(event.pointerId, localPoint(event));
+      pressed = event.target.closest(".mp-node");
       root.setPointerCapture(event.pointerId);
       dragged = false;
       coasting = false;
@@ -856,7 +859,11 @@
 
     root.addEventListener("click", (event) => {
       if (dragged) { dragged = false; return; }
-      const node = event.target.closest(".mp-node");
+      // Capturing the pointer on press (for the drag) makes the browser send
+      // the click to the root rather than to the node under it, so the node
+      // is the one the press began on. Reading the click's own target found
+      // nothing, and a mouse click on a node did nothing.
+      const node = event.target.closest(".mp-node") || pressed;
       if (node) select(node.dataset.id);
     });
 
@@ -923,15 +930,16 @@
   }
 
   /* A resize used to re-fit, which threw away wherever the reader had got to —
-     and the drawer opening is a resize, so following a `?sel=` link zoomed to
-     the component and then immediately zoomed back out. It re-fits only while
+     and the side drawer that used to open beside the map was a resize, so
+     following a `?sel=` link zoomed to the component and then immediately
+     zoomed back out. It re-fits only while
      nobody has moved the camera; after that it keeps the scale and holds
      whatever was in the middle of the view in the middle of it.
 
      It moves the camera and its goal by the same half of the size change, so
      a flight in progress still lands centred. It once snapped the goal to the
      camera instead, which stopped the flight a selection starts: the drawer
-     sends its second reflow 340ms after opening, mid-flight. That version
+     sent its second reflow 340ms after opening, mid-flight. That version
      also measured the middle against the new size, so it never held it. */
   function onResize() {
     if (!box || !host || !host.classList.contains("on")) return;
@@ -962,7 +970,7 @@
       case "ArrowRight": goal.x -= pan; touched = true; nudge(); break;
       case "ArrowUp": goal.y += pan; touched = true; nudge(); break;
       case "ArrowDown": goal.y -= pan; touched = true; nudge(); break;
-      // The drawer owns its own Esc; this one only lets go of the ring.
+      // Esc lets go of the ring.
       case "Escape": if (TD.state.sel) TD.commit({ sel: "" }); return;
       default: return;
     }
@@ -1040,13 +1048,11 @@
     nodeEls.forEach((el, key) => el.classList.toggle("sel", key === id));
   }
 
-  /* The drawer records the selection (one silent commit, and it marks the
-     table and rings the node); the map then flies to it, which is what a
-     full refresh used to do by way of paint(). */
+  /* A node opens its component's page, as a name in the table does; Back
+     returns here, and paint() rings and flies to it on the way. */
   function select(id) {
     if (!id || !nodeById.has(id)) return;
-    TD.drawer.open(id, undefined, { opener: nodeEls.get(id) });
-    map.focus(id);
+    TD.navigate({ view: "component", sel: id });
   }
 
   /* --- Tooltips ------------------------------------------------------------- */
@@ -1055,7 +1061,7 @@
      record them, plus the externals. "3 in · 5 out" was what this said first
      and it answered nothing: the question a reader has in front of a box on a
      diagram is *which* three, and the whole point of hovering is not having to
-     open the drawer to find out. */
+     open the component's page to find out. */
   const NAME_CAP = 6;
 
   function nameList(entries) {
@@ -1313,17 +1319,6 @@
     if (!container) return 0;
     if (host !== container || !scene) return build(container);
     return paint();
-  };
-
-  map.ring = ring;
-  // The drawer taking or giving back its 440px is a resize the window never
-  // reports; app.js's TD.layoutChanged calls this.
-  map.resized = onResize;
-
-  map.focus = function focus(id) {
-    if (!nodeById.has(id)) return;
-    ring(id);
-    flyTo(nodeById.get(id), Math.max(1.25, cam.k));
   };
 
   map.nodeNameLimit = nodeNameLimit;

@@ -1,51 +1,38 @@
 /*
-  The detail drawer: one surface, six tabs, shared by the table and (later) the
-  map. It is the only place on the page where every field the payload carries
-  for a component is reachable, which is why it renders from the row object
-  rather than from anything the table already computed — a cell the table drops
-  at 800px is still here.
+  The Component view: one component on a page of its own, every section at
+  once, chosen from a picker so a reader can move between components without
+  going back to the table. It replaced a 440px side drawer whose six tabs did
+  not fit and which was too narrow to read an environment side by side with
+  another. It renders from the row object rather than from anything the table
+  computed, so a field the table drops at 800px is still here.
 
   Two rules run through the whole file.
 
   Every value is optional. A build made from an older sync cache, or a public
   build with a policy applied, is missing whole blocks (`catalog_edges`,
   `repository_meta`, `smartapi_record`, half of `helm_charts[].last_changed`),
-  and a drawer that throws on one absent key takes the page with it. So nothing
-  here indexes without a guard and nothing assumes a list is a list.
+  and a section that throws on one absent key must not take the page with it.
+  So nothing here indexes without a guard and nothing assumes a list is a list.
 
   And a fact is never shown without its provenance. A Helm chart says what
   *should* run; `derived_rejected` says a conventional hostname did not answer,
   not that a service is down; `uptime` belongs to a SmartAPI record, not to an
-  environment. Each of those carries its label in the markup beside it, because
-  a reader who screenshots one row of this drawer takes the label with them.
-
-  This file loads before app.js (JS_FILES order), so TD.state, TD.commit and
-  TD.DATA do not exist yet at definition time. Boot is deferred to a
-  microtask, which runs after the whole concatenated <script> — app.js
-  included — has finished.
+  environment. Each of those carries its label in the markup beside it, and
+  every document a fact was read from is linked, so a reader who doubts a
+  value can open where it came from.
 */
 
 (() => {
   "use strict";
 
   const TD = (globalThis.TD = globalThis.TD || {});
-  const drawer = (TD.drawer = TD.drawer || {});
+  const view = (TD.component = TD.component || {});
 
   const WIKI_BASE = "https://github.com/NCATSTranslator/Translator-All/wiki/";
-  const TABS = [
-    { id: "overview", label: "Overview" },
-    { id: "environments", label: "Environments" },
-    { id: "releases", label: "Releases" },
-    { id: "helm", label: "Helm" },
-    { id: "smartapi", label: "SmartAPI" },
-    { id: "connections", label: "Connections" },
-  ];
-  const TAB_IDS = TABS.map((tab) => tab.id);
-  const DEFAULT_TAB = "overview";
+  // ponytail: the catalog lives in this repository on `main`; a fork that
+  // publishes its own page would need this to come from the payload instead.
+  const CATALOG_BASE = "https://github.com/NCATSTranslator/translator-diagram";
   const LIST_LIMIT = 8;
-  // Below this the drawer is a sheet over the bottom of the page rather than
-  // a column beside the table: the same 900px as drawer.css's media query.
-  const SHEET_MAX_WIDTH = 900;
 
   /* --- Small helpers ------------------------------------------------------- */
 
@@ -60,8 +47,8 @@
   const list = (value) => (Array.isArray(value) ? value.filter((v) => v != null) : []);
   const filled = (value) => value !== null && value !== undefined && value !== "";
 
-  const mono = (value) => `<span class="dw-mono">${esc(value)}</span>`;
-  const note = (text) => `<span class="dw-note">${esc(text)}</span>`;
+  const mono = (value) => `<span class="cv-mono">${esc(value)}</span>`;
+  const note = (text) => `<span class="cv-note">${esc(text)}</span>`;
 
   /* A value as text, or nothing: what most rows of a definition list are. */
   const val = (value) => (filled(value) ? esc(value) : "");
@@ -75,29 +62,29 @@
 
   /* A list of small-caps tags, or nothing. */
   const tags = (items) =>
-    items.map((item) => `<span class="dw-tag">${esc(item)}</span>`).join("");
+    items.map((item) => `<span class="cv-tag">${esc(item)}</span>`).join("");
 
-  /* Every link out of this page opens in its own tab: the drawer holds the
+  /* Every link out of this page opens in its own tab: the page holds the
      reader's place in a filtered, sorted, scrolled table, and navigating away
      from it in place loses all of that. */
   function ext(url, text, cls) {
     if (!filled(url)) return "";
     const href = TD.fmt.href(url);
     if (!href) return esc(filled(text) ? text : url);
-    return `<a class="${cls || "dw-link"}" href="${esc(href)}" target="_blank"
+    return `<a class="${cls || "cv-link"}" href="${esc(href)}" target="_blank"
       rel="noopener">${esc(filled(text) ? text : url)}</a>`;
   }
 
   /* Truncation is done by CSS (one line, ellipsis), so the full string has to
      travel with the node for the tooltip to have anything to show. */
   function clip(text) {
-    return `<span class="dw-clip" data-tip="1" data-full="${esc(text)}">${esc(text)}</span>`;
+    return `<span class="cv-clip" data-tip="1" data-full="${esc(text)}">${esc(text)}</span>`;
   }
 
   const yesNo = (value) =>
     value === true ? "yes" : value === false ? "no" : "";
 
-  /* A definition-list row. Absent by default, because a drawer that prints a
+  /* A definition-list row. Absent by default, because a page that prints a
      dash for each of forty keys is a form, not a reading surface; `always` is
      for the handful where "we do not know" is itself the answer. */
   function drow(label, html, always) {
@@ -105,16 +92,16 @@
       if (!always) return "";
       html = DASH;
     }
-    return `<div class="dw-r"><dt>${esc(label)}</dt><dd>${html}</dd></div>`;
+    return `<div class="cv-r"><dt>${esc(label)}</dt><dd>${html}</dd></div>`;
   }
 
   const dl = (parts) => {
     const body = parts.filter(Boolean).join("");
-    return body ? `<dl class="dw-dl">${body}</dl>` : "";
+    return body ? `<dl class="cv-dl">${body}</dl>` : "";
   };
 
   const stack = (items) =>
-    items.length ? `<ul class="dw-stack">${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
+    items.length ? `<ul class="cv-stack">${items.map((i) => `<li>${i}</li>`).join("")}</ul>` : "";
 
   let discId = 0;
 
@@ -125,11 +112,11 @@
      does. */
   function disclosure(summary, html) {
     if (!html) return "";
-    const id = `dw-disc-${++discId}`;
-    return `<button type="button" class="dw-disc" data-disc="${id}"
+    const id = `cv-disc-${++discId}`;
+    return `<button type="button" class="cv-disc" data-disc="${id}"
         aria-expanded="false" aria-controls="${id}"
         >${TD.ui.CHEVRON}<span>${esc(summary)}</span></button>
-      <div class="dw-disc-body" id="${id}"><div>${html}</div></div>`;
+      <div class="cv-disc-body" id="${id}"><div>${html}</div></div>`;
   }
 
   /* Eight is where a list stops being scannable and starts being a wall. The
@@ -154,13 +141,13 @@
     return parts
       .filter(Boolean)
       .map((html, index) =>
-        `<section class="dw-sec${cls ? ` ${cls}` : ""}" style="--i:${index}">${html}</section>`)
+        `<section class="cv-sec${cls ? ` ${cls}` : ""}" style="--i:${index}">${html}</section>`)
       .join("");
   }
 
-  const heading = (text) => `<h3 class="dw-h">${esc(text)}</h3>`;
-  const caption = (text) => `<p class="dw-cap">${esc(text)}</p>`;
-  const muted = (text) => `<p class="dw-muted">${esc(text)}</p>`;
+  const heading = (text) => `<h3 class="cv-h">${esc(text)}</h3>`;
+  const caption = (text) => `<p class="cv-cap">${esc(text)}</p>`;
+  const muted = (text) => `<p class="cv-muted">${esc(text)}</p>`;
 
   function table(headers, bodyRows) {
     if (!bodyRows.length) return "";
@@ -168,7 +155,7 @@
     const body = bodyRows
       .map((cells) => `<tr>${cells.map((c) => `<td>${c || DASH}</td>`).join("")}</tr>`)
       .join("");
-    return `<div class="dw-tscroll"><table class="dw-t"><thead><tr>${head}</tr></thead>
+    return `<div class="cv-tscroll"><table class="cv-t"><thead><tr>${head}</tr></thead>
       <tbody>${body}</tbody></table></div>`;
   }
 
@@ -184,7 +171,7 @@
   function ago(iso) {
     if (!filled(iso)) return "";
     const age = TD.fmt.relativeAge(iso);
-    return age ? `${age} <span class="dw-note" title="${esc(iso)}">${esc(String(iso).slice(0, 10))}</span>` : esc(String(iso).slice(0, 10));
+    return age ? `${age} <span class="cv-note" title="${esc(iso)}">${esc(String(iso).slice(0, 10))}</span>` : esc(String(iso).slice(0, 10));
   }
 
   /* --- Header -------------------------------------------------------------- */
@@ -208,7 +195,19 @@
     if (record && record.registry_url) links.push(ext(record.registry_url, "SmartAPI registry"));
     const chart = list(row.helm_charts)[0];
     if (chart && chart.source_url) links.push(ext(chart.source_url, "Helm chart"));
-    return links.length ? `<div class="dw-links">${links.join("")}</div>` : "";
+    // What this page knows about the component that nobody upstream told it:
+    // the catalog file, and where to correct it.
+    const file = catalogUrls(row.id);
+    links.push(ext(file.view, "Catalog file"), ext(file.edit, "Edit catalog file"));
+    return links.length ? `<div class="cv-links">${links.join("")}</div>` : "";
+  }
+
+  /* The component's own file in catalog/components/, on GitHub, to read and to
+     edit. A component's id is its file's name (tests/test_component_files.py
+     holds that), so the id alone is enough. */
+  function catalogUrls(id) {
+    const path = `catalog/components/${encodeURIComponent(id)}.yaml`;
+    return { view: `${CATALOG_BASE}/blob/main/${path}`, edit: `${CATALOG_BASE}/edit/main/${path}` };
   }
 
   /* The catalog's `summary`, else GitHub's one-liner for the repository: the
@@ -233,18 +232,13 @@
     const blurb = blurbFor(row);
     const meta = joinHtml([row.refactor_status, row.hosted_at, row.component_type || row.type,
       row.layer, thirdPartyText(row) ? "third-party" : ""]);
-    return `<div class="dw-headtop">
-        <div class="dw-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
-        <button type="button" class="dw-close" aria-label="Close details">
-          <svg viewBox="0 0 14 14" width="12" height="12" aria-hidden="true" fill="none"
-            stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-            ><path d="M3 3l8 8M11 3l-8 8"/></svg>
-        </button>
+    return `<div class="cv-headtop">
+        <div class="cv-name">${TD.owner.coin(row.owner)}<h2>${esc(row.name || row.id)}</h2></div>
       </div>
-      <div class="dw-id">${esc(row.id)}</div>
-      ${blurb ? `<div class="dw-blurb clamp-2">${esc(blurb)}</div>` : ""}
-      <div class="dw-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
-      ${meta ? `<div class="dw-metaline">${meta}</div>` : ""}
+      <div class="cv-id">${esc(row.id)}</div>
+      ${blurb ? `<div class="cv-blurb clamp-2">${esc(blurb)}</div>` : ""}
+      <div class="cv-rule" style="${metalRule(row.owner)}" aria-hidden="true"></div>
+      ${meta ? `<div class="cv-metaline">${meta}</div>` : ""}
       ${headerLinks(row)}`;
   }
 
@@ -261,8 +255,8 @@
       // differs from the reported one by a capital letter is genuinely a name
       // nothing reports, and saying so is the point of this row.
       const where = seen.length
-        ? `<span class="dw-note">${esc(seen.join(" · "))}</span>`
-        : `<span class="dw-note dw-off">not reporting</span>`;
+        ? `<span class="cv-note">${esc(seen.join(" · "))}</span>`
+        : `<span class="cv-note cv-off">not reporting</span>`;
       return `${mono(name)} ${where}`;
     });
     return longList(items, "services");
@@ -303,7 +297,7 @@
     // The key in small caps, the path in mono: "openapi openapi.json" in one
     // typeface reads as one string rather than as a name and its value.
     return stack(keys.map((key) =>
-      `<span class="dw-key">${esc(key)}</span> ${
+      `<span class="cv-key">${esc(key)}</span> ${
         filled(endpoints[key]) ? mono(endpoints[key]) : DASH}`));
   }
 
@@ -321,7 +315,7 @@
     if (!meta) return "";
     const topics = list(meta.topics);
     // Description is deliberately absent: it is the header's subtitle now, and
-    // printing it twice in one drawer is the kind of padding this page avoids.
+    // printing it twice on one page is the kind of padding this page avoids.
     return dl([
       drow("Default branch", meta.default_branch ? mono(meta.default_branch) : ""),
       drow("Last push", meta.pushed_at ? ago(meta.pushed_at) : ""),
@@ -347,7 +341,7 @@
     const smartapiId = row.smartapi;
     const smartapiCell = smartapiId
       ? (record && record.registry_url
-        ? ext(record.registry_url, smartapiId, "dw-link dw-mono")
+        ? ext(record.registry_url, smartapiId, "cv-link cv-mono")
         : mono(smartapiId))
       : "";
 
@@ -357,7 +351,7 @@
       ? charts.map((name) => {
         const detail = chartDetails.find((c) => c && c.chart === name);
         return detail && detail.source_url
-          ? ext(detail.source_url, name, "dw-link dw-mono")
+          ? ext(detail.source_url, name, "cv-link cv-mono")
           : mono(name);
       }).join(" ")
       : "";
@@ -384,7 +378,7 @@
       drow("Software", softwareHtml),
       drow("Layer", val(row.layer), true),
       drow("Stage", stage ? `${stage}${row.step_description
-        ? `<span class="dw-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
+        ? `<span class="cv-sub">${esc(row.step_description)}</span>` : ""}` : "", true),
       drow("Owner", row.owner ? TD.row.ownerLabel(row.owner) : "", true),
       drow("Part of", val(row.part_of)),
       drow("ITRB app / group", [itrb.app, itrb.group].filter(filled).length
@@ -401,11 +395,13 @@
       drow("Last updated", updatedHtml(row), true),
       drow("Uptime", uptime),
       drow("Isolated?", row.isolated ? "no recorded connections" : ""),
-      // The map draws a ubiquitous component beside each caller instead of
-      // once in a lane, so the picture has no node bearing this id; saying so
-      // here is what stops that reading as a missing node.
+      // The map puts a ubiquitous component on a rail at the right, outside
+      // the stage rows, with its edges off by default (layout.js); saying so
+      // here is what stops that reading as a missing node. The wording is
+      // #51's (7fb4520); this said "drawn beside each caller", which is the
+      // Graphviz picture, not the web map.
       drow("On the map", (row.diagram || {}).ubiquitous
-        ? `drawn beside each caller ${note("ubiquitous")}` : ""),
+        ? `on the rail at the right, edges hidden by default ${note("ubiquitous")}` : ""),
     ]);
 
     const meta = repoMetaHtml(row);
@@ -414,127 +410,74 @@
     // catalog's `description` and `notes` answer those two questions, which
     // is why the notes carry a heading and the description does not.
     return sections([
-      row.description ? `<div class="dw-prose dw-desc">${TD.fmt.prose(row.description)}</div>` : "",
+      row.description ? `<div class="cv-prose cv-desc">${TD.fmt.prose(row.description)}</div>` : "",
       row.notes
-        ? `<div class="dw-notes">${heading("Notes")}<p class="dw-prose">${esc(row.notes)}</p></div>`
+        ? `<div class="cv-notes">${heading("Notes")}<p class="cv-prose">${esc(row.notes)}</p></div>`
         : "",
       identity,
       meta ? heading("Repository") + meta : "",
     ]);
   }
 
-  /* --- Environments tab ---------------------------------------------------- */
+  /* --- Environments ----------------------------------------------------- */
 
-  /* What the document at the far end turned out to be. "version" is the
-     ordinary case and the Version row above already says it, so only the two
-     that explain an absence are drawn. */
-  const DOCUMENT_WORDS = {
-    "no-version": "document has no version",
-    "not-json": "serves HTML, not JSON",
-    version: "carries a version",
-  };
-
-  /* Which probe is the evidence for a deployment, and what it said: the
-     document's status when there is one; the root probe's when there is not,
-     under its own label so a 200 from "/" is never read as a 200 from the
-     document; and bare reachability when nothing recorded a status at all. */
-  function probeEvidence(cell) {
-    if (filled(cell.http_status)) return { row: "http", status: cell.http_status };
-    if (filled(cell.root_status)) return { row: "root", status: cell.root_status };
-    if (TD.row.reach(cell)) return { row: "reachable", status: null };
-    return { row: null, status: null };
+  /* One column per environment and one row per fact, so a reader compares
+     dev with prod along a line rather than matching four lists by eye. It is
+     the table's expanded row at full width, built on the same model
+     (TD.cell), so the two cannot disagree; the first row is the table's own
+     cell. What the table has no room for comes after: the full address of
+     every document a fact was read from, and the TRAPI operations by name. */
+  function factHtml(fact) {
+    if (!fact) return DASH;
+    const text = fact.mono ? esc(fact.value).replace(/\./g, ".<wbr>") : esc(fact.value);
+    const value = fact.href
+      ? `<a class="cv-link" href="${esc(fact.href)}" target="_blank" rel="noopener">${text}</a>`
+      : text;
+    const src = fact.src ? ` <span class="src" data-src="${esc(fact.src)}">${esc(sourceLabel(fact.src))}</span>` : "";
+    return `${value}${src}${fact.note ? ` ${note(fact.note)}` : ""}`;
   }
 
-  function envBlock(row, env) {
-    const cell = (row.environments || {})[env];
-    // `reason` is the payload's own sentence for why there is no version —
-    // "no such host", "up · no version endpoint", "not in registry for ci".
-    // It is a better first line than "Not deployed", which says less and is
-    // sometimes wrong: a service can be up and still report no version.
-    const reason = cell && cell.reason ? muted(cell.reason) : "";
-    if (!cell || !cell.deployed) {
-      return `${heading(env)}${reason || muted("Not deployed.")}`;
+  const helpButton = (row, label) =>
+    `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
+      data-fact="${esc(label)}" aria-label="Where ${esc(label)} comes from">?</button>`;
+
+  function urlCell(url) {
+    if (!filled(url)) return DASH;
+    return ext(url, url, "cv-link cv-mono cv-url");
+  }
+
+  function envMatrix(row) {
+    const names = envs();
+    if (!names.length) return muted("This build names no environments.");
+    const cells = row.environments || {};
+    const models = Object.fromEntries(names.map((env) => [env, TD.cell(row, env)]));
+    const labels = [];
+    for (const env of names) {
+      for (const fact of models[env].facts) {
+        if (labels.indexOf(fact.label) < 0) labels.push(fact.label);
+      }
     }
+    const line = (label, cellsHtml, help) =>
+      `<tr><th scope="row">${esc(label)}${help ? helpButton(row, label) : ""}</th>${cellsHtml}</tr>`;
+    const across = (fn) => names.map((env) => `<td>${fn(env)}</td>`).join("");
+    const any = (key) => names.some((env) => filled((cells[env] || {})[key]));
 
-    const drift = list(cell.drift);
-    // No glyph: the tint carries it, the sentence is one hover away, and
-    // aria-label is what a screen reader gets — the same three parts the
-    // table's cells use, so the two surfaces make one claim.
-    const driftSays = drift.length
-      ? `disagrees with the rest of this row: ${drift.join(", ")}` : "";
-    const version = cell.version
-      ? `<span class="version${drift.length ? " dw-drift" : ""}"${drift.length
-        ? ` data-tip="say" data-full="${esc(driftSays)}" aria-label="${esc(driftSays)}"` : ""}>${
-        esc(cell.version)}</span>`
-      : DASH;
-    const source = cell.version_source
-      ? ` <span class="src" data-src="${esc(cell.version_source)}">${
-        esc(sourceLabel(cell.version_source))}</span>` : "";
-    const unregistered = cell.unregistered
-      ? ` ${note("absent from the SmartAPI record")}` : "";
+    const body = [
+      line("Version", names.map((env) => TD.table.envCell(row, env)).join("")),
+      ...labels.map((label) => line(label,
+        across((env) => factHtml(models[env].facts.find((f) => f.label === label))), true)),
+      any("url") ? line("Address", across((env) => urlCell((cells[env] || {}).url))) : "",
+      any("openapi_url") ? line("API document URL", across((env) => urlCell((cells[env] || {}).openapi_url))) : "",
+      any("status_url") ? line("Status page URL", across((env) => urlCell((cells[env] || {}).status_url))) : "",
+      names.some((env) => list((cells[env] || {}).trapi_operations).length)
+        ? line("TRAPI operations", across((env) =>
+          counted(list((cells[env] || {}).trapi_operations).map(mono), "show") || DASH))
+        : "",
+    ].join("");
 
-    const href = cell.openapi_url || cell.url;
-    const host = href
-      ? `${ext(href, TD.fmt.host(cell.url || href))}<span class="dw-sub">${esc(cell.url || href)}</span>`
-      : "";
-
-    const state = TD.row.reach(cell);
-    const dotHtml = state ? dot(state === "up") : "";
-    const reach = state ? note(state === "up" ? "reachable" : "not reachable") : "";
-    // The dot travels to whichever row is the actual evidence, so a service
-    // whose document never answered still says whether anything answered.
-    const evidence = probeEvidence(cell);
-    const httpRow = evidence.row === "http" ? `${dotHtml}${esc(evidence.status)} ${reach}` : "";
-    const rootRow = evidence.row === "root"
-      ? `${dotHtml}${esc(evidence.status)} ${note("the service's root path, not its document")}`
-      : "";
-    const reachRow = evidence.row === "reachable" ? `${dotHtml}${reach}` : "";
-
-    const queries = cell.recent_queries
-      ? [
-        filled(cell.recent_queries.count) ? `${esc(cell.recent_queries.count)} queries` : "",
-        filled(cell.recent_queries.p50_ms) ? `p50 ${esc(cell.recent_queries.p50_ms)} ms` : "",
-        filled(cell.recent_queries.p95_ms) ? `p95 ${esc(cell.recent_queries.p95_ms)} ms` : "",
-      ].filter(Boolean).join(" · ")
-      : "";
-
-    const opsHtml = counted(list(cell.trapi_operations).map(mono), "show");
-
-    const document = cell.document && cell.document !== "version"
-      ? (DOCUMENT_WORDS[cell.document] || cell.document) : "";
-
-    // A deployment nothing probed directly: the registry named this maturity
-    // in a server description. Said under the environment name, because it
-    // qualifies every row beneath it rather than any one of them.
-    const inferred = cell.inferred
-      ? caption("inferred from the registry server's description") : "";
-
-    return heading(env) + inferred + (cell.version ? "" : reason) + dl([
-      drow("Version", `${version}${source}${unregistered}`, true),
-      drow("TRAPI", cell.trapi
-        ? `${esc(cell.trapi)}${cell.trapi_source ? ` <span class="src" data-src="${
-          esc(cell.trapi_source)}">${esc(sourceLabel(cell.trapi_source))}</span>` : ""}` : ""),
-      drow("Biolink", val(cell.biolink)),
-      drow("Data release", val(cell.data_release)),
-      drow("Released", cell.released
-        ? `${esc(cell.released)}${cell.release_tag
-          ? ` ${cell.release_url ? ext(cell.release_url, cell.release_tag, "dw-link dw-mono")
-            : mono(cell.release_tag)}` : ""}` : ""),
-      drow("Host", host),
-      drow("HTTP status", httpRow),
-      drow("Root", rootRow),
-      drow("Reachable", reachRow),
-      drow("Document", val(document)),
-      drow("Status endpoint", cell.status_url
-        ? ext(cell.status_url, TD.fmt.host(cell.status_url)) : ""),
-      drow("Location", val(cell.location)),
-      drow("OpenAPI title", val(cell.openapi_title)),
-      drow("Paths", val(cell.paths_count)),
-      drow("Async query", yesNo(cell.asyncquery)),
-      drow("Status message", val(cell.status_message)),
-      drow("Recent queries", queries),
-      drow("TRAPI operations", opsHtml),
-    ]);
+    return `<div class="cv-tscroll"><table class="cv-envs">
+        <thead><tr><th></th>${names.map((env) => `<th scope="col">${esc(env)}</th>`).join("")}</tr></thead>
+        <tbody>${body}</tbody></table></div>${rejectedHtml(row)}`;
   }
 
   function rejectedHtml(row) {
@@ -543,16 +486,7 @@
     return heading("Probed, not confirmed")
       + caption("a conventional hostname that did not confirm; not a claim that anything is down")
       + stack(rejected.map((entry) =>
-        `<span class="dw-key">${esc(entry.env)}</span> ${ext(entry.url, entry.url, "dw-link dw-mono")}`));
-  }
-
-  function panelEnvironments(row) {
-    const blocks = envs().map((env) => envBlock(row, env));
-    if (!blocks.length) blocks.push(muted("This build names no environments."));
-    // The one class on the page that puts a rule back: four environments read
-    // as four claims, and spacing alone was not enough to keep prod's rows
-    // from looking like more of test's.
-    return sections(blocks.concat([rejectedHtml(row)]), "dw-envsec");
+        `<span class="cv-key">${esc(entry.env)}</span> ${ext(entry.url, entry.url, "cv-link cv-mono")}`));
   }
 
   /* --- Releases tab -------------------------------------------------------- */
@@ -582,15 +516,15 @@
     if (release.published) marks.push(note(release.published));
 
     const tag = release.url
-      ? ext(release.url, release.tag, `dw-link dw-mono${isDeployed ? " dw-on" : ""}`)
-      : `<span class="dw-mono${isDeployed ? " dw-on" : ""}">${esc(release.tag)}</span>`;
+      ? ext(release.url, release.tag, `cv-link cv-mono${isDeployed ? " cv-on" : ""}`)
+      : `<span class="cv-mono${isDeployed ? " cv-on" : ""}">${esc(release.tag)}</span>`;
     const name = release.name && release.name !== release.tag
-      ? `<span class="dw-relname">${esc(release.name)}</span>` : "";
+      ? `<span class="cv-relname">${esc(release.name)}</span>` : "";
 
-    return `<div class="dw-rel">
-      <div class="dw-relhead">${tag}${name}</div>
-      <div class="dw-relmeta">${marks.join(" ")}</div>
-      ${release.body_excerpt ? `<p class="dw-excerpt">${esc(release.body_excerpt)}</p>` : ""}
+    return `<div class="cv-rel">
+      <div class="cv-relhead">${tag}${name}</div>
+      <div class="cv-relmeta">${marks.join(" ")}</div>
+      ${release.body_excerpt ? `<p class="cv-excerpt">${esc(release.body_excerpt)}</p>` : ""}
     </div>`;
   }
 
@@ -635,7 +569,7 @@
       // someone meant to change what runs; it does not say a cluster took it.
       drow("Chart last changed", changed
         ? `${changed.url ? ext(changed.url, changed.date || changed.sha || "commit") : esc(changed.date || "")}
-           ${changed.subject ? `<span class="dw-sub">${esc(changed.subject)}</span>` : ""}
+           ${changed.subject ? `<span class="cv-sub">${esc(changed.subject)}</span>` : ""}
            ${note("intent to deploy, not a deployment")}`
         : ""),
       drow("Chart source", ext(chart.source_url, "open in translator-devops")),
@@ -687,7 +621,7 @@
       candidates.length === 1 ? "entry shares" : "entries share"
     } this infores; none is recorded on the component: ${titles.join(", ")}`)
       + stack(candidates.map((c) =>
-        `${ext(`https://smart-api.info/ui/${c.smartapi_id}`, c.smartapi_id, "dw-link dw-mono")} ${
+        `${ext(`https://smart-api.info/ui/${c.smartapi_id}`, c.smartapi_id, "cv-link cv-mono")} ${
           val(c.title)}`));
   }
 
@@ -733,8 +667,8 @@
       const under = joinHtml([server.location, server.description]);
       return [
         val(server.maturity),
-        `${server.url ? ext(server.url, server.url, "dw-link dw-mono") : ""}${
-          under ? `<span class="dw-sub">${under}</span>` : ""}`,
+        `${server.url ? ext(server.url, server.url, "cv-link cv-mono") : ""}${
+          under ? `<span class="cv-sub">${under}</span>` : ""}`,
       ];
     });
 
@@ -760,7 +694,7 @@
       drow("Contact", [contact.name, contact.email, contact.url].filter(filled).length
         ? [
           val(contact.name),
-          contact.email ? `<a class="dw-link" href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : "",
+          contact.email ? `<a class="cv-link" href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : "",
           contact.url ? ext(contact.url) : "",
         ].filter(Boolean).join(" · ")
         : ""),
@@ -774,7 +708,7 @@
       statusBlock,
       registration,
       record.description_text ? heading("Description")
-        + `<p class="dw-prose">${esc(record.description_text)}</p>` : "",
+        + `<p class="cv-prose">${esc(record.description_text)}</p>` : "",
     ]);
   }
 
@@ -783,19 +717,18 @@
   function connButton(id, planned) {
     const other = rowById(id);
     const label = other ? other.name : id;
-    return `<button type="button" class="dw-conn${planned ? " planned" : ""}" data-go="${esc(id)}">
-      ${other ? TD.owner.coin(other.owner) : ""}<span class="dw-connname">${esc(label)}</span>
-      <span class="dw-mono dw-connid" data-tip="1" data-full="${esc(id)}">${esc(id)}</span>${
-      planned ? `<span class="dw-note">planned</span>` : ""}</button>`;
+    return `<button type="button" class="cv-conn${planned ? " planned" : ""}" data-go="${esc(id)}">
+      ${other ? TD.owner.coin(other.owner) : ""}<span class="cv-connname">${esc(label)}</span>
+      <span class="cv-mono cv-connid" data-tip="1" data-full="${esc(id)}">${esc(id)}</span>${
+      planned ? `<span class="cv-note">planned</span>` : ""}</button>`;
   }
 
   /* The chips of a connections group, or nothing. */
-  const conns = (items) => (items.length ? `<div class="dw-conns">${items.join("")}</div>` : "");
+  const conns = (items) => (items.length ? `<div class="cv-conns">${items.join("")}</div>` : "");
 
-  function connGroup(title, ids, plannedIds) {
-    const items = list(ids).map((id) => connButton(id, false))
-      .concat(list(plannedIds).map((id) => connButton(id, true)));
-    return heading(title) + (conns(items) || muted("None recorded."));
+  function connGroup(group) {
+    const items = group.items.map((item) => connButton(item.id, item.planned));
+    return heading(group.title) + (conns(items) || muted("None recorded."));
   }
 
   /* Catalog edges follow the data (`build_catalog_edges`): what this
@@ -814,27 +747,12 @@
   }
 
   function panelConnections(row) {
-    const connections = row.connections || {};
-    const all = rows();
-
-    const reverse = (key) => all
-      .filter((other) => other.id !== row.id
-        && list((other.connections || {})[key]).indexOf(row.id) >= 0)
-      .map((other) => other.id);
-
     const externalsHtml = conns(list(row.externals).map((entry) =>
-      `<span class="dw-conn static">${TD.row.arrow(entry.direction)}
-          <span class="dw-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
+      `<span class="cv-conn static">${TD.row.arrow(entry.direction)}
+          <span class="cv-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
 
-    const parts = [
-      connGroup("Gets results from",
-        connections.gets_results_from, connections.planned_gets_results_from),
-      connGroup("Provides results to",
-        reverse("gets_results_from"), reverse("planned_gets_results_from")),
-      connGroup("Calls", connections.calls, connections.planned_calls),
-      connGroup("Called by", reverse("calls"), reverse("planned_calls")),
-      heading("Externals") + externalsHtml,
-    ];
+    const parts = TD.row.connections(row).map(connGroup)
+      .concat([heading("Externals") + externalsHtml]);
 
     // A second opinion, kept separate from the hand-recorded graph rather than
     // merged into it: the catalog is a different claim by a different group.
@@ -854,10 +772,10 @@
         + caption("the infores catalog's view, beside what this repository records")
         + facts
         + (consumes.length
-          ? `<div class="dw-sublabel">consumes</div>${
+          ? `<div class="cv-sublabel">consumes</div>${
             conns(consumes.map((id) => connButton(id, false)))}` : "")
         + (consumedBy.length
-          ? `<div class="dw-sublabel">consumed by</div>${
+          ? `<div class="cv-sublabel">consumed by</div>${
             conns(consumedBy.map((id) => connButton(id, false)))}` : "")
         + (!consumes.length && !consumedBy.length && !facts
           ? muted("Nothing recorded in the catalog for this component.") : ""));
@@ -869,313 +787,276 @@
     return sections(parts);
   }
 
-  const PANELS = {
-    overview: panelOverview,
-    environments: panelEnvironments,
-    releases: panelReleases,
-    helm: panelHelm,
-    smartapi: panelSmartapi,
-    connections: panelConnections,
-  };
+  /* --- Recorded ---------------------------------------------------------- */
 
-  /* --- The element --------------------------------------------------------- */
-
-  let root = null;
-  let head = null;
-  let bodyEl = null;
-  let panelEl = null;
-  let tabsWrap = null;
-  let tabs = null;
-  let currentId = "";
-  let currentTab = DEFAULT_TAB;
-  let opener = null;
-  let openerId = "";
-  let pending = null;
-
-  /* table.js opens the drawer without handing over the button that was
-     clicked, and rewrites its <tbody> on the next render, so by the time Esc
-     is pressed that button is a detached node. Capturing the click here — one
-     listener, before the table's own — is how Esc gets the focus back to the
-     row the reader started from without table.js having to know the drawer
-     exists. */
-  document.addEventListener("click", (event) => {
-    const trigger = event.target.closest && event.target.closest("[data-open]");
-    if (trigger && !(root && root.contains(trigger))) pending = trigger;
-  }, true);
-
-  const normaliseTab = (tab) => (TAB_IDS.indexOf(tab) >= 0 ? tab : DEFAULT_TAB);
-
-  /* One row of tabs at 440px does not fit six labels, and a scrollbar is
-     hidden by design. A fade at the right edge is the only remaining sign
-     that there is more, and it must not be painted when everything fits —
-     which is a measurement, so it happens here rather than in the sheet. */
-  function measureTabs() {
-    if (!tabsWrap) return;
-    // The wrapper is the scroller; the strip inside it is width:max-content and
-    // so is never wider than itself. Measuring the strip always said "fits".
-    const more = tabsWrap.scrollWidth > tabsWrap.clientWidth + 1;
-    tabsWrap.dataset.more = more ? "1" : "0";
-  }
-
-  /* Keeps the selected tab in view when the strip is scrolled: arrow keys can
-     move to a tab that is off the right edge, and a focused control the
-     reader cannot see is worse than no scrolling at all. */
-  function revealTab() {
-    if (!tabsWrap) return;
-    const on = tabsWrap.querySelector('[aria-selected="true"]');
-    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }
-
-  function build() {
-    if (root) return root;
-    root = document.createElement("aside");
-    root.className = "drawer";
-    root.setAttribute("role", "complementary");
-    root.setAttribute("aria-label", "Component details");
-    root.hidden = true;
-    root.innerHTML = `<button type="button" class="dw-sheetclose"
-        >${TD.ui.CARET_DOWN}<span>Close</span></button>
-      <div class="dw-head"></div>
-      <div class="dw-tabs"></div>
-      <div class="dw-body"><div class="dw-panel" id="dw-panel" role="tabpanel"
-        tabindex="0"></div></div>`;
-    head = root.querySelector(".dw-head");
-    tabsWrap = root.querySelector(".dw-tabs");
-    bodyEl = root.querySelector(".dw-body");
-    panelEl = root.querySelector(".dw-panel");
-
-    tabs = TD.ui.tabs({
-      label: "Component details",
-      tabs: TABS.map((tab) => ({ id: tab.id, label: tab.label, panel: "dw-panel" })),
-      // The panel names the tab that labels it by this id (`aria-labelledby`).
-      idPrefix: "dw-tab",
-      value: currentTab,
-      onChange: (value) => setTab(value, false),
+  /* Flattens the schema's `properties` into the rows the Recorded section
+     draws, in schema order: a scalar or list is one row, a block with its
+     own `properties` (identifiers, itrb, connections, endpoints, diagram) is
+     one row per key inside it, and `environments` is one row per environment
+     the payload names. `endpoints` may carry keys the schema does not name
+     (`additionalProperties`), so the file's own extra keys are appended when
+     a file is given. Each row is {path, label, description, required}.
+     From #51 (811826b). */
+  function schemaFields(schema, recorded) {
+    const props = (schema && schema.properties) || {};
+    const required = new Set(list(schema && schema.required));
+    const out = [];
+    const push = (path, spec, isRequired) => out.push({
+      path,
+      label: path.join("."),
+      description: String((spec && spec.description) || ""),
+      required: !!isRequired,
     });
-    tabsWrap.append(tabs.el);
+    for (const [key, spec] of Object.entries(props)) {
+      if (!spec || typeof spec !== "object") continue;
+      if (key === "environments") {
+        for (const env of envs()) push([key, env], { description: `Base URL and location for ${env}.` }, false);
+        continue;
+      }
+      const nested = spec.type === "object" && spec.properties && typeof spec.properties === "object"
+        ? spec.properties : null;
+      if (!nested) {
+        push([key], spec, required.has(key));
+        continue;
+      }
+      const inner = new Set(list(spec.required));
+      for (const [sub, subSpec] of Object.entries(nested)) push([key, sub], subSpec, inner.has(sub));
+      // Keys the file has under this block that the schema does not name
+      // (endpoints allows them): shown, so nothing recorded is invisible.
+      const block = recorded && recorded[key];
+      if (block && typeof block === "object" && !Array.isArray(block)) {
+        for (const sub of Object.keys(block)) {
+          if (!(sub in nested)) push([key, sub], {}, false);
+        }
+      }
+    }
+    return out;
+  }
 
-    root.addEventListener("click", onClick);
-    document.body.append(root);
-    TD.ui.tooltip.bind(root, "[data-tip]", (target) => {
+  /* Absent, null and empty are three different claims in this format
+     (docs/component-metadata.md): absent means "not recorded yet", an
+     explicit null or [] means "checked, there is none". This is where the
+     distinction is shown rather than flattened. */
+  function fieldState(recorded, path) {
+    let node = recorded;
+    for (const key of path) {
+      if (!node || typeof node !== "object" || !(key in node)) return { state: "absent" };
+      node = node[key];
+    }
+    const empty = node === null
+      || (Array.isArray(node) && node.length === 0)
+      || (typeof node === "object" && !Array.isArray(node) && Object.keys(node).length === 0);
+    return { state: empty ? "none" : "recorded", value: node };
+  }
+
+  /* A recorded value as HTML. A URL becomes a link; a list of strings is
+     joined; a list of mappings (repositories, documentation, externals) is
+     one line each; a mapping (an environment, an itrb block) is `key value`
+     pairs. Nothing here is prose the page wrote. */
+  function valueHtml(value) {
+    if (value === null || value === undefined) return DASH;
+    if (typeof value === "boolean") return value ? "yes" : "no";
+    if (typeof value === "string") {
+      return /^https?:\/\//i.test(value) ? ext(value, value, "cv-link cv-mono") : mono(value);
+    }
+    if (typeof value === "number") return mono(String(value));
+    if (Array.isArray(value)) {
+      if (!value.length) return DASH;
+      if (value.every((v) => typeof v !== "object" || v === null)) return value.map(valueHtml).join(", ");
+      return stack(value.map(valueHtml));
+    }
+    const entries = Object.entries(value);
+    if (!entries.length) return DASH;
+    return entries.map(([k, v]) => `<span class="cv-key">${esc(k)}</span> ${valueHtml(v)}`).join(" · ");
+  }
+
+  const STATE_WORDS = { recorded: "recorded", none: "checked: none", absent: "not recorded" };
+
+  /* The component's own file against every field the schema allows. This is
+     the section for "field X is wrong or missing": what the catalog says,
+     what it says it checked and found nothing, and what nobody has written
+     down yet. */
+  function recordedSection(row) {
+    const recorded = row.recorded;
+    if (!recorded || typeof recorded !== "object") {
+      return muted("This build did not carry the component file.");
+    }
+    const fields = schemaFields(data().component_schema, recorded);
+    if (!fields.length) return muted("This build carries no schema to compare the file against.");
+    let count = 0;
+    const body = fields.map((field) => {
+      const { state, value } = fieldState(recorded, field.path);
+      if (state === "recorded") count += 1;
+      const title = field.description ? ` title="${esc(field.description)}"` : "";
+      return `<tr class="cv-f cv-f-${state}">
+        <th scope="row"${title}>${esc(field.label)}${field.required ? ` ${note("required")}` : ""}</th>
+        <td class="cv-state">${STATE_WORDS[state]}</td>
+        <td class="cv-value">${state === "recorded" ? valueHtml(value) : DASH}</td></tr>`;
+    }).join("");
+    const absent = fields.length - count;
+    const file = catalogUrls(row.id);
+    return `<p class="cv-cap">The component's own file, ${
+      ext(file.view, `catalog/components/${row.id}.yaml`, "cv-link cv-mono")}, against every field the
+        schema allows. “Not recorded” means nobody has written the field down yet; “checked: none”
+        means someone looked and there is nothing to record. Hover a field for what it holds.</p>
+      <p class="cv-count">${count} of ${fields.length} fields recorded${
+        absent ? ` · <strong>${absent}</strong> not` : ""} · ${ext(file.edit, "edit the file")}</p>
+      <div class="cv-tscroll"><table class="cv-t cv-rec"><thead><tr>
+        <th>Field</th><th>State</th><th>Value</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+
+  /* The sections under the environments, in reading order: what it is, how
+     it is registered, what it has released, what should be deployed, and
+     what it talks to. */
+  const PANELS = [
+    { id: "overview", label: "Overview", render: panelOverview },
+    { id: "smartapi", label: "SmartAPI", render: panelSmartapi },
+    { id: "releases", label: "Releases", render: panelReleases },
+    { id: "helm", label: "Helm", render: panelHelm },
+    { id: "connections", label: "Connections", render: panelConnections },
+  ];
+
+  // Full width, last: a table of every field is too wide for a column.
+  const RECORDED = { id: "recorded", label: "Recorded in the catalog", render: recordedSection };
+
+  /* One malformed field must cost its section, not the page: this is a
+     reading surface over data fetched from six upstreams. */
+  function panelHtml(row, panel, wide) {
+    let html;
+    try {
+      html = panel.render(row);
+    } catch (error) {
+      html = muted(`This section could not be rendered for ${row.id}.`);
+      if (typeof console !== "undefined") console.error(`component ${panel.id}:`, error);
+    }
+    return `<section class="cv-panel${wide ? " wide" : ""}" id="cv-${panel.id}"
+      aria-labelledby="cv-${panel.id}-h"><h2 class="cv-ph" id="cv-${panel.id}-h">${
+      esc(panel.label)}</h2>${html}</section>`;
+  }
+
+  /* --- The picker --------------------------------------------------------- */
+
+  /* The components grouped by stage, in the payload's order, which is the
+     table's order before anyone sorts it: so a stage reads the same in the
+     picker as it does in the bands. */
+  function pickerGroups(all) {
+    const groups = [];
+    for (const row of all) {
+      const numbered = row.step_label && row.step_title && row.step_label !== row.step_title;
+      const label = numbered ? `${row.step_label}: ${row.step_title}` : row.step_title || row.step_label || "";
+      if (!groups.length || groups[groups.length - 1].label !== label) groups.push({ label, rows: [] });
+      groups[groups.length - 1].rows.push(row);
+    }
+    return groups;
+  }
+
+  /* A native <select>: type-to-find, the keyboard and a phone's own picker,
+     none of which a listbox here would have without writing them. */
+  function pickerHtml(current) {
+    const known = !!rowById(current);
+    const option = (row) =>
+      `<option value="${esc(row.id)}"${row.id === current ? " selected" : ""}>${esc(row.name || row.id)}</option>`;
+    const groups = pickerGroups(rows()).map((group) => group.label
+      ? `<optgroup label="${esc(group.label)}">${group.rows.map(option).join("")}</optgroup>`
+      : group.rows.map(option).join(""));
+    return `<label class="cv-pick"><span class="cv-picklabel">Component</span><select id="cv-select">${
+      known ? "" : '<option value="" selected disabled>Choose a component…</option>'}${groups.join("")}</select></label>`;
+  }
+
+  /* --- The page ----------------------------------------------------------- */
+
+  function pageHtml(id) {
+    const row = rowById(id);
+    const bar = `<div class="cv-bar">${pickerHtml(id)}
+      ${row ? `<span class="spacer"></span>
+        <button type="button" class="btn" id="cv-copy">Copy link</button>
+        <button type="button" class="btn" id="cv-map">Show on map</button>` : ""}</div>`;
+    if (!row) {
+      return bar + muted(id
+        ? `No component has the id ${id}. Choose one above.`
+        : "Choose a component above, or use the arrow beside a component in the Overview, or click a node on the Map.");
+    }
+    return `${bar}<header class="cv-head">${headerHtml(row)}</header>
+      <section class="cv-panel wide" id="cv-environments" aria-labelledby="cv-environments-h">
+        <h2 class="cv-ph" id="cv-environments-h">Environments</h2>${envMatrix(row)}</section>
+      <div class="cv-cols">${PANELS.map((panel) => panelHtml(row, panel)).join("")}</div>
+      ${panelHtml(row, RECORDED, true)}`;
+  }
+
+  let host = null;
+  let shown = null;
+
+  function bind(container) {
+    host = container;
+    container.addEventListener("click", (event) => {
+      const disc = event.target.closest("[data-disc]");
+      if (disc) {
+        const expanded = disc.getAttribute("aria-expanded") === "true";
+        disc.setAttribute("aria-expanded", expanded ? "false" : "true");
+        return;
+      }
+      const go = event.target.closest("[data-go]");
+      if (go) {
+        event.preventDefault();
+        if (rowById(go.dataset.go)) TD.navigate({ sel: go.dataset.go });
+        return;
+      }
+      if (event.target.closest("#cv-map")) { TD.navigate({ view: "map" }); return; }
+      const copy = event.target.closest("#cv-copy");
+      if (copy) copyLink(copy);
+    });
+    container.addEventListener("change", (event) => {
+      if (event.target.id === "cv-select" && event.target.value) {
+        TD.navigate({ sel: event.target.value });
+      }
+    });
+    TD.ui.tooltip.bind(container, "[data-tip]", (target) => {
+      const kind = target.dataset.tip;
+      // The table's kinds (an environment cell, a fact's (?), a source label)
+      // read the same here as there; "say" and "1" are this page's own.
+      if (kind !== "say" && kind !== "1") return TD.table.tipHtml(target);
       const full = target.dataset.full || target.textContent || "";
-      // data-tip="say" carries a sentence the element does not show — the
-      // drift explanation, now that the ≠ glyph is gone. Everything else is a
+      // data-tip="say" carries a sentence the element does not show; "1" is a
       // truncation tooltip, and declines to repeat text already legible.
-      if (target.dataset.tip === "say") return esc(full);
+      if (kind === "say") return esc(full);
       if (target.scrollWidth <= target.clientWidth + 1) return "";
       return esc(full);
     });
-    return root;
   }
 
-  function onClick(event) {
-    const closeButton = event.target.closest(".dw-close, .dw-sheetclose");
-    if (closeButton) {
-      close();
-      return;
-    }
-    const disc = event.target.closest("[data-disc]");
-    if (disc) {
-      const expanded = disc.getAttribute("aria-expanded") === "true";
-      disc.setAttribute("aria-expanded", expanded ? "false" : "true");
-      return;
-    }
-    const go = event.target.closest("[data-go]");
-    if (go) {
-      event.preventDefault();
-      const id = go.dataset.go;
-      if (!rowById(id)) return;
-      open(id, currentTab, { opener: go });
-      TD.map.focus(id);
-    }
-  }
-
-  function syncSelection(id) {
-    TD.table.markSelected(id);
-    // The commits here are silent, so the map never repaints on its own and
-    // would keep ringing a node the drawer has let go of.
-    TD.map.ring(id);
-  }
-
-  function renderPanel() {
-    const row = rowById(currentId);
-    if (!row) {
-      panelEl.innerHTML = `<p class="dw-muted">No component with the id ${esc(currentId)}.</p>`;
-      return;
-    }
-    const make = PANELS[currentTab] || PANELS[DEFAULT_TAB];
-    let html;
+  async function copyLink(button) {
     try {
-      html = make(row);
-    } catch (error) {
-      // One malformed field must cost that tab, not the page: the drawer is a
-      // reading surface over data fetched from six upstreams.
-      html = `<p class="dw-muted">This tab could not be rendered for ${esc(row.id)}.</p>`;
-      if (typeof console !== "undefined") console.error("drawer:", error);
+      await navigator.clipboard.writeText(location.href);
+      button.textContent = "Copied";
+    } catch {
+      button.textContent = "Press ⌘C";
     }
-    panelEl.innerHTML = html;
-    panelEl.setAttribute("aria-labelledby", `dw-tab-${currentTab}`);
-    panelEl.scrollTop = 0;
-    bodyEl.scrollTop = 0;
+    setTimeout(() => { button.textContent = "Copy link"; }, 3000);
   }
 
-  function setTab(tab, silentControl) {
-    const next = normaliseTab(tab);
-    if (next === currentTab && panelEl && panelEl.innerHTML) return;
-    currentTab = next;
-    if (tabs && silentControl !== false) tabs.set(next);
-    renderPanel();
-    revealTab();
-    // Only when it differs from the default: a link that says ?tab=overview
-    // is telling the reader nothing they would not have got anyway.
-    TD.commit({ tab: next === DEFAULT_TAB ? "" : next }, { silent: true });
-  }
+  /* Redrawn only when the component changes: app.js renders the shown view on
+     every commit, and a page that rebuilt itself would close every disclosure
+     the reader had opened and lose their scroll. */
+  view.render = function render(container) {
+    if (host !== container) bind(container);
+    const id = (TD.state && TD.state.sel) || "";
+    if (id === shown && container.firstChild) return;
+    shown = id;
+    container.innerHTML = pageHtml(id);
+    container.scrollTop = 0;
+  };
 
-  /* --- Open, close --------------------------------------------------------- */
-
-  let reflowTimer = 0;
-
-  /* app.js measures the table's scrollport against the window, and the map
-     keeps its camera; the drawer has just taken 440px of the row and only
-     TD.layoutChanged tells either of them. Sent twice: once now, so the
-     reflow happens with the slide rather than after it, and once when the
-     entrance has finished, because the first measurement is taken
-     mid-animation. */
-  function reflow() {
-    const fire = () => {
-      TD.layoutChanged();
-      measureTabs();
-      // Sheet mode only. The 30vh cap on the table lands the moment
-      // data-drawer is set, which is after app.js has already scrolled to the
-      // selected row against the full-height scrollport — so without this the
-      // row the reader just tapped sits behind the sheet.
-      if (innerWidth <= SHEET_MAX_WIDTH) TD.table.revealRow(currentId);
-    };
-    fire();
-    clearTimeout(reflowTimer);
-    reflowTimer = setTimeout(fire, 340);
-  }
-
-  function open(id, tab, options) {
-    const row = rowById(id);
-    if (!row) return;
-    build();
-
-    const opts = options || {};
-    const wasOpen = drawer.isOpen();
-    // Only when the drawer is opening, or opening on a different component:
-    // clicking through Connections should return focus to the row that
-    // started the journey, not to the last link on the way.
-    const from = opts.opener || pending;
-    pending = null;
-    if (from && (!wasOpen || openerId !== id)) {
-      opener = from;
-      openerId = id;
-    }
-    if (!wasOpen && !from) { opener = null; openerId = id; }
-
-    const sameId = currentId === id;
-    currentId = id;
-    currentTab = normaliseTab(tab || (sameId ? currentTab : TD.state && TD.state.tab) || DEFAULT_TAB);
-
-    head.innerHTML = headerHtml(row);
-    if (tabs) tabs.set(currentTab);
-    renderPanel();
-
-    root.hidden = false;
-    measureTabs();
-    revealTab();
-    document.documentElement.dataset.drawer = "open";
-    if (!wasOpen) {
-      // Re-triggered rather than left on the element: reopening on another
-      // component should play the same entrance, not sit still.
-      root.classList.remove("in");
-      // The token durations are already 0 under prefers-reduced-motion;
-      // reading the preference here too means the class is never applied, so
-      // there is no animation to fill and no forced reflow to pay for.
-      if (TD.motion.enabled) {
-        void root.offsetWidth;
-        root.classList.add("in");
-      }
-      reflow();
-    }
-
-    TD.commit({ sel: id, tab: currentTab === DEFAULT_TAB ? "" : currentTab }, { silent: true });
-    syncSelection(id);
-    if (!opts.silentFocus) {
-      const closeButton = root.querySelector(".dw-close");
-      if (closeButton) closeButton.focus({ preventScroll: true });
-    }
-  }
-
-  function close() {
-    if (!root || root.hidden) return;
-    root.hidden = true;
-    root.classList.remove("in");
-    delete document.documentElement.dataset.drawer;
-    const id = currentId;
-    currentId = "";
-    TD.commit({ sel: "", tab: "" }, { silent: true });  // no selection, no tab
-    syncSelection("");
-    reflow();
-
-    // The table rebuilds its rows on every render, so the button that opened
-    // the drawer is usually a detached node by now; the row is found again by
-    // id rather than the focus being dropped on <body>.
-    let target = opener && document.contains(opener) ? opener : null;
-    if (!target && id) target = document.querySelector(`[data-open="${CSS.escape(id)}"]`);
-    opener = null;
-    openerId = "";
-    if (target) target.focus({ preventScroll: true });
-  }
-
-  /* --- Keyboard ------------------------------------------------------------ */
-
-  /* Escape closes when the focus is inside the drawer, and otherwise only when
-     nothing else has already claimed the key — a listbox popover in the filter
-     strip calls preventDefault on its own Escape, so checking that is what
-     keeps one key from closing two things. */
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || event.defaultPrevented) return;
-    if (!drawer.isOpen()) return;
-    close();
-  });
-
-  /* --- Boot ---------------------------------------------------------------- */
-
-  function sync() {
-    const state = TD.state || {};
-    if (state.sel && rowById(state.sel)) {
-      // From the URL, so no focus steal: the reader asked for a page, not for
-      // the caret to land in a close button they did not press.
-      open(state.sel, state.tab, { silentFocus: true });
-    } else if (drawer.isOpen()) {
-      close();
-    }
-  }
-
-  // drawer.js is inlined before app.js, so TD.state does not exist yet. A
-  // microtask runs after the whole <script> — app.js included — has finished,
-  // and a frame after that gives the shell its first layout to measure.
-  queueMicrotask(() => {
-    if (!TD.state) return;
-    requestAnimationFrame(sync);
-  });
-
-  addEventListener("resize", () => { if (drawer.isOpen()) measureTabs(); });
-
-  /* --- Public API ---------------------------------------------------------- */
-
-  drawer.open = open;
-  drawer.isOpen = () => !!root && !root.hidden;
-  // Open or close to match TD.state.sel; app.js calls it on popstate.
-  drawer.sync = sync;
-  // For tests/web/drawer.test.js; nothing on the page calls these from outside.
-  drawer.blurbFor = blurbFor;
-  drawer.thirdPartyText = thirdPartyText;
-  drawer.catalogNeighbours = catalogNeighbours;
-  drawer.deployedIn = deployedIn;
-  drawer.docLabel = docLabel;
-  drawer.probeEvidence = probeEvidence;
-  drawer.updatedHtml = updatedHtml;
+  // For tests/web/component.test.js; nothing on the page calls these from outside.
+  view.blurbFor = blurbFor;
+  view.thirdPartyText = thirdPartyText;
+  view.catalogNeighbours = catalogNeighbours;
+  view.catalogUrls = catalogUrls;
+  view.deployedIn = deployedIn;
+  view.fieldState = fieldState;
+  view.recordedSection = recordedSection;
+  view.schemaFields = schemaFields;
+  view.docLabel = docLabel;
+  view.pickerGroups = pickerGroups;
+  view.pageHtml = pageHtml;
+  view.updatedHtml = updatedHtml;
 })();

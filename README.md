@@ -31,20 +31,17 @@ dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 uv sync                    # first-time setup; creates .venv/
 uv run sync-components     # follow what catalog/components/*.yaml points at -> data/sync/
 uv run build-dashboard     # compile that into a page      -> data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard
+# then open http://localhost:8765/ (Ctrl-C stops the server)
 ```
 
 That takes about ten seconds of network time and reaches only public services.
 Everything it fetches is cached under `data/`, which is gitignored, so nothing
 you run can dirty the repository.
 
-To exercise the full page — map export, clipboard copy, and anything else a
-browser blocks from `file://` — serve the build instead:
-
-```bash
-cd data/dashboard && python3 -m http.server 8765
-# then open http://localhost:8765/
-```
+The page inlines its own data, so `open data/dashboard/index.html` works
+without a server too, but browsers block map export, clipboard copy and some
+other features from `file://`.
 
 ### The diagram needs two more things
 
@@ -212,26 +209,42 @@ shows what a fetcher builds from one of them.
 
 ## The components dashboard
 
-A single self-contained HTML page with two views over the same payload:
+A single self-contained HTML page with three views over the same payload:
 
 - **Overview** — one row per component, in stages (data coming in at the top,
-  the people who use it at the bottom), with a column per environment showing
-  the deployed URL and the version running there.
+  the people who use it at the bottom), with a cell per environment tinted by
+  its state: the same version as the rest of the row, a different one, up
+  with no version to read, down, or nothing on file. The version links to the
+  document it was read from, and the data release it has loaded (`babel
+  2025sep1`) sits under it.
 - **Map** — an interactive SVG diagram of which component connects to what,
-  laid out in the same stages, with pan/zoom, hover highlighting, SVG/PNG
-  export, and the same detail drawer as the table.
+  laid out in the same stages, with pan/zoom, hover highlighting and SVG/PNG
+  export.
+- **Component** — one component on a page of its own, chosen from a picker:
+  its environments side by side, one row per fact with a link to every
+  document a fact was read from, then its overview, SmartAPI registration,
+  releases, Helm chart and connections, and its catalog file field by field
+  against the schema, marked recorded, "checked: none" or "not recorded".
 
-Click a row or a map node to open the drawer (Overview · Environments ·
-Releases · Helm · SmartAPI · Connections). Expand a row inline with the
-chevron for a side-by-side environment read without leaving the table.
+Click anywhere on a row, its name included, to expand it inline for a
+side-by-side environment read without leaving the table: one line per fact,
+each with a (?) that says where its values come from, the component's releases
+under its repository, and, under its name, what it gets results from, provides
+them to, calls and is called by, each opening that component's page. (Below
+800px wide that column holds the labels instead, and the connections are on
+the Component page.) The arrow at the right of a component's name, the "Open
+the … page" button in an open row, and a node on the map open its Component
+page; Back returns to where you were. A legend beside the filters says what
+the cell colours mean.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
 uv run build-dashboard     # compile           into data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard   # http://localhost:8765/
 
-# Map export and other features some browsers block from file://:
-cd data/dashboard && python3 -m http.server 8765
+# Without a server, minus map export and other features browsers block from
+# file://:
+open data/dashboard/index.html
 
 # Rebuild on every edit to the catalog, config, sync cache or code (Ctrl-C
 # stops it). Reload the tab by hand; a new sync is still a separate step.
@@ -256,21 +269,36 @@ things it reports are the answer:
   source?" has a number rather than an opinion. Both live sources come before
   the registry, because a registration is a copy somebody filed by hand.
 - **Which environments disagree.** A version in the minority for its component
-  is tinted, so drift between dev, ci, test and prod is visible without reading
-  every cell.
-- **Which release each environment is running.** The Repository column lists a
-  component's newest GitHub releases, plus any older release an environment is
-  still on, each tag linking to its notes. A filled tag is deployed somewhere
-  on that row, so the number in the `prod` column has its changelog one click
-  away.
+  is tinted amber and marked ≠, so drift between dev, ci, test and prod is
+  visible without reading every cell. A version copied from the registry or
+  the chart rather than read from the running service is a dashed pill, so
+  four identical copies do not read as four services agreeing.
+- **Where it is registered, and what needs a look.** The SmartAPI column says
+  what to do about each registration, worst problem first: `record not found`
+  (the catalog has an id the registry does not), `probe failing`, `ci not
+  listed` (deployed somewhere the record leaves out), `not probed` (the
+  registry skipped every path, usually for want of example requests), and
+  then `registered`, `not registered` or `not an API` (`smartapi: null` in
+  the component file). Any further problems and when the record last changed
+  sit under it, and the tooltip has the detail, including the probe's failing
+  lines. Sorting the column lists the problems first, banded by kind. The
+  Repository column dates the newest GitHub release; an open row lists every
+  release under it, each tag linking to its notes, the ones running somewhere
+  on the row filled in.
 - **Why a cell is empty.** Every cell with no version says what happened
-  instead, in a few words: `no such host`, `up · no API document`,
-  `up · serves HTML, no API document`, `not in registry for prod`,
+  instead, in a few words: `no such host`, `no API document found`,
+  `serves a web page, not an API document`, `SmartAPI lists no prod server`,
   `not a hosted service`. The distinctions matter — a host that does not
   resolve, one that is up and publishes no version, and one nobody has
   recorded a URL for are three different things, and an empty cell said all
   three at once. Every deployment is contacted at its own URL for this, so
   "reachable" means a host answered rather than a document parsed.
+- **How much of the platform.** The "checked N minutes ago" note at the top
+  right opens a panel of shares rather than counts: deployments reachable,
+  with a version read, listed in their SmartAPI record; components with a
+  record, running the same version everywhere — each as "n of N" with a link
+  that filters the table to the rest. Under them, where versions came from
+  and how many services report to OpenTelemetry per environment.
 
 To see a branch's page the way the published build will be — built on a
 GitHub runner, with `config/privacy.yaml` applied — run the Pages workflow on
@@ -324,8 +352,9 @@ and a third click returns to stage order — which is also what the ✕ beside
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
 and it travels in the URL with the filters. In stage order the rows are banded by
-stage — each band naming what that stage is for — and sorting by owner bands
-them by owner instead.
+stage — each band naming what that stage is for — sorting by owner bands
+them by owner instead, and sorting by SmartAPI bands them by what the
+registration needs, problems first in both directions.
 
 The stages, their order, and the components in each are
 [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml), edited by hand. The
@@ -334,19 +363,19 @@ nothing recording that the UI calls Name Lookup, a computed order put Name
 Lookup up beside the data sources. A written order is more honest than a
 plausible-looking one derived from data that is missing.
 
-**`Last updated`** is the newer of a component's latest GitHub release and its
-SmartAPI registration, badged with which one it was. Thirteen of the
-twenty-six components have neither and show a dash: they publish no releases
-and are in no registry. Nothing here dates a *deployment* — see
-[`FUTURE.md`](FUTURE.md) for the closest available proxy. The environment
-columns sort by the age of the release running in that environment, which is
-the sharpest version of the same question: prod is on `0.6.1`, released
-2024-10-04.
+**Dates.** The Repository column dates a component's newest GitHub release
+and the SmartAPI column its registration's last change; about half the
+components have neither, because they publish no releases and are in no
+registry. Nothing here dates a *deployment* — see [`FUTURE.md`](FUTURE.md)
+for the closest available proxy. The environment columns sort by the age of
+the release running in that environment, which is the sharpest version of the
+same question: prod is on `0.6.1`, released 2024-10-04.
 
-**The page opens on every component.** The dropdown beside the owner filter
-narrows it: `Environments disagree` (seven of twenty-four today, and the rows
-with the most to say), `Any version known`, and `No version known` — which is
-the list of gaps in the metadata, and worth reading as a to-do list. The count
+**The page opens on every component.** The `Show` dropdown narrows it:
+`Environments disagree` (the rows with the most to say), `Any version known`,
+`No version known` — the list of gaps in the metadata, worth reading as a
+to-do list — and the three complements the sync panel links to, `Not
+reachable`, `Absent from SmartAPI record` and `No SmartAPI record`. The count
 beside the filters always says how many of the total are showing.
 
 Filters live in the URL, so a filtered view can be pasted to someone else and
@@ -354,6 +383,22 @@ arrives as you saw it. Output goes to the gitignored `data/`: `index.html`,
 which inlines its own data and so works straight from disk, and
 `overview.json`, the same payload as a file for anything that wants to consume
 it.
+
+### What travels in the URL
+
+| Parameter | Meaning |
+|---|---|
+| `view` | `overview` (the default), `map` or `component` |
+| `q` | the search box |
+| `owner` | a comma-separated list of owners |
+| `versions` | the `Show` view: `all`, `differ`, `known`, `none`, `unreachable`, `unregistered` or `no-smartapi` |
+| `sort`, `dir` | the sorted column (`name`, `owner`, `repo`, `smartapi` or `env-<env>`) and `asc` or `desc`; absent means stage order |
+| `expand` | the ids of the rows expanded inline |
+| `sel` | the component looked at: the Component view's subject, the table's highlighted row and the map's ringed node. A `tab` from an older link is ignored |
+| `edges` | on the map, which edge kinds are shown |
+
+Only what differs from the default is written, so a shared link says what the
+sender changed and nothing else.
 
 **Map controls:** `f` fits the diagram, `+`/`-` zoom, arrow keys pan when the
 map has focus, `Esc` clears selection. Edge kinds can be toggled in the legend.
