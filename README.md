@@ -31,20 +31,17 @@ dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 uv sync                    # first-time setup; creates .venv/
 uv run sync-components     # follow what catalog/components/*.yaml points at -> data/sync/
 uv run build-dashboard     # compile that into a page      -> data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard
+# then open http://localhost:8765/ (Ctrl-C stops the server)
 ```
 
 That takes about ten seconds of network time and reaches only public services.
 Everything it fetches is cached under `data/`, which is gitignored, so nothing
 you run can dirty the repository.
 
-To exercise the full page — map export, clipboard copy, and anything else a
-browser blocks from `file://` — serve the build instead:
-
-```bash
-cd data/dashboard && python3 -m http.server 8765
-# then open http://localhost:8765/
-```
+The page inlines its own data, so `open data/dashboard/index.html` works
+without a server too, but browsers block map export, clipboard copy and some
+other features from `file://`.
 
 ### The diagram needs two more things
 
@@ -239,10 +236,11 @@ legend beside the filters says what the cell colours mean.
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
 uv run build-dashboard     # compile           into data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard   # http://localhost:8765/
 
-# Map export and other features some browsers block from file://:
-cd data/dashboard && python3 -m http.server 8765
+# Without a server, minus map export and other features browsers block from
+# file://:
+open data/dashboard/index.html
 
 # Rebuild on every edit to the catalog, config, sync cache or code (Ctrl-C
 # stops it). Reload the tab by hand; a new sync is still a separate step.
