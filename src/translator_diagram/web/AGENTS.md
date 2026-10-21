@@ -262,6 +262,20 @@ groups, found by typing: the browser's own control does type-to-find, the
 keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
 taught all three.
 
+**The SmartAPI column says what to do, not whether a record exists.** It
+used to print "registered" for every record and draw the registry's
+`uptime_status` as green for `pass` and red for anything else, so the three
+shepherds, whose paths the registry skipped (`unknown`), looked as broken as
+RTX/ARAX's failing probe, and Retriever and PloverDB, whose recorded ids match
+no Translator-tagged record, read "not registered". `TD.smartapi.status`
+(`core.js`) now names one state per row, worst first, and the cell, the
+column's sort and its tooltip all read it, so they cannot disagree. Only
+`pass` is green. The cell's date is the record's own `meta.last_updated`, not
+`last_updated`: that one is the newer of the release and the registration,
+and showing it only when the registry won hid the registry date from every
+component with a newer release, and the release date from the Repository
+column of every component whose registration was newer.
+
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different
 components means nothing. Cells rank in tiers — running a release we can date,

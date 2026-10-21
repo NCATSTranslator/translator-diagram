@@ -215,25 +215,28 @@
   }
 
   /* One registration usually covers every environment, so it is a column of
-     its own rather than four facts: whether the component is registered at
-     all, how the registry's own probe finds it, and when the record last
-     changed. */
+     its own rather than four facts. It says what to do about the record, in
+     TD.smartapi's words: the worst problem first, any others under it, then
+     when the record last changed, and everything in the tooltip. The date has
+     a line of its own: run on after the problems it wrapped, and left a "·"
+     hanging at the end of the line above.
+
+     The dot sits in a gutter of its own, kept empty on rows with no dot, so
+     every first line starts at the same x and the lines under it start under
+     the first rather than under the dot. */
   function smartapiCell(row) {
-    const record = row.smartapi_record;
-    if (!record) {
-      const candidates = (row.smartapi_candidates || []).length;
-      return `<td class="sapi drop-sm"><span class="why">${
-        candidates ? `${candidates} possible records` : "not registered"}</span></td>`;
-    }
-    const uptime = record.status && record.status.uptime_status;
-    const dot = uptime
-      ? `<span class="dot ${uptime === "pass" ? "up" : "down"}" aria-label="registry probe: ${esc(uptime)}"></span>`
+    const status = TD.smartapi.status(row);
+    const dot = status.dot != null
+      ? `<span class="dot ${status.dot}" aria-label="${esc(status.group)}"></span>`
       : "";
-    const changed = row.last_updated && row.last_updated.source === "registry"
-      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}">changed <span class="age">${
-          esc(TD.fmt.relativeAge(row.last_updated.at))}</span></span>`
-      : "";
-    return `<td class="sapi drop-sm">${dot}${link(record.registry_url, "registered")}${changed}</td>`;
+    const word = link(status.href, esc(status.word), status.href ? "" : "why");
+    const others = status.problems.slice(1).map((problem) => esc(problem.word));
+    const lines = [
+      others.length ? others.join('<span class="sep"> · </span>') : "",
+      status.changed ? `changed <span class="age">${esc(TD.fmt.relativeAge(status.changed))}</span>` : "",
+    ].filter(Boolean).map((line) => `<span class="l2">${line}</span>`).join("");
+    return `<td class="sapi drop-sm" data-tip="sapi" data-id="${esc(row.id)}"><span class="sapil">${
+      dot}<span class="sapiw">${word}</span>${lines}</span></td>`;
   }
 
   /* The name on the first line and, under it, the summary; the id joins the
@@ -260,9 +263,7 @@
 
   /* --- Columns -------------------------------------------------------------- */
 
-  const registryDate = (row) =>
-    (row.last_updated && row.last_updated.source === "registry" ? row.last_updated.date : "")
-    || ((row.smartapi_record || {}).meta || {}).last_updated || "";
+  const registryDate = (row) => TD.smartapi.status(row).changed;
 
   const COLUMNS = [
     { key: "name", label: "Component", cell: componentCell, value: (row) => row.name },
@@ -276,9 +277,14 @@
     },
     {
       key: "smartapi", label: "SmartAPI", drop: "drop-sm", cell: smartapiCell,
+      // What needs a look first, in either direction: the state is a tier,
+      // compared before the flip, and the date orders each band.
+      rank: (row) => TD.smartapi.status(row).rank,
+      band: (row) => TD.smartapi.status(row).group,
       value: registryDate,
-      compare: TD.sort.byDate, prefer: "asc", words: ["oldest first", "newest first"],
-      hint: "Sort by when the SmartAPI registration last changed",
+      compare: TD.sort.byDate, prefer: "asc",
+      words: ["problems first", "problems first, newest first"],
+      hint: "Sort by what needs a look in the SmartAPI registration, problems first",
     },
   ];
 
@@ -511,8 +517,6 @@
     status: "Read live from the deployment's /status endpoint.",
     smartapi: "Copied from the SmartAPI registry, not from the running service.",
     helm: "From the Helm chart — what should be deployed, not what is.",
-    release: "The newest GitHub release on this component's repository.",
-    registry: "When this component's SmartAPI registration last changed.",
   };
 
   function tipHtml(target) {
@@ -544,17 +548,23 @@
         where ? `<div class="note">${esc(where)}</div>` : ""}${
         release.body_excerpt ? `<div class="note">${esc(release.body_excerpt)}</div>` : ""}`;
     }
-    if (kind === "upd") {
+    if (kind === "sapi") {
       const row = rowById(target.dataset.id);
-      const updated = row && row.last_updated;
-      if (!updated) return "";
-      // The three shepherds share one repository, so one release date lands on
-      // three rows: without the tag that reads as three coincidental deploys.
-      const what = updated.source === "release"
-        ? `${updated.tag} released ${updated.date}`
-        : `SmartAPI registration last changed ${updated.date}`;
-      return `<div><b>${esc(what)}</b></div><div class="note">${
-        esc(SOURCE_NOTES[updated.source] || "")}</div>`;
+      if (!row) return "";
+      const status = TD.smartapi.status(row);
+      const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
+      const day = (iso) => String(iso).slice(0, 10);
+      // The registry writes one line per path; the failures are the ones to
+      // read, and three is enough to say which.
+      const failures = status.failures.slice(0, 3);
+      return `<div class="title">SmartAPI · ${esc(status.group)}</div><dl>${
+        pair("record", row.smartapi || "")}${
+        pair("changed", status.changed ? day(status.changed) : "")}${
+        pair("probed", status.probed ? day(status.probed) : "")}</dl>${
+        status.problems.map((problem) => `<div class="note">${esc(problem.note)}</div>`).join("")}${
+        failures.map((line) => `<div class="note">${esc(line)}</div>`).join("")}${
+        status.failures.length > failures.length
+          ? `<div class="note">and ${status.failures.length - failures.length} more</div>` : ""}`;
     }
     if (kind === "env") {
       const row = rowById(target.dataset.id);

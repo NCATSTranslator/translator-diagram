@@ -95,9 +95,23 @@ test("stage order draws a band per step present, and never an empty one", () => 
 });
 
 test("a sort by date draws no bands, and no rows draws the empty message", () => {
-  reset({ sort: "smartapi", dir: "asc" });
+  reset({ sort: "env-prod", dir: "asc" });
   assert.doesNotMatch(table.bodyHtml(table.visibleRows()), /class="band"/);
   assert.match(table.bodyHtml([]), /No components match these filters/);
+});
+
+test("a SmartAPI sort puts the problems first in both directions, banded by state", () => {
+  for (const dir of ["asc", "desc"]) {
+    reset({ sort: "smartapi", dir });
+    const column = table.COLUMNS.find((entry) => entry.key === "smartapi");
+    const ids = TD.sort.rows(table.visibleRows(), column, dir).map((row) => row.id);
+    // arax has an environment its record leaves out; ars has a clean record;
+    // ui has none at all.
+    assert.deepEqual(ids, ["arax", "ui", "ars"]);
+    const html = table.bodyHtml(TD.sort.rows(table.visibleRows(), column, dir));
+    const bands = [...html.matchAll(/class="band" data-step="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(bands, ["Deployments missing from the record", "Not registered", "Registered"]);
+  }
 });
 
 test("an expanded row shows only the fields some environment answered", () => {
@@ -131,26 +145,41 @@ test("a cell's state follows the model: known absences are white, a lone deploym
   assert.equal(state({ deployed: true, version: "1.0" }, 1), "one");
 });
 
-test("the repository and SmartAPI cells carry their dates and the registry's probe", () => {
+test("the repository and SmartAPI cells each carry their own date, whichever is newer", () => {
   reset();
   const row = {
     ...ROWS[0],
-    last_updated: { at: "2026-10-01T00:00:00Z", date: "2026-10-01", source: "release", tag: "v1.0" },
+    // The registration changed after the release: last_updated is the
+    // registry's, and the release date must stay under the repository anyway.
+    last_updated: { at: "2026-10-02T00:00:00Z", date: "2026-10-02", source: "registry", tag: null },
     releases_detail: [{ tag: "v1.0", published: "2026-10-01", url: "https://github.com/x/ars/releases/tag/v1.0" }],
-    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc", status: { uptime_status: "fail" } },
+    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc",
+      status: { uptime_status: "fail" }, meta: { last_updated: "2026-10-02T00:00:00Z" } },
   };
   const html = table.bodyHtml([row]);
   assert.match(html, /class="repo drop-md"><a[^>]*href="https:\/\/github\.com\/x\/ars"/);
   assert.match(html, /class="l2" data-tip="rel" data-id="ars" data-tag="v1\.0"><span class="age">[^<]+<\/span> · v1\.0/);
-  assert.match(html, /class="sapi drop-sm"><span class="dot down" aria-label="registry probe: fail"><\/span><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>registered/);
-  // Registered, but the date came from the registry: it goes under "registered".
-  const registry = { ...row, last_updated: { ...row.last_updated, source: "registry", tag: null } };
-  assert.match(table.bodyHtml([registry]), /registered<\/a><span class="l2" data-tip="upd" data-id="ars">changed/);
-  // And the release date stays under the repository when the registry's is newer.
-  assert.match(table.bodyHtml([registry]), /data-tip="rel" data-id="ars" data-tag="v1\.0">/);
-  // No record: say so, or count the candidates.
-  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]), /not registered/);
+  assert.match(html, /class="sapi drop-sm" data-tip="sapi" data-id="ars"><span class="sapil"><span class="dot down" aria-label="Registry probe failing"><\/span><span class="sapiw"><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>probe failing<\/a><\/span><span class="l2">changed <span class="age">/);
+  // A release newer than the registration leaves the registry date in place.
+  const released = { ...row, last_updated: { at: "2026-10-03T00:00:00Z", date: "2026-10-03", source: "release", tag: "v1.0" } };
+  assert.match(table.bodyHtml([released]), /class="sapi[\s\S]*changed <span class="age">/);
+  // No record: say so, or count the candidates, with no dot but the gutter kept.
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]),
+    /<span class="sapil"><span class="sapiw"><span class="why">not registered<\/span>/);
   assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null, smartapi_candidates: [{}, {}] }]), /2 possible records/);
+});
+
+test("the SmartAPI tooltip names the state, each problem and the failing probe lines", () => {
+  const row = { ...ROWS[1], smartapi: "def", smartapi_record: { id: "def",
+    status: { uptime_status: "fail", uptime_ts: "2026-10-21T07:00:00Z",
+      uptime_msg: ["🟢 200: (/ok) All good!", "🔴 /get: (400) Invalid <request>."] } } };
+  TD.boot({ rows: [row], environments: ["ci", "prod"] });
+  const html = table.tipHtml({ dataset: { tip: "sapi", id: "arax" } });
+  assert.match(html, /SmartAPI · Registry probe failing/);
+  assert.match(html, /<dt>probed<\/dt><dd>2026-10-21<\/dd>/);
+  assert.match(html, /ci, but the record lists no server there/);
+  assert.match(html, /🔴 \/get: \(400\) Invalid &lt;request&gt;\./);
+  assert.doesNotMatch(html, /All good/);
 });
 
 test("an environment cell says why it has no version, and marks drift", () => {

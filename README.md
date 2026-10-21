@@ -269,11 +269,18 @@ things it reports are the answer:
   visible without reading every cell. A version copied from the registry or
   the chart rather than read from the running service is a dashed pill, so
   four identical copies do not read as four services agreeing.
-- **Where it is registered, and what has changed.** The SmartAPI column says
-  whether a component has a registration, how the registry's own probe finds
-  it, and when the record last changed. The Repository column dates the
-  newest GitHub release; an open row lists every release under it, each tag
-  linking to its notes, the ones running somewhere on the row filled in.
+- **Where it is registered, and what needs a look.** The SmartAPI column says
+  what to do about each registration, worst problem first: `record not found`
+  (the catalog has an id the registry does not), `probe failing`, `ci not
+  listed` (deployed somewhere the record leaves out), `not probed` (the
+  registry skipped every path, usually for want of example requests), and
+  then `registered`, `not registered` or `not an API` (`smartapi: null` in
+  the component file). Any further problems and when the record last changed
+  sit under it, and the tooltip has the detail, including the probe's failing
+  lines. Sorting the column lists the problems first, banded by kind. The
+  Repository column dates the newest GitHub release; an open row lists every
+  release under it, each tag linking to its notes, the ones running somewhere
+  on the row filled in.
 - **Why a cell is empty.** Every cell with no version says what happened
   instead, in a few words: `no such host`, `no API document found`,
   `serves a web page, not an API document`, `SmartAPI lists no prod server`,
@@ -341,8 +348,9 @@ and a third click returns to stage order — which is also what the ✕ beside
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
 and it travels in the URL with the filters. In stage order the rows are banded by
-stage — each band naming what that stage is for — and sorting by owner bands
-them by owner instead.
+stage — each band naming what that stage is for — sorting by owner bands
+them by owner instead, and sorting by SmartAPI bands them by what the
+registration needs, problems first in both directions.
 
 The stages, their order, and the components in each are
 [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml), edited by hand. The

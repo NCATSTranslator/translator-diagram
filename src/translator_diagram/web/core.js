@@ -343,6 +343,108 @@
 
   TD.cell = cellModel;
 
+  /* --- SmartAPI registration --------------------------------------------- */
+
+  /* What a reader should do about a component's SmartAPI registration, in one
+     answer the table's cell, its sort and its tooltip all read. The column
+     used to say "registered" for every record whatever state it was in, and
+     drew the registry's "unknown" as red: a record whose paths the registry
+     skipped looked exactly like one whose probe failed.
+
+     The states are listed worst first, and `rank` is that order, so sorting
+     the column is the triage list. A record can have several problems (a
+     shepherd is both missing an environment and unprobed): `problems` holds
+     them all, worst first, and the state is the first. `dot` is the class of
+     the dot in front, or null for none: green is kept for a probe that
+     passed, and "unknown" is grey because nothing failed. */
+  const SMARTAPI_STATES = {
+    missing: { group: "SmartAPI record not found", dot: "warn" },
+    failing: { group: "Registry probe failing", dot: "down" },
+    unlisted: { group: "Deployments missing from the record", dot: "warn" },
+    unprobed: { group: "Not probed by the registry", dot: "" },
+    candidates: { group: "Possible records, none recorded", dot: null },
+    none: { group: "Not registered", dot: null },
+    ok: { group: "Registered", dot: null },
+    "n/a": { group: "Not an API", dot: null },
+  };
+  const SMARTAPI_ORDER = Object.keys(SMARTAPI_STATES);
+
+  /* The probe's own lines, with its traffic-light emoji: 🔴 failed, 🟠
+     skipped, 🟢 passed. */
+  const probeLines = (record, light) =>
+    ((record.status || {}).uptime_msg || []).filter((line) => String(line).startsWith(light));
+
+  function smartapiProblems(row, record) {
+    const status = record.status || {};
+    const problems = [];
+    if (status.uptime_status === "fail") {
+      problems.push({ key: "failing", word: "probe failing",
+        note: "The registry's last probe of this API failed on at least one path." });
+    }
+    const unlisted = (TD.ENVS || []).filter((env) => cellModel(row, env).flags.unregistered);
+    if (unlisted.length) {
+      problems.push({ key: "unlisted", word: `${unlisted.join(", ")} not listed`,
+        note: `Deployed in ${unlisted.join(", ")}, but the record lists no server there.` });
+    }
+    if (status.uptime_status === "unknown") {
+      const lines = status.uptime_msg || [];
+      const skipped = lines.length && lines.every((line) => String(line).includes("(skipped)"));
+      problems.push({ key: "unprobed", word: "not probed",
+        note: skipped
+          ? "The registry skipped every path: the registration gives it no example requests to send."
+          : "The registry's probe could not tell whether this API is up." });
+    }
+    return problems;
+  }
+
+  function smartapiStatus(given) {
+    const row = given || {};
+    const record = row.smartapi_record;
+    const identifiers = (row.recorded || {}).identifiers || {};
+    let key;
+    let word;
+    let problems = [];
+    let url = "";
+    if (record) {
+      problems = smartapiProblems(row, record);
+      key = problems.length ? problems[0].key : "ok";
+      word = problems.length ? problems[0].word : "registered";
+      url = record.registry_url;
+    } else if (row.smartapi) {
+      key = "missing";
+      word = "record not found";
+      problems = [{ key, word,
+        note: "The catalog records this SmartAPI id, but no Translator-tagged record has it: it may have been deleted, or lost its translator tag." }];
+      url = `https://smart-api.info/ui/${row.smartapi}`;
+    } else if ((row.smartapi_candidates || []).length) {
+      key = "candidates";
+      word = `${row.smartapi_candidates.length} possible records`;
+    } else if ("smartapi" in identifiers && identifiers.smartapi === null) {
+      // `smartapi: null` in a component file: checked, and there is none to have.
+      key = "n/a";
+      word = "not an API";
+    } else {
+      key = "none";
+      word = "not registered";
+    }
+    const state = SMARTAPI_STATES[key];
+    const ok = key === "ok" && ((record || {}).status || {}).uptime_status === "pass";
+    return {
+      key,
+      word,
+      rank: SMARTAPI_ORDER.indexOf(key),
+      group: state.group,
+      dot: ok ? "up" : state.dot,
+      problems,
+      href: href(url),
+      changed: ((record || {}).meta || {}).last_updated || "",
+      probed: ((record || {}).status || {}).uptime_ts || "",
+      failures: record ? probeLines(record, "🔴") : [],
+    };
+  }
+
+  TD.smartapi = { status: smartapiStatus, STATES: SMARTAPI_STATES };
+
   /* --- Theme ------------------------------------------------------------- */
 
   /* The cycle starts by moving *away* from what the system says, because the

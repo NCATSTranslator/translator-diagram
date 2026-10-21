@@ -267,8 +267,19 @@ td.repo a.rel { text-decoration: none; }
 /* A repository slug has no spaces; let it break rather than widen the table
    past the window (issue #31). */
 td.repo { overflow-wrap: anywhere; }
-td.sapi .dot { margin-right: 6px; }
+/* The dot in a gutter of its own, both lines in the column beside it: an
+   inline dot pushed the first line right of the second (smartapiCell). */
+td.sapi .sapil {
+  display: grid;
+  grid-template-columns: 7px auto;
+  column-gap: 6px;
+  justify-content: start;
+}
+td.sapi .dot { grid-column: 1; grid-row: 1; align-self: center; }
+td.sapi .sapiw, td.sapi .l2 { grid-column: 2; }
+td.sapi .sapiw { grid-row: 1; }
 td.sapi .l2 { white-space: nowrap; }
+td.sapi .l2 .sep { opacity: 0.6; }
 /* A second line under a value: the release and when under the repository,
    when the registration changed under "registered", the source and data
    release under a version. */
@@ -323,6 +334,8 @@ tbody tr.row.sel td { background-image: linear-gradient(var(--accent-soft), var(
 }
 .dot.up { background: var(--ok); }
 .dot.down { background: var(--bad); }
+/* Something to check rather than something broken: the drift tint's ink. */
+.dot.warn { background: var(--diff-ink); }
 
 /* The version is a pill, and a link to the document it was read from. A
    dashed pill is a copy — the registry's or the chart's word, not the
