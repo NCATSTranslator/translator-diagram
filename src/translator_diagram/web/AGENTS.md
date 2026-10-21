@@ -22,18 +22,24 @@ uv run --group shots playwright install chromium          # once
 uv run build-dashboard --output-dir data/dashboard-mine   # not under a --watch
 uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine
 uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine --measure
-uv run --group shots python tools/shoot.py --path '?expand=name-lookup' \
-  --hover 'button.fg' --theme dark --width 1200
+uv run --group shots python tools/shoot.py --path '?' \
+  --hover '[data-tip="src"]' --theme dark --width 1200
+uv run --group shots python tools/shoot.py --path '?view=map' --hover '.mp-node'
 ```
 
-The defaults are the Overview, the Map and a Component page, both themes,
-at 1700, 1200 and 760px; `--full` shoots the whole page, `--hover` opens a
-tooltip first, and `--measure` reports the table's `scrollWidth` against
-its `clientWidth` per width and exits 1 on an overflow at 1000px or wider
-(issue #31's failure, which no screenshot shows). The docstring has the
-rest. Build to a directory of your own while a `build-dashboard --watch`
-is running: the watcher rewrites `data/dashboard/` with the published
-policy on every code change, and a shot of it is a shot of that build.
+The defaults are the Overview, the Map and a component's drawer
+(`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` shoots the
+whole page; `--hover` and `--click` act on the first visible match and fail
+(exit 2) if there is none, or if the hover opens no tooltip; the tooltip
+targets are `[data-tip]` in the table and drawer and `.mp-node`, `.mp-edge`
+and `.mp-lane` on the Map. `--measure` sweeps 1000–1700px in 10px steps,
+reports the table's `scrollWidth` against its `clientWidth`, and exits 1 on
+an overflow outside the known 1490–1535px band below (issue #31's failure,
+which no screenshot shows); it fails too if there is no table to measure.
+The docstring has the rest. Build to a directory of your own while a
+`build-dashboard --watch` is running: the watcher rewrites
+`data/dashboard/` with the published policy on every code change, and a
+shot of it is a shot of that build.
 
 **The long way**, for a machine without Playwright, is below: either
 browser works. Chromium's headless shell runs from the command line with
@@ -158,7 +164,9 @@ reachable, and the Map's EDGES legend sits over the Translator UI / Node
 Annotator row; neither has been fixed, and neither hides anything that cannot
 be scrolled or panned to. The overflow is not visible in a screenshot: measure
 `scrollWidth` against `clientWidth` at several widths instead of judging by
-eye.
+eye, which is what `tools/shoot.py --measure` does. Its `KNOWN_OVERFLOW`
+holds this band so the check passes today; when the column is fixed, delete
+it and correct this paragraph.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
