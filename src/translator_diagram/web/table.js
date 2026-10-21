@@ -194,13 +194,18 @@
   }
 
   /* The repository, and under it the newest release and when: that date used
-     to be a column of its own, and it belongs beside the thing it dates. */
+     to be a column of its own, and it belongs beside the thing it dates.
+
+     The newest release itself, not `last_updated`: that is the newer of the
+     release and the registration, and when it showed here only when the
+     release won, a registration edited last week took the release date off
+     Name Lookup's row. `releases_detail` is newest first. */
   function repoCell(row) {
     if (!row.repository) return `<td class="repo drop-md">${DASH()}</td>`;
-    const updated = row.last_updated;
-    const released = updated && updated.source === "release"
-      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}"><span class="age">${
-          esc(TD.fmt.relativeAge(updated.at))}</span> · ${esc(updated.tag || "release")}</span>`
+    const newest = (row.releases_detail || [])[0];
+    const released = newest && newest.published
+      ? `<span class="l2" data-tip="rel" data-id="${esc(row.id)}" data-tag="${esc(newest.tag)}"><span class="age">${
+          esc(TD.fmt.relativeAge(newest.published))}</span> · ${esc(newest.tag)}</span>`
       : "";
     // The release chips sit here too, shown only once the row is open: this is
     // the column they come from, so they need no label of their own.

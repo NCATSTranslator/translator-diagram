@@ -136,15 +136,18 @@ test("the repository and SmartAPI cells carry their dates and the registry's pro
   const row = {
     ...ROWS[0],
     last_updated: { at: "2026-10-01T00:00:00Z", date: "2026-10-01", source: "release", tag: "v1.0" },
+    releases_detail: [{ tag: "v1.0", published: "2026-10-01", url: "https://github.com/x/ars/releases/tag/v1.0" }],
     smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc", status: { uptime_status: "fail" } },
   };
   const html = table.bodyHtml([row]);
   assert.match(html, /class="repo drop-md"><a[^>]*href="https:\/\/github\.com\/x\/ars"/);
-  assert.match(html, /class="l2" data-tip="upd" data-id="ars"><span class="age">[^<]+<\/span> · v1\.0/);
+  assert.match(html, /class="l2" data-tip="rel" data-id="ars" data-tag="v1\.0"><span class="age">[^<]+<\/span> · v1\.0/);
   assert.match(html, /class="sapi drop-sm"><span class="dot down" aria-label="registry probe: fail"><\/span><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>registered/);
   // Registered, but the date came from the registry: it goes under "registered".
   const registry = { ...row, last_updated: { ...row.last_updated, source: "registry", tag: null } };
   assert.match(table.bodyHtml([registry]), /registered<\/a><span class="l2" data-tip="upd" data-id="ars">changed/);
+  // And the release date stays under the repository when the registry's is newer.
+  assert.match(table.bodyHtml([registry]), /data-tip="rel" data-id="ars" data-tag="v1\.0">/);
   // No record: say so, or count the candidates.
   assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]), /not registered/);
   assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null, smartapi_candidates: [{}, {}] }]), /2 possible records/);
