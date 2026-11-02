@@ -166,9 +166,10 @@ redrawn table with every row collapsed, `div.tablewrap` overflows in two bands
 overlay the page, and 1000–1017px and 1151–1180px, at most 30px over, where a
 classic 15px scrollbar takes its room. At 900px and below the environment
 columns run past the window, and the wrap scrolls at every width, so nothing is
-unreachable. With every row open, nine widths from 1000 to 1700px showed no
-overflow, though bands this narrow can fall between them; three rules in
-`table.css` hold those widths, each written where it applies: the Owner
+unreachable. With every row open nothing overflows at any of those widths, but
+with every third row open the same two bands widen, to 1026px and 1184px and at
+most 34px over with the classic scrollbar. Three rules in `table.css` keep the
+all-open case clean, each written where it applies: the Owner
 column's labels wrap between 800 and 1150px, a host label longer than its
 column may break inside itself there, and a long connection name wraps inside
 its button. Each was a measured overflow first. The earlier table overflowed
