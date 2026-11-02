@@ -12,6 +12,7 @@ id: ploverdb
 name: Ploverdb
 owner: CATRAX
 refactor_status: Continues into Refactor
+kind: service
 hosted_at: ITRB
 
 identifiers:

@@ -103,6 +103,7 @@ owner: DOGSLED
 component_type: Utility          # the x-translator `component` vocabulary
 refactor_status: Continues into Refactor
 layer: Shared services           # the band the diagram draws as a row
+kind: service                    # what sort of thing it is, whatever its role
 hosted_at: ITRB
 
 identifiers:                     # this component's name everywhere else
@@ -253,11 +254,23 @@ a dependency inside its service's own chart (`sri-testing`'s
 `bitnami/mongodb`) stays a mention in that service's `description`, because
 it has neither a deployment nor a version of its own.
 
-What this does not add is a role: nothing says *datastore* rather than
-*service*, and a reader tells them apart by name, summary and the `calls` edge
-from the service. [#55](https://github.com/NCATSTranslator/translator-diagram/issues/55)
-asks the same question for pipelines and data sources, and a `kind` axis, if
-one is needed, is its to add.
+What says *datastore* rather than *service* is `kind`, a separate field
+(below). [#55](https://github.com/NCATSTranslator/translator-diagram/issues/55)
+asks how pipelines and data sources are recorded and drawn; `kind` is the axis
+it can build on, and the edge from a source to what loads it is still its to
+add.
+
+**5. Does a file say what sort of thing a component is? — decided: yes,
+`kind`.** `component_type` is the SmartAPI registry's role vocabulary (KP,
+ARA, Utility, …) and is null for anything not registered, so it could not say
+that the UI is a web app, Tier 1 an ElasticSearch store or the SDK a library.
+`kind` is that axis: `service`, `web-app`, `datastore`, `pipeline`, `job`,
+`library` or `cli`, one per component, defined in the schema. It is
+independent of `third_party` (Jaeger is a third-party service) and of
+`identifiers.smartapi: null`, which stays a curator's explicit "checked,
+nothing to register". Where a file does not settle it, it is left absent: a
+component that is several of these at once, like the retired CAM Pipeline's
+builder, web server and API, is left for whoever splits or decides it.
 
 ## How this replaces the sheet
 

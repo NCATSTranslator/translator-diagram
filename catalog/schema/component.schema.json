@@ -63,6 +63,18 @@
         null
       ]
     },
+    "kind": {
+      "description": "What sort of thing the component is, whatever its Translator role. service: answers requests through an HTTP API, the thing SmartAPI registers. web-app: serves pages to people rather than an API. datastore: a database or index other components read. pipeline: transforms or loads data when its inputs change. job: runs on a schedule or on demand and serves nothing. library: code that people or other components import. cli: a command people run. Absent means not recorded yet.",
+      "enum": [
+        "service",
+        "web-app",
+        "datastore",
+        "pipeline",
+        "job",
+        "library",
+        "cli"
+      ]
+    },
     "third_party": {
       "description": "Set when the code is not ours: software we deploy but did not write, such as Jaeger or a MongoDB a service reads. It gets a file of its own when it is deployed on its own or shared by more than one component; a datastore bundled inside its service's chart does not (../README.md, Conventions). Absent means Translator-written code; null means checked, our own code.",
       "type": [

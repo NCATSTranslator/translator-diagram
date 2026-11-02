@@ -28,9 +28,13 @@ owner: DOGSLED
 # None of the enum's values fits a service that was never deployed to
 # Translator; this is the nearest, pending #69.
 refactor_status: Continues into Refactor
+kind: web-app
 hosted_at: RENCI
 
 identifiers:
+  # Checked 2026-10-21: renders terms-of-service pages for other services; it is
+  # not an API itself.
+  smartapi: null
   helm_chart: toss
 
 # Services link to its pages from their OpenAPI documents rather than calling

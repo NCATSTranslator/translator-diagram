@@ -19,6 +19,7 @@ description: |-
 owner: DOGSURF
 refactor_status: Continues into Refactor
 layer: Shared services
+kind: service
 hosted_at: ITRB
 
 itrb:

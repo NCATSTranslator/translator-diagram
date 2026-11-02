@@ -19,6 +19,7 @@ third_party:
   url: https://www.jaegertracing.io/
 refactor_status: Continues into Refactor
 layer: Shared services
+kind: service
 hosted_at: ITRB
 
 identifiers:

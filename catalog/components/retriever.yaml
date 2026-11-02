@@ -15,6 +15,7 @@ owner: DOGSURF
 component_type: KP
 refactor_status: New in Refactor
 layer: DogPark and Retriever
+kind: service
 hosted_at: ITRB
 
 identifiers:
