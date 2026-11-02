@@ -326,7 +326,13 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
     if args.full:
         grow_to_fit(page, width)
     if args.hover:
-        first_visible(page, args.hover).hover()
+        target_element = first_visible(page, args.hover)
+        # Scrolled there first, on its own: the page hides a tooltip on any
+        # scroll, including its pending one, so hovering a target below the fold
+        # in one step opens nothing and looks like a target with no tooltip.
+        target_element.scroll_into_view_if_needed()
+        page.evaluate(SETTLE)
+        target_element.hover()
         try:
             page.wait_for_selector("#td-tip:not([hidden])", timeout=2000)
         except PlaywrightTimeout:
