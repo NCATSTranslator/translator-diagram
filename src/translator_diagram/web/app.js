@@ -152,6 +152,17 @@
       </div></details>`;
   }
 
+  /* --- The data releases summary -------------------------------------------- */
+
+  /* One line under the filters saying which releases are on each data axis
+     and where, opening into a table with a row per release and a column
+     per environment (TD.table.axesHtml). A release moving dev → ci → test →
+     prod is read off it; the table below is where to find the cell. Each
+     release is a search: the search box already matches data releases, so
+     one click lists the rows on it. Drawn once, from the whole payload: it
+     describes the platform, not the filter. */
+  const axesHtml = () => TD.table.axesHtml(TD.summary.axes(DATA), TD.ENVS);
+
   /* --- Shell ------------------------------------------------------------------ */
 
   function shell() {
@@ -186,6 +197,7 @@
             <span class="count" id="count" aria-live="polite"></span>
           </span>
         </div>
+        ${axesHtml()}
         <div class="view on" id="view-overview"></div>
         <div class="view" id="view-map"></div>
         <div class="view" id="view-component"></div>
@@ -290,6 +302,19 @@
     document.addEventListener("click", (event) => {
       if (sync.open && !sync.contains(event.target)) sync.open = false;
     });
+
+    // A release in the strip is a search for it. The href is real too, so a
+    // middle-click opens the same list in a new tab.
+    const axes = document.querySelector(".axes");
+    if (axes) {
+      axes.addEventListener("click", (event) => {
+        const link = event.target.closest("a[data-q]");
+        if (!link) return;
+        event.preventDefault();
+        search.value = link.dataset.q;
+        TD.commit({ q: link.dataset.q });
+      });
+    }
 
     // The order label's ✕ is the only way back to stage order when a narrow
     // window has hidden the column whose header would complete the cycle.

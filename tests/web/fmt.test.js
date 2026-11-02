@@ -89,6 +89,29 @@ test("the figures are shares with honest denominators, each naming a view", () =
   assert.deepEqual(f.sources, ["3 from its API document", "1 from nowhere"]);
 });
 
+test("the axes strip lists each release seen, in version order, with where it is", () => {
+  const on = (babel, extra) => ({ deployed: true, version: "1", babel, babel_source: "status", ...extra });
+  const data = {
+    environments: ["dev", "ci", "test", "prod"],
+    data_axes: { babel: "Babel", biolink: "Biolink", graph: "Translator Graph" },
+    rows: [
+      { id: "nn", environments: { ci: on("2025sep1"), test: on("2025sep1"), prod: { deployed: false } } },
+      { id: "nr", environments: { ci: on("2025sep1", { biolink: "master" }), prod: on("2025sep1", { biolink: "master" }) } },
+      { id: "redis", environments: { dev: on("2026jul22", { biolink: "v4.4.3" }) } },
+      { id: "gandalf", environments: { dev: { deployed: true, version: "1", biolink: "4.4.2", biolink_source: "openapi" } } },
+    ],
+  };
+  const strip = summary.axes(data);
+  // No cell carries a graph release, so the axis is not a line.
+  assert.deepEqual(strip.map((a) => a.label), ["Babel", "Biolink"]);
+  assert.deepEqual(strip[0].versions, [
+    { version: "2025sep1", envs: [{ env: "ci", ids: ["nn", "nr"] }, { env: "test", ids: ["nn"] }, { env: "prod", ids: ["nr"] }] },
+    { version: "2026jul22", envs: [{ env: "dev", ids: ["redis"] }] },
+  ]);
+  assert.deepEqual(strip[1].versions.map((v) => v.version), ["4.4.2", "master", "v4.4.3"]);
+  assert.deepEqual(summary.axes({ rows: [] }), []);
+});
+
 test("the figures leave out a share with nothing to count", () => {
   const f = summary.figures({ rows: [] });
   assert.deepEqual(f.shares, []);
