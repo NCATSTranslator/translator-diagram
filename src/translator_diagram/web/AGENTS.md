@@ -162,13 +162,14 @@ render.
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
 breakpoints. Measured in Chromium at every width from 1000 to 1700px on the
 redrawn table with every row collapsed, `div.tablewrap` overflows in two bands
-(issue #108): 1000–1002px and 1151–1165px, at most 15px over, where scrollbars
-overlay the page, and 1000–1017px and 1151–1180px, at most 30px over, where a
+(issue #108): 1000–1022px and 1151–1185px, at most 35px over, where scrollbars
+overlay the page, and 1000–1037px and 1151–1200px, at most 50px over, where a
 classic 15px scrollbar takes its room. At 900px and below the environment
 columns run past the window, and the wrap scrolls at every width, so nothing is
 unreachable. With every row open nothing overflows at any of those widths, but
-with every third row open the same two bands widen, to 1026px and 1184px and at
-most 34px over with the classic scrollbar. Three rules in `table.css` keep the
+with every third row open the two bands widen, to 1046px and 1204px with the
+classic scrollbar, and a third appears at 1401–1468px, at most 68px over.
+Three rules in `table.css` keep the
 all-open case clean, each written where it applies: the Owner
 column's labels wrap between 800 and 1150px, a host label longer than its
 column may break inside itself there, and a long connection name wraps inside
