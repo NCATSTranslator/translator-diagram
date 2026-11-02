@@ -31,20 +31,17 @@ dashboard, nothing else. No credentials, no Graphviz, no spreadsheet access:
 uv sync                    # first-time setup; creates .venv/
 uv run sync-components     # follow what catalog/components/*.yaml points at -> data/sync/
 uv run build-dashboard     # compile that into a page      -> data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard
+# then open http://localhost:8765/ (Ctrl-C stops the server)
 ```
 
 That takes about ten seconds of network time and reaches only public services.
 Everything it fetches is cached under `data/`, which is gitignored, so nothing
 you run can dirty the repository.
 
-To exercise the full page — map export, clipboard copy, and anything else a
-browser blocks from `file://` — serve the build instead:
-
-```bash
-cd data/dashboard && python3 -m http.server 8765
-# then open http://localhost:8765/
-```
+The page inlines its own data, so `open data/dashboard/index.html` works
+without a server too, but browsers block map export, clipboard copy and some
+other features from `file://`.
 
 ### The diagram needs two more things
 
@@ -239,20 +236,25 @@ A single self-contained HTML page with three views over the same payload:
   releases, Helm chart and connections, and its catalog file field by field
   against the schema, marked recorded, "checked: none" or "not recorded".
 
-Click a component's name in the table, or a node on the map, to open its
-Component page; Back returns to where you were. Click anywhere else on a row,
-or its chevron, to expand it inline for a side-by-side environment read
-without leaving the table: one line per fact, each with a (?) that says where
-its values come from, and the component's releases under its repository. A
-legend beside the filters says what the cell colours mean.
+Click anywhere on a row, its name included, to expand it inline for a
+side-by-side environment read without leaving the table: one line per fact,
+each with a (?) that says where its values come from, the component's releases
+under its repository, and, under its name, what it gets results from, provides
+them to, calls and is called by, each opening that component's page. (Below
+800px wide that column holds the labels instead, and the connections are on
+the Component page.) The arrow at the right of a component's name, the "Open
+the … page" button in an open row, and a node on the map open its Component
+page; Back returns to where you were. A legend beside the filters says what
+the cell colours mean.
 
 ```bash
 uv run sync-components     # follow the pointers, cache into data/sync/
 uv run build-dashboard     # compile           into data/dashboard/
-open data/dashboard/index.html
+python3 -m http.server 8765 --directory data/dashboard   # http://localhost:8765/
 
-# Map export and other features some browsers block from file://:
-cd data/dashboard && python3 -m http.server 8765
+# Without a server, minus map export and other features browsers block from
+# file://:
+open data/dashboard/index.html
 
 # Rebuild on every edit to the catalog, config, sync cache or code (Ctrl-C
 # stops it). Reload the tab by hand; a new sync is still a separate step.
@@ -281,11 +283,18 @@ things it reports are the answer:
   visible without reading every cell. A version copied from the registry or
   the chart rather than read from the running service is a dashed pill, so
   four identical copies do not read as four services agreeing.
-- **Where it is registered, and what has changed.** The SmartAPI column says
-  whether a component has a registration, how the registry's own probe finds
-  it, and when the record last changed. The Repository column dates the
-  newest GitHub release; an open row lists every release under it, each tag
-  linking to its notes, the ones running somewhere on the row filled in.
+- **Where it is registered, and what needs a look.** The SmartAPI column says
+  what to do about each registration, worst problem first: `record not found`
+  (the catalog has an id the registry does not), `probe failing`, `ci not
+  listed` (deployed somewhere the record leaves out), `not probed` (the
+  registry skipped every path, usually for want of example requests), and
+  then `registered`, `not registered` or `not an API` (`smartapi: null` in
+  the component file). Any further problems and when the record last changed
+  sit under it, and the tooltip has the detail, including the probe's failing
+  lines. Sorting the column lists the problems first, banded by kind. The
+  Repository column dates the newest GitHub release; an open row lists every
+  release under it, each tag linking to its notes, the ones running somewhere
+  on the row filled in.
 - **Why a cell is empty.** Every cell with no version says what happened
   instead, in a few words: `no such host`, `no API document found`,
   `serves a web page, not an API document`, `SmartAPI lists no prod server`,
@@ -353,8 +362,9 @@ and a third click returns to stage order — which is also what the ✕ beside
 the order name in the filter bar does, and the only way back when a narrow
 window has hidden the column you sorted on. The order is always named there,
 and it travels in the URL with the filters. In stage order the rows are banded by
-stage — each band naming what that stage is for — and sorting by owner bands
-them by owner instead.
+stage — each band naming what that stage is for — sorting by owner bands
+them by owner instead, and sorting by SmartAPI bands them by what the
+registration needs, problems first in both directions.
 
 The stages, their order, and the components in each are
 [`catalog/flow-steps.yaml`](catalog/flow-steps.yaml), edited by hand. The

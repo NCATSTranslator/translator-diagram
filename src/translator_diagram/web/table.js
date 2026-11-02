@@ -234,13 +234,18 @@
   }
 
   /* The repository, and under it the newest release and when: that date used
-     to be a column of its own, and it belongs beside the thing it dates. */
+     to be a column of its own, and it belongs beside the thing it dates.
+
+     The newest release itself, not `last_updated`: that is the newer of the
+     release and the registration, and when it showed here only when the
+     release won, a registration edited last week took the release date off
+     Name Lookup's row. `releases_detail` is newest first. */
   function repoCell(row) {
     if (!row.repository) return `<td class="repo drop-md">${DASH()}</td>`;
-    const updated = row.last_updated;
-    const released = updated && updated.source === "release"
-      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}"><span class="age">${
-          esc(TD.fmt.relativeAge(updated.at))}</span> · ${esc(updated.tag || "release")}</span>`
+    const newest = (row.releases_detail || [])[0];
+    const released = newest && newest.published
+      ? `<span class="l2" data-tip="rel" data-id="${esc(row.id)}" data-tag="${esc(newest.tag)}"><span class="age">${
+          esc(TD.fmt.relativeAge(newest.published))}</span> · ${esc(newest.tag)}</span>`
       : "";
     // The release chips sit here too, shown only once the row is open: this is
     // the column they come from, so they need no label of their own.
@@ -250,30 +255,39 @@
   }
 
   /* One registration usually covers every environment, so it is a column of
-     its own rather than four facts: whether the component is registered at
-     all, how the registry's own probe finds it, and when the record last
-     changed. */
+     its own rather than four facts. It says what to do about the record, in
+     TD.smartapi's words: the worst problem first, any others under it, then
+     when the record last changed, and everything in the tooltip. The date has
+     a line of its own: run on after the problems it wrapped, and left a "·"
+     hanging at the end of the line above.
+
+     The dot sits in a gutter of its own, kept empty on rows with no dot, so
+     every first line starts at the same x and the lines under it start under
+     the first rather than under the dot. */
   function smartapiCell(row) {
-    const record = row.smartapi_record;
-    if (!record) {
-      const candidates = (row.smartapi_candidates || []).length;
-      return `<td class="sapi drop-sm"><span class="why">${
-        candidates ? `${candidates} possible records` : "not registered"}</span></td>`;
-    }
-    const uptime = record.status && record.status.uptime_status;
-    const dot = uptime
-      ? `<span class="dot ${uptime === "pass" ? "up" : "down"}" aria-label="registry probe: ${esc(uptime)}"></span>`
+    const status = TD.smartapi.status(row);
+    const dot = status.dot != null
+      ? `<span class="dot ${status.dot}" aria-label="${esc(status.group)}"></span>`
       : "";
-    const changed = row.last_updated && row.last_updated.source === "registry"
-      ? `<span class="l2" data-tip="upd" data-id="${esc(row.id)}">changed <span class="age">${
-          esc(TD.fmt.relativeAge(row.last_updated.at))}</span></span>`
-      : "";
-    return `<td class="sapi drop-sm">${dot}${link(record.registry_url, "registered")}${changed}</td>`;
+    const word = link(status.href, esc(status.word), status.href ? "" : "why");
+    const others = status.problems.slice(1).map((problem) => esc(problem.word));
+    const lines = [
+      others.length ? others.join('<span class="sep"> · </span>') : "",
+      status.changed ? `changed <span class="age">${esc(TD.fmt.relativeAge(status.changed))}</span>` : "",
+    ].filter(Boolean).map((line) => `<span class="l2">${line}</span>`).join("");
+    return `<td class="sapi drop-sm" data-tip="sapi" data-id="${esc(row.id)}"><span class="sapil">${
+      dot}<span class="sapiw">${word}</span>${lines}</span></td>`;
   }
 
   /* The name on the first line and, under it, the summary; the id joins the
      second line only when the row is open, because it is the key a link or a
-     search uses rather than a thing to read down a column. */
+     search uses rather than a thing to read down a column.
+
+     The name is text, not a link: a click on it opens the row like a click
+     anywhere else on it, since the open row is where the connections are.
+     The arrow at the cell's right edge opens the component's page, and the
+     arrows line up down the table, so they read as a column without costing
+     one. */
   function componentCell(row) {
     const externals = (row.externals || [])
       .map((external) =>
@@ -284,9 +298,10 @@
     return `<td><span class="cnamewrap"><button type="button" class="chev"
         aria-expanded="${open}" data-expand="${esc(row.id)}"
         aria-label="Environment detail for ${esc(row.name)}">${TD.ui.CHEVRON}</button>${
-      TD.owner.coin(row.owner, "narrow")}<button type="button" class="cname"
-        data-open="${esc(row.id)}">${esc(row.name)}</button>${
-      TD.findings.marks(row.findings, { id: row.id, env: "", about: "row" })}${externals}</span>
+      TD.owner.coin(row.owner, "narrow")}<span class="cname">${esc(row.name)}</span>${
+      TD.findings.marks(row.findings, { id: row.id, env: "", about: "row" })}${externals}<button
+        type="button" class="openpage" data-open="${esc(row.id)}" title="Open the ${esc(row.name)} page"
+        aria-label="Open the ${esc(row.name)} page">${TD.ui.OPEN}</button></span>
       <span class="csub"><span class="cid">${esc(row.id)}</span>${summary}</span></td>`;
   }
 
@@ -296,9 +311,7 @@
 
   /* --- Columns -------------------------------------------------------------- */
 
-  const registryDate = (row) =>
-    (row.last_updated && row.last_updated.source === "registry" ? row.last_updated.date : "")
-    || ((row.smartapi_record || {}).meta || {}).last_updated || "";
+  const registryDate = (row) => TD.smartapi.status(row).changed;
 
   const COLUMNS = [
     { key: "name", label: "Component", cell: componentCell, value: (row) => row.name },
@@ -312,9 +325,14 @@
     },
     {
       key: "smartapi", label: "SmartAPI", drop: "drop-sm", cell: smartapiCell,
+      // What needs a look first, in either direction: the state is a tier,
+      // compared before the flip, and the date orders each band.
+      rank: (row) => TD.smartapi.status(row).rank,
+      band: (row) => TD.smartapi.status(row).group,
       value: registryDate,
-      compare: TD.sort.byDate, prefer: "asc", words: ["oldest first", "newest first"],
-      hint: "Sort by when the SmartAPI registration last changed",
+      compare: TD.sort.byDate, prefer: "asc",
+      words: ["problems first", "problems first, newest first"],
+      hint: "Sort by what needs a look in the SmartAPI registration, problems first",
     },
   ];
 
@@ -430,16 +448,28 @@
      once put in the first column instead, and read as detached from the
      numbers it named.
 
-     Version is deliberately absent: it is the row directly above. */
-  function labelCells(row, label, about) {
+     Version is deliberately absent: it is the row directly above.
+
+     `skipName` leaves out the Component column's cell, for the rows a
+     connections cell spans (connectionsCell). */
+  /* Where a narrow column wraps a label, its last word and the (?) wrap
+     together (`.dkw`), so the (?) is never on a line alone. A word joiner
+     before the button was tried first: Chrome still breaks before a button. */
+  function labelHtml(label, help) {
+    if (!help) return esc(label);
+    const at = label.lastIndexOf(" ") + 1;
+    return `${esc(label.slice(0, at))}<span class="dkw">${esc(label.slice(at))}${help}</span>`;
+  }
+
+  function labelCells(row, label, about, skipName) {
     const help = about
       ? `<button type="button" class="help" data-tip="fact" data-id="${esc(row.id)}"
            data-fact="${esc(label)}" aria-label="Where ${esc(label)} comes from">?</button>`
       : "";
     return COLUMNS
-      .filter((column) => !column.env)
+      .filter((column) => !column.env && !(skipName && column.key === "name"))
       .map((column) => `<td class="dk dk-${esc(column.key)} ${column.drop || ""}"><span class="dkl">${
-        esc(label)}${help}</span></td>`)
+        labelHtml(label, help)}</span></td>`)
       .join("");
   }
 
@@ -448,6 +478,7 @@
       group == null ? [] : ["grp"],
       flags.first ? ["detail-first"] : [],
       flags.last ? ["detail-last"] : [],
+      flags.spanned ? ["spanned"] : [],
     );
     return `class="${classes.join(" ")}" data-for="${esc(row.id)}"${
       group == null ? "" : ` data-step="${esc(group)}"`}`;
@@ -466,10 +497,46 @@
     return (row.releases_detail || []).map((release) => releaseChip(row, release)).join("");
   }
 
+  /* One connection: the component's coin and name, as a button that opens its
+     page, exactly as the name in its own row does (the body's click handler
+     answers both). */
+  function connectionButton(item) {
+    const other = rowById(item.id);
+    const name = other ? other.name : item.id;
+    const title = `Open ${name}${item.planned ? " (planned, not yet implemented)" : ""}`;
+    return `<button type="button" class="conn${item.planned ? " planned" : ""}" data-open="${
+      esc(item.id)}" title="${esc(title)}">${other ? TD.owner.coin(other.owner) : ""}${esc(name)}</button>`;
+  }
+
+  /* The connections, in the Component column of the detail rows, which is
+     otherwise empty above the narrow breakpoint: the labels sit in the
+     rightmost non-environment column, and that is never this one there. One
+     cell spanning every detail row, in TD.row.connections' groups and order;
+     the externals and the catalog's view stay on the Component page. */
+  function connectionsCell(row, span) {
+    const groups = TD.row.connections(row).filter((group) => group.items.length);
+    const body = groups.length
+      ? groups.map((group) => `<div class="cg"><span class="cgl">${esc(group.title)}</span>${
+        group.items.map(connectionButton).join("")}</div>`).join("")
+      : '<span class="why">No connections recorded</span>';
+    // Words as well as the arrow on the row: someone who has opened the row
+    // and read it is deciding whether to go further.
+    const open = `<button type="button" class="openlink" data-open="${esc(row.id)}">Open the ${
+      esc(row.name)} page ${TD.ui.OPEN}</button>`;
+    return `<td class="dk-conn" rowspan="${span}">${open}${body}</td>`;
+  }
+
   /* Only the facts some environment answered, each in its environment's
      column. The releases are not here: they are in the Repository cell of
-     the row above, shown once it is open. */
-  function detailRowsHtml(row, group) {
+     the row above, shown once it is open.
+
+     `narrow` is whether the window is at or under NARROW. There the
+     Component column is the label column, so the rows are drawn without the
+     connections cell. It is an argument rather than a CSS rule because a
+     rowspan cannot be undone in CSS: hiding the spanning cell would move
+     every later row's cells one column left. */
+  function detailRowsHtml(row, group, options) {
+    const narrow = !!(options && options.narrow);
     const models = Object.fromEntries(TD.ENVS.map((env) => [env, TD.cell(row, env)]));
     const facts = [];
     for (const env of TD.ENVS) {
@@ -477,17 +544,36 @@
         if (!facts.some((f) => f.label === fact.label)) facts.push(fact);
       }
     }
+    const lead = (flags) => (narrow || flags.index > 0 ? "" : connectionsCell(row, flags.count));
     const make = facts.map((fact) => (flags) =>
-      `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, fact.label, fact.about)}${
+      `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, fact.label, fact.about, !narrow)}${
         TD.ENVS.map((env) => factCell(models[env].facts.find((f) => f.label === fact.label))).join("")
       }</tr>`);
     if (!make.length) {
-      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${labelCells(row, "", "")}<td
+      make.push((flags) => `<tr ${detailAttrs(row, group, flags)}>${lead(flags)}${labelCells(row, "", "", !narrow)}<td
         class="dv note" colspan="${TD.ENVS.length}">Nothing else is recorded for this component.</td></tr>`);
     }
     return make
-      .map((build, index) => build({ first: index === 0, last: index === make.length - 1 }))
+      .map((build, index) => build({
+        index,
+        count: make.length,
+        first: index === 0,
+        last: index === make.length - 1,
+        spanned: !narrow && index > 0,
+      }))
       .join("");
+  }
+
+  /* At and under this width the Component column holds the detail rows'
+     labels: the last step of the label ladder in table.css, which must change
+     with it. */
+  const NARROW = "(max-width: 800px)";
+  function isNarrow() {
+    try {
+      return typeof matchMedia === "function" && matchMedia(NARROW).matches;
+    } catch {
+      return false;
+    }
   }
 
   /* Everything the chevron opened, in document order. Walked rather than
@@ -507,7 +593,7 @@
 
   /* `group` is the band this row sits under, or null in an order that has no
      bands (by date, by environment). */
-  function rowHtml(row, group) {
+  function rowHtml(row, group, options) {
     const open = (state().expand || []).indexOf(row.id) >= 0;
     const classes = ["row"];
     if (group != null) classes.push("grp");
@@ -517,16 +603,16 @@
     const step = group == null ? "" : ` data-step="${esc(group)}"`;
     const body = `<tr class="${classes.join(" ")}" id="c-${esc(row.id)}" data-id="${esc(row.id)}"${
       step}>${COLUMNS.map((column) => column.cell(row)).join("")}</tr>`;
-    return open ? body + detailRowsHtml(row, group) : body;
+    return open ? body + detailRowsHtml(row, group, options) : body;
   }
 
-  function bodyHtml(rows) {
+  function bodyHtml(rows, options) {
     if (!rows.length) {
       return `<tr><td class="empty" colspan="${COLUMNS.length}"
         >No components match these filters.</td></tr>`;
     }
     const label = bandKey();
-    if (!label) return rows.map((row) => rowHtml(row, null)).join("");
+    if (!label) return rows.map((row) => rowHtml(row, null, options)).join("");
     // Grouped as they come, so a step filtered down to nothing leaves no empty
     // band, and a visible gap — Step 1, Step 2, Step 8 — reports honestly what
     // the filter took out.
@@ -539,7 +625,7 @@
     }
     return groups
       .map((group) =>
-        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label)).join(""))
+        bandHtml(group) + group.rows.map((row) => rowHtml(row, group.label, options)).join(""))
       .join("");
   }
 
@@ -577,8 +663,6 @@
     status: "Read live from the deployment's /status endpoint.",
     smartapi: "Copied from the SmartAPI registry, not from the running service.",
     helm: "From the Helm chart — what should be deployed, not what is.",
-    release: "The newest GitHub release on this component's repository.",
-    registry: "When this component's SmartAPI registration last changed.",
   };
 
   function tipHtml(target) {
@@ -610,17 +694,23 @@
         where ? `<div class="note">${esc(where)}</div>` : ""}${
         release.body_excerpt ? `<div class="note">${esc(release.body_excerpt)}</div>` : ""}`;
     }
-    if (kind === "upd") {
+    if (kind === "sapi") {
       const row = rowById(target.dataset.id);
-      const updated = row && row.last_updated;
-      if (!updated) return "";
-      // The three shepherds share one repository, so one release date lands on
-      // three rows: without the tag that reads as three coincidental deploys.
-      const what = updated.source === "release"
-        ? `${updated.tag} released ${updated.date}`
-        : `SmartAPI registration last changed ${updated.date}`;
-      return `<div><b>${esc(what)}</b></div><div class="note">${
-        esc(SOURCE_NOTES[updated.source] || "")}</div>`;
+      if (!row) return "";
+      const status = TD.smartapi.status(row);
+      const pair = (term, value) => (value ? `<dt>${esc(term)}</dt><dd>${esc(value)}</dd>` : "");
+      const day = (iso) => String(iso).slice(0, 10);
+      // The registry writes one line per path; the failures are the ones to
+      // read, and three is enough to say which.
+      const failures = status.failures.slice(0, 3);
+      return `<div class="title">SmartAPI · ${esc(status.group)}</div><dl>${
+        pair("record", row.smartapi || "")}${
+        pair("changed", status.changed ? day(status.changed) : "")}${
+        pair("probed", status.probed ? day(status.probed) : "")}</dl>${
+        status.problems.map((problem) => `<div class="note">${esc(problem.note)}</div>`).join("")}${
+        failures.map((line) => `<div class="note">${esc(line)}</div>`).join("")}${
+        status.failures.length > failures.length
+          ? `<div class="note">and ${status.failures.length - failures.length} more</div>` : ""}`;
     }
     if (kind === "findings") {
       const row = rowById(target.dataset.id);
@@ -686,7 +776,7 @@
     // The band this row is under, read back off the row rather than passed in:
     // the click handler knows the id, not the grouping.
     const group = tr.classList.contains("grp") ? tr.dataset.step ?? "" : null;
-    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group));
+    tr.insertAdjacentHTML("afterend", detailRowsHtml(row, group, { narrow: isNarrow() }));
     tr.classList.add("open");
   }
 
@@ -727,7 +817,7 @@
 
     /* A click anywhere on a row toggles it, so a reader looking at the
        environment columns need not travel back to the chevron. Links and
-       buttons in the row keep their own job (the name opens the component's page), a
+       buttons in the row keep their own job (the arrow opens the component's page), a
        drag that selected text to copy is not a click, and the detail rows
        never collapse their row: they hold the values people copy. The chevron
        stays the keyboard and screen-reader control; the <tr> is not made a
@@ -750,6 +840,15 @@
     });
 
     TD.ui.tooltip.bind(body, "[data-tip]", tipHtml);
+
+    // An open row's detail is drawn for one side of NARROW (detailRowsHtml),
+    // so crossing it redraws the body. Only then: nothing else depends on it.
+    if (typeof matchMedia === "function") {
+      matchMedia(NARROW).addEventListener("change", () => {
+        if (!(state().expand || []).length) return;
+        body.innerHTML = bodyHtml(TD.sort.rows(visibleRows(), sortColumn(), state().dir), { narrow: isNarrow() });
+      });
+    }
   }
 
   table.render = function render(container) {
@@ -759,7 +858,7 @@
     const rows = TD.sort.rows(visibleRows(), sortColumn(), state().dir);
     TD.ui.tooltip.hide();
     head.innerHTML = headHtml();
-    body.innerHTML = bodyHtml(rows);
+    body.innerHTML = bodyHtml(rows, { narrow: isNarrow() });
     return { shown: rows.length, total: (TD.DATA.rows || []).length };
   };
 
