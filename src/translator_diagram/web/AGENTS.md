@@ -342,6 +342,12 @@ groups, found by typing: the browser's own control does type-to-find, the
 keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
 taught all three.
 
+**A published page can say "withheld".** `privacy.apply` lists what it emptied
+out of a component's own file in the row's `recorded_withheld`. The Recorded
+section and the Connections section read it, because the format's `[]` means
+"checked, there are none", and six components' `calls: [jaeger]` is pruned to
+exactly that.
+
 **The SmartAPI column says what to do, not whether a record exists.** It
 used to print "registered" for every record and draw the registry's
 `uptime_status` as green for `pass` and red for anything else, so the three

@@ -726,9 +726,16 @@
   /* The chips of a connections group, or nothing. */
   const conns = (items) => (items.length ? `<div class="cv-conns">${items.join("")}</div>` : "");
 
-  function connGroup(group) {
+  /* What an empty list of connections says. "None recorded" would be false
+     where the file records some and the published page withholds them all
+     (`recorded_withheld`, privacy.apply). */
+  const noConnections = (row, path) => muted(list(row.recorded_withheld).includes(path)
+    ? "Withheld from this page."
+    : "None recorded.");
+
+  function connGroup(row, group) {
     const items = group.items.map((item) => connButton(item.id, item.planned));
-    return heading(group.title) + (conns(items) || muted("None recorded."));
+    return heading(group.title) + (conns(items) || noConnections(row, `connections.${group.key}`));
   }
 
   /* Catalog edges follow the data (`build_catalog_edges`): what this
@@ -749,9 +756,10 @@
   function panelConnections(row) {
     const externalsHtml = conns(list(row.externals).map((entry) =>
       `<span class="cv-conn static">${TD.row.arrow(entry.direction)}
-          <span class="cv-connname">${esc(entry.name)}</span></span>`)) || muted("None recorded.");
+          <span class="cv-connname">${esc(entry.name)}</span></span>`))
+      || noConnections(row, "connections.externals");
 
-    const parts = TD.row.connections(row).map(connGroup)
+    const parts = TD.row.connections(row).map((group) => connGroup(row, group))
       .concat([heading("Externals") + externalsHtml]);
 
     // A second opinion, kept separate from the hand-recorded graph rather than
@@ -836,8 +844,10 @@
   /* Absent, null and empty are three different claims in this format
      (docs/component-metadata.md): absent means "not recorded yet", an
      explicit null or [] means "checked, there is none". This is where the
-     distinction is shown rather than flattened. */
-  function fieldState(recorded, path) {
+     distinction is shown rather than flattened. A published build adds a
+     fourth: a value the file does hold and the policy emptied, listed in the
+     row's `recorded_withheld`, which must not read as "checked: none". */
+  function fieldState(recorded, path, withheld) {
     let node = recorded;
     for (const key of path) {
       if (!node || typeof node !== "object" || !(key in node)) return { state: "absent" };
@@ -846,6 +856,7 @@
     const empty = node === null
       || (Array.isArray(node) && node.length === 0)
       || (typeof node === "object" && !Array.isArray(node) && Object.keys(node).length === 0);
+    if (empty && list(withheld).includes(path.join("."))) return { state: "withheld" };
     return { state: empty ? "none" : "recorded", value: node };
   }
 
@@ -870,7 +881,12 @@
     return entries.map(([k, v]) => `<span class="cv-key">${esc(k)}</span> ${valueHtml(v)}`).join(" · ");
   }
 
-  const STATE_WORDS = { recorded: "recorded", none: "checked: none", absent: "not recorded" };
+  const STATE_WORDS = {
+    recorded: "recorded",
+    none: "checked: none",
+    absent: "not recorded",
+    withheld: "withheld",
+  };
 
   /* The component's own file against every field the schema allows. This is
      the section for "field X is wrong or missing": what the catalog says,
@@ -883,24 +899,33 @@
     }
     const fields = schemaFields(data().component_schema, recorded);
     if (!fields.length) return muted("This build carries no schema to compare the file against.");
-    let count = 0;
+    const withheld = list(row.recorded_withheld);
+    const counts = { recorded: 0, none: 0, absent: 0, withheld: 0 };
     const body = fields.map((field) => {
-      const { state, value } = fieldState(recorded, field.path);
-      if (state === "recorded") count += 1;
+      const { state, value } = fieldState(recorded, field.path, withheld);
+      counts[state] += 1;
       const title = field.description ? ` title="${esc(field.description)}"` : "";
+      // Part of an environment's block, say, with the rest of it still shown.
+      const inside = withheld
+        .filter((path) => path.startsWith(`${field.label}.`))
+        .map((path) => path.slice(field.label.length + 1));
       return `<tr class="cv-f cv-f-${state}">
         <th scope="row"${title}>${esc(field.label)}${field.required ? ` ${note("required")}` : ""}</th>
         <td class="cv-state">${STATE_WORDS[state]}</td>
-        <td class="cv-value">${state === "recorded" ? valueHtml(value) : DASH}</td></tr>`;
+        <td class="cv-value">${state === "recorded" ? valueHtml(value) : DASH}${
+          inside.length ? ` ${note(`${inside.join(", ")} withheld`)}` : ""}</td></tr>`;
     }).join("");
-    const absent = fields.length - count;
     const file = catalogUrls(row.id);
     return `<p class="cv-cap">The component's own file, ${
       ext(file.view, `catalog/components/${row.id}.yaml`, "cv-link cv-mono")}, against every field the
         schema allows. “Not recorded” means nobody has written the field down yet; “checked: none”
-        means someone looked and there is nothing to record. Hover a field for what it holds.</p>
-      <p class="cv-count">${count} of ${fields.length} fields recorded${
-        absent ? ` · <strong>${absent}</strong> not` : ""} · ${ext(file.edit, "edit the file")}</p>
+        means someone looked and there is nothing to record.${
+        withheld.length ? " “Withheld” means the file records it and this published page does not show it." : ""
+      } Hover a field for what it holds.</p>
+      <p class="cv-count">${counts.recorded} of ${fields.length} fields recorded${
+        counts.absent ? ` · <strong>${counts.absent}</strong> not recorded` : ""}${
+        counts.none ? ` · ${counts.none} checked: none` : ""}${
+        counts.withheld ? ` · ${counts.withheld} withheld` : ""} · ${ext(file.edit, "edit the file")}</p>
       <div class="cv-tscroll"><table class="cv-t cv-rec"><thead><tr>
         <th>Field</th><th>State</th><th>Value</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
@@ -1058,5 +1083,6 @@
   view.docLabel = docLabel;
   view.pickerGroups = pickerGroups;
   view.pageHtml = pageHtml;
+  view.panelConnections = panelConnections;
   view.updatedHtml = updatedHtml;
 })();
