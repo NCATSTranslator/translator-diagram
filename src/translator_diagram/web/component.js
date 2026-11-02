@@ -944,16 +944,23 @@
   // Full width, last: a table of every field is too wide for a column.
   const RECORDED = { id: "recorded", label: "Recorded in the catalog", render: recordedSection };
 
+  const ENVIRONMENTS = { id: "environments", label: "Environments", render: envMatrix };
+
   /* One malformed field must cost its section, not the page: this is a
-     reading surface over data fetched from six upstreams. */
-  function panelHtml(row, panel, wide) {
-    let html;
+     reading surface over data fetched from six upstreams. The header and the
+     environments are sections like the others: thrown from here at boot, an
+     error would stop app.js before Back and Forward are wired up. */
+  function attempt(row, id, render) {
     try {
-      html = panel.render(row);
+      return render(row);
     } catch (error) {
-      html = muted(`This section could not be rendered for ${row.id}.`);
-      if (typeof console !== "undefined") console.error(`component ${panel.id}:`, error);
+      if (typeof console !== "undefined") console.error(`component ${id}:`, error);
+      return muted(`This section could not be rendered for ${row.id}.`);
     }
+  }
+
+  function panelHtml(row, panel, wide) {
+    const html = attempt(row, panel.id, panel.render);
     return `<section class="cv-panel${wide ? " wide" : ""}" id="cv-${panel.id}"
       aria-labelledby="cv-${panel.id}-h"><h2 class="cv-ph" id="cv-${panel.id}-h">${
       esc(panel.label)}</h2>${html}</section>`;
@@ -990,26 +997,40 @@
 
   /* --- The page ----------------------------------------------------------- */
 
-  function pageHtml(id) {
+  function actionsHtml(row) {
+    return row ? `<span class="spacer"></span>
+      <button type="button" class="btn" id="cv-copy">Copy link</button>
+      <button type="button" class="btn" id="cv-map">Show on map</button>` : "";
+  }
+
+  function bodyHtml(id) {
     const row = rowById(id);
-    const bar = `<div class="cv-bar">${pickerHtml(id)}
-      ${row ? `<span class="spacer"></span>
-        <button type="button" class="btn" id="cv-copy">Copy link</button>
-        <button type="button" class="btn" id="cv-map">Show on map</button>` : ""}</div>`;
     if (!row) {
-      return bar + muted(id
+      return muted(id
         ? `No component has the id ${id}. Choose one above.`
         : "Choose a component above, or use the arrow beside a component in the Overview, or click a node on the Map.");
     }
-    return `${bar}<header class="cv-head">${headerHtml(row)}</header>
-      <section class="cv-panel wide" id="cv-environments" aria-labelledby="cv-environments-h">
-        <h2 class="cv-ph" id="cv-environments-h">Environments</h2>${envMatrix(row)}</section>
+    return `<header class="cv-head">${attempt(row, "header", headerHtml)}</header>
+      ${panelHtml(row, ENVIRONMENTS, true)}
       <div class="cv-cols">${PANELS.map((panel) => panelHtml(row, panel)).join("")}</div>
       ${panelHtml(row, RECORDED, true)}`;
   }
 
+  function pageHtml(id) {
+    return `<div class="cv-bar">${pickerHtml(id)}<span class="cv-actions" id="cv-actions">${
+      actionsHtml(rowById(id))}</span></div><div id="cv-body">${bodyHtml(id)}</div>`;
+  }
+
+  /* Changes of the picker this close together are one walk through the list,
+     by arrow key or by typing a name, and share one history entry: Back from
+     the end of a walk returns to where it started, not to each component
+     passed on the way. Two picks a reader stopped to read between are two
+     places. */
+  const PICKER_WALK_MS = 1000;
+
   let host = null;
   let shown = null;
+  let lastPick = 0;
 
   function bind(container) {
     host = container;
@@ -1032,7 +1053,10 @@
     });
     container.addEventListener("change", (event) => {
       if (event.target.id === "cv-select" && event.target.value) {
-        TD.navigate({ sel: event.target.value });
+        const now = Date.now();
+        const walking = now - lastPick < PICKER_WALK_MS;
+        lastPick = now;
+        TD.navigate({ sel: event.target.value }, { replace: walking });
       }
     });
     TD.ui.tooltip.bind(container, "[data-tip]", (target) => {
@@ -1061,13 +1085,29 @@
 
   /* Redrawn only when the component changes: app.js renders the shown view on
      every commit, and a page that rebuilt itself would close every disclosure
-     the reader had opened and lose their scroll. */
+     the reader had opened and lose their scroll.
+
+     The picker itself is kept when the new component is a real one. Replacing
+     it dropped focus after one arrow key and lost a half-typed name, and those
+     are why it is a native <select>. Only a page with no such component
+     rebuilds it, to offer the placeholder again. */
   view.render = function render(container) {
     if (host !== container) bind(container);
     const id = (TD.state && TD.state.sel) || "";
     if (id === shown && container.firstChild) return;
     shown = id;
-    container.innerHTML = pageHtml(id);
+    TD.ui.tooltip.hide();
+    const picker = container.querySelector("#cv-select");
+    const row = rowById(id);
+    if (picker && row) {
+      const placeholder = picker.querySelector('option[value=""]');
+      if (placeholder) placeholder.remove();
+      picker.value = id;
+      container.querySelector("#cv-actions").innerHTML = actionsHtml(row);
+      container.querySelector("#cv-body").innerHTML = bodyHtml(id);
+    } else {
+      container.innerHTML = pageHtml(id);
+    }
     container.scrollTop = 0;
   };
 

@@ -287,8 +287,9 @@ once the choice was made (the commit that deleted them says why), and their
 shared cell model moved into `core.js` as `TD.cell`. Two rules in the tint:
 a lone deployment is not tinted "same", because it agrees with nobody; and an
 absence the page is sure of (no such host, no server listed, not a hosted
-service) is left white, while "no address on file" — the page's own gap — is
-grey.
+service) is left white, while the page's own gap is grey: no address on file,
+an address it could not confirm, or a host it never checked. The light green
+"up, no version" needs a host that answered; a null `reachable` is grey.
 
 **The expanded row's label sits beside the environments, not in the first
 column.** It is written into every non-environment cell and CSS shows the
@@ -340,7 +341,11 @@ table as it was before the click.
 **The picker is a native `<select>`.** Twenty-seven components in stage
 groups, found by typing: the browser's own control does type-to-find, the
 keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
-taught all three.
+taught all three. So `TD.component.render` redraws around it rather than
+replacing it, because a replaced `<select>` loses focus after one arrow key
+and forgets a half-typed name. For the same reason, picker changes less than a
+second apart share one history entry, so a keyboard walk through the list is
+one Back rather than one per component.
 
 **A published page can say "withheld".** `privacy.apply` lists what it emptied
 out of a component's own file in the row's `recorded_withheld`. The Recorded

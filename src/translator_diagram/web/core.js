@@ -318,7 +318,7 @@
     const cell = ((row || {}).environments || {})[env] || {};
     const source = cell.version_source || "";
     const otel = ((row || {}).otel_presence || [])
-      .filter((p) => (p.seen_in || []).includes(env)).map((p) => p.service);
+      .filter((p) => p && (p.seen_in || []).includes(env)).map((p) => p.service);
     // Each fact says where it comes from (`about`): the (?) beside its label
     // in the expanded row shows that sentence, so a new fact explains itself.
     const facts = [

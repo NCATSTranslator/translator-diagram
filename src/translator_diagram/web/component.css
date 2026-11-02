@@ -29,6 +29,9 @@ html[data-view="component"] .filters { display: none; }
   padding: var(--sp-3) 0;
 }
 .cv-bar .spacer { flex: 1; }
+/* A wrapper so the buttons can be redrawn without touching the picker; it
+   takes no part in the bar's layout. */
+.cv-actions { display: contents; }
 .cv-pick { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .cv-picklabel {
   font-size: var(--fs-label);

@@ -42,8 +42,10 @@
   };
 
   /* Go somewhere: another view, or another component. Unlike commit, this
-     pushes a history entry and redraws the whole shown view. */
-  TD.navigate = function navigate(patch) {
+     pushes a history entry and redraws the whole shown view. `replace` moves
+     the current entry instead, for a walk through the Component view's picker
+     (component.js). */
+  TD.navigate = function navigate(patch, options) {
     // Leaving a view for a component: the entry being left records which one
     // was picked there, so Back returns to its row highlighted and in view,
     // or to its node ringed, rather than to the place as it was before.
@@ -52,7 +54,7 @@
       writeUrl(false);
     }
     Object.assign(TD.state, patch);
-    writeUrl(true);
+    writeUrl(!(options && options.replace));
     syncControls();
     showView(true);
   };
@@ -174,7 +176,7 @@
             <span><i class="sw diff"></i>differs</span>
             <span><i class="sw nov"></i>up, no version</span>
             <span><i class="sw down"></i>down</span>
-            <span><i class="sw off"></i>no address on file</span>
+            <span><i class="sw off"></i>not confirmed</span>
             <span><i class="sw copied"></i>copied from a registry or chart</span>
           </span>
           <span class="spacer"></span>
@@ -240,7 +242,7 @@
     search.addEventListener("input", () => TD.commit({ q: search.value }));
 
     document.getElementById("reset").addEventListener("click", () => {
-      TD.commit({ q: "", owner: [], versions: TD.table.DEFAULT_VIEW, sort: "", dir: "asc", expand: [] });
+      TD.commit({ q: "", owner: [], versions: TD.table.DEFAULT_VIEW, sort: "", dir: "asc", expand: [], sel: "" });
       search.value = "";
       ownerBox.set([]);
       versionBox.set(TD.table.DEFAULT_VIEW);
@@ -269,18 +271,28 @@
       if (currentTheme() === "auto") applyTheme("auto");
     });
 
-    // A share's link lists the rows it leaves out: switch to the Overview on
-    // that view, set the control to match, and close the panel. The href is
-    // real too, so a middle-click opens the same view in a new tab.
+    // Esc lets go of the highlighted row, as it lets go of the ring on the Map.
+    // Only from the table or the page itself: in the search box Esc clears the
+    // box, and in a listbox it closes the list. Without a redraw, so the focus
+    // stays on whatever in the table holds it.
+    const overview = document.getElementById("view-overview");
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || TD.state.view !== "overview" || !TD.state.sel) return;
+      if (event.target !== document.body && !overview.contains(event.target)) return;
+      TD.commit({ sel: "" }, { silent: true });
+      const highlighted = overview.querySelector("tr.row.sel");
+      if (highlighted) highlighted.classList.remove("sel");
+    });
+
+    // A share's link lists the rows it leaves out: go to the Overview on that
+    // view and close the panel. The href is real too, so a middle-click opens
+    // the same view in a new tab.
     const sync = document.getElementById("sync");
     sync.addEventListener("click", (event) => {
       const link = event.target.closest("a[data-show]");
       if (!link) return;
       event.preventDefault();
-      TD.commit({ view: "overview", versions: link.dataset.show }, { silent: true });
-      viewSwitch.set("overview");
-      versionBox.set(link.dataset.show);
-      showView(false);
+      TD.navigate({ view: "overview", versions: link.dataset.show });
       sync.open = false;
     });
     // Anywhere else closes it, the way the listboxes close.
@@ -316,6 +328,10 @@
 
   function showView(animate) {
     const name = TD.state.view;
+    // Its target may be about to be hidden or replaced, and a hidden target
+    // sends no mouseout or focusout to hide it later. This also cancels a tip
+    // still waiting out its delay, which would paint at the top-left corner.
+    TD.ui.tooltip.hide();
     // base.css hides the filter bar on the Component view, where it filters
     // nothing; this attribute is what it keys on.
     document.documentElement.dataset.view = name;

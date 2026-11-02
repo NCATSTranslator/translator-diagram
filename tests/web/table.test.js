@@ -142,6 +142,9 @@ test("a cell's state follows the model: known absences are white, a lone deploym
   assert.equal(state({}), "off");
   assert.equal(state({ deployed: true, reach: "down", version: "1.0" }), "down");
   assert.equal(state({ deployed: true, reach: "up" }), "nov");
+  // "nov" says the host is up, and nothing contacted this one.
+  assert.equal(state({ deployed: true, reach: "" }), "off");
+  assert.equal(state({ deployed: true, reach: "", version: "1.0" }), "same");
   assert.equal(state({ deployed: true, version: "1.0", drift: ["version"] }), "diff");
   assert.equal(state({ deployed: true, version: "1.0" }), "same");
   assert.equal(state({ deployed: true, version: "1.0" }, 1), "one");

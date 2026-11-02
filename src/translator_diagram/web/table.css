@@ -15,7 +15,7 @@
      COLUMNS entry in table.js. Four things have to agree about a column, and
      three of them used to be written out twice.
   3. The four environment cells carry a tint by state — same as the row,
-     differs, up without a version, down, no address on file — and nothing
+     differs, up without a version, down, not confirmed or not checked — and nothing
      else on the page is tinted. The states are decided in table.js
      (cellState) from the one cell model in core.js; this file only says what
      each looks like. The tints are never the only signal: a differing cell
