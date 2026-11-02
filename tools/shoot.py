@@ -147,21 +147,24 @@ FREEZE_DATE = """{
 # The parts of a query the page did not act on. Everything it understands comes
 # back out of `TD.url.serialize` unless it is the default, which covers an
 # unknown view, sort or edge kind. A selected component or an expanded row stays
-# in the state even when no such row exists, so those ask for the row, and a tab
-# has to be the one showing. `sel` asks for the row and not for an open drawer
-# because a selection does not need a drawer to mean something.
-IGNORED = """(query) => {
+# in the state even when no such row exists, so those are checked against the
+# build's own list of rows, and a tab has to be the one showing. The list comes
+# from `overview.json` rather than from `TD.row` or `TD.drawer` because this has
+# to run on any build, and the page's internals are not the same on all of them:
+# an older build is what a before-and-after compares against, and `TD.row` came
+# and `TD.drawer` is going. `overview.json` is a contract, so its rows stay put.
+IGNORED = """({query, rows}) => {
   const asked = new URLSearchParams(query);
   const kept = new URLSearchParams(TD.url.serialize(TD.state));
   const ignored = [...asked]
     .filter(([name, value]) => name !== "tab" && kept.get(name) !== value
       && String(TD.url.DEFAULTS[name] ?? "") !== value)
     .map(([name, value]) => `${name}=${value}`);
-  if (asked.get("sel") && !TD.row.byId(asked.get("sel"))) ignored.push(`sel=${asked.get("sel")}`);
+  if (asked.get("sel") && !rows.includes(asked.get("sel"))) ignored.push(`sel=${asked.get("sel")}`);
   const tab = asked.get("tab");
   const shown = document.querySelector('.dw-tabs [aria-selected="true"]')?.dataset.id;
   if (tab && shown !== tab) ignored.push(`tab=${tab}`);
-  for (const id of TD.state.expand) if (!TD.row.byId(id)) ignored.push(`expand=${id}`);
+  for (const id of TD.state.expand) if (!rows.includes(id)) ignored.push(`expand=${id}`);
   return ignored;
 }"""
 
@@ -175,6 +178,16 @@ def slug(path: str) -> str:
     """A filename out of a query string: `?view=map&sel=arax` → `map-arax`."""
     body = re.sub(r"[^a-z0-9]+", "-", path.lower().lstrip("?")).strip("-")
     return re.sub(r"(^|-)(view|sel)-", r"\1", body) or "overview"
+
+
+def row_ids(build_dir: Path) -> list[str]:
+    """Every component this build has a row for, from its `overview.json`."""
+    path = build_dir / "overview.json"
+    try:
+        return [row["id"] for row in json.loads(path.read_text())["rows"]]
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise Missing(f"cannot read the rows from {path} ({error!r}); "
+                      "run `uv run build-dashboard` first.") from None
 
 
 def frozen_now(build_dir: Path) -> datetime:
@@ -262,6 +275,7 @@ def grow_to_fit(page, width: int) -> None:
 
 
 def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, target: Path) -> None:
+    from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
     # The page is reused between paths, and a pointer left over a tooltip's
@@ -269,7 +283,12 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
     page.mouse.move(0, 0)
     page.set_viewport_size({"width": width, "height": HEIGHT})
     arrive(page, base + path)
-    ignored = page.evaluate(IGNORED, path)
+    try:
+        ignored = page.evaluate(IGNORED, {"query": path, "rows": row_ids(args.build_dir)})
+    except PlaywrightError as error:
+        raise Missing(f"{page.url} cannot say what it did with {path!r} ({error.message.splitlines()[0]}), "
+                      f"so {args.build_dir} may not be a dashboard build; "
+                      "try `uv run build-dashboard`.") from None
     if ignored:
         raise Missing(f"the page ignored {', '.join(ignored)}: no such view, component or tab in this build")
     if args.click:

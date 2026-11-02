@@ -94,6 +94,21 @@ def test_the_sweep_sees_the_band_widen_by_a_pixel(shoot):
     assert band.start - 1 in shoot.MEASURE_WIDTHS and band.stop in shoot.MEASURE_WIDTHS
 
 
+def test_the_rows_come_from_the_builds_own_payload(shoot, tmp_path):
+    """Not from the page: `TD.row` is missing on a build older than it."""
+    (tmp_path / "overview.json").write_text('{"rows": [{"id": "arax"}, {"id": "ui"}]}')
+    assert shoot.row_ids(tmp_path) == ["arax", "ui"]
+
+
+@pytest.mark.parametrize("body", [None, "{}", '{"rows": [{}]}', '{"rows": 1}', "not json"])
+def test_a_build_with_no_readable_rows_is_an_error(shoot, tmp_path, body):
+    """Without them every `sel` looks ignored, or none does."""
+    if body is not None:
+        (tmp_path / "overview.json").write_text(body)
+    with pytest.raises(shoot.Missing, match="build-dashboard"):
+        shoot.row_ids(tmp_path)
+
+
 def test_the_clock_is_frozen_at_the_sync(shoot, tmp_path):
     (tmp_path / "overview.json").write_text('{"synced_at": "2026-09-02T18:17:07+00:00"}')
     assert shoot.frozen_now(tmp_path) == datetime(2026, 9, 2, 18, 17, 7, tzinfo=UTC)
