@@ -25,7 +25,7 @@ test("an empty query gives every default", () => {
   const state = TD.url.parse("");
   assert.deepEqual(state, {
     view: "overview", q: "", owner: [], versions: "all", sort: "", dir: "asc",
-    expand: [], sel: "", tab: "", edges: [],
+    expand: [], sel: "", edges: [],
   });
 });
 
@@ -48,7 +48,6 @@ test("every field round-trips", () => {
     dir: "desc",
     expand: ["arax", "ars"],
     sel: "arax",
-    tab: "environments",
     edges: ["calls", "catalog"],
   };
   assert.deepEqual(TD.url.parse(TD.url.serialize(state)), state);
@@ -56,6 +55,8 @@ test("every field round-trips", () => {
 
 test("a leading question mark is accepted", () => {
   assert.equal(TD.url.parse("?versions=none").versions, "none");
+  assert.equal(TD.url.parse("?versions=unreachable").versions, "unreachable");
+  assert.equal(TD.url.parse("?versions=no-smartapi").versions, "no-smartapi");
 });
 
 test("commas stay readable in a shared link", () => {
@@ -77,6 +78,23 @@ test("an unknown sort column falls back to no sort", () => {
 
 test("an unknown view falls back", () => {
   assert.equal(TD.url.parse("view=diagram").view, "overview");
+});
+
+test("the component view round-trips with the component it shows", () => {
+  const state = { ...defaults(), view: "component", sel: "arax" };
+  assert.equal(TD.url.serialize(state), "view=component&sel=arax");
+  assert.deepEqual(TD.url.parse("view=component&sel=arax"), state);
+});
+
+/* `tab` named one of the drawer's tabs. The Component view that replaced the
+   drawer shows every section at once, so a link shared before then opens
+   with its component selected, and the tab is dropped rather than written
+   back. */
+test("a drawer link's tab is accepted and ignored", () => {
+  const state = TD.url.parse("sel=arax&tab=helm");
+  assert.equal(state.sel, "arax");
+  assert.ok(!("tab" in state));
+  assert.equal(TD.url.serialize(state), "sel=arax");
 });
 
 test("the sort vocabulary follows the payload's environments", () => {
@@ -125,7 +143,7 @@ test("dir is written only beside a column, and never survives alone", () => {
   assert.equal(TD.url.parse("dir=desc").dir, "asc");
   // Both, always, when there is a column: the first click's direction differs
   // per column, so "asc" is not a default a reader of the URL could infer.
-  assert.equal(TD.url.serialize({ ...defaults(), sort: "updated" }), "sort=updated&dir=asc");
+  assert.equal(TD.url.serialize({ ...defaults(), sort: "smartapi" }), "sort=smartapi&dir=asc");
 });
 
 test("a query with everything default but whitespace stays empty", () => {

@@ -21,8 +21,8 @@ half built.** ITRB deploys from
 [`helxplatform/translator-devops`](https://github.com/helxplatform/translator-devops),
 so the last commit touching `helm/<chart>/` dates the intent to deploy.
 `sync-components` already fetches it, one call per recorded chart, and the
-drawer's Helm tab shows it as "Chart last changed", labelled *intent to deploy,
-not a deployment*.
+Component view's Helm section shows it as "Chart last changed", labelled
+*intent to deploy, not a deployment*.
 
 What is not built is putting it on the table, where a reader scanning
 environments would see it. Two things to be careful about there:
@@ -59,8 +59,8 @@ query API. Showing individual trace samples — latency, error rate, last seen �
 would need a separate sampled job with its own cache and TTL, because the
 query endpoint is not cheap enough to hit on every `sync-components` run and
 the answer is not stable enough to treat as a version fact. If built, it belongs
-in its own tile or drawer section, labelled as sampled telemetry rather than
-deployment truth.
+in its own tile or Component view section, labelled as sampled telemetry
+rather than deployment truth.
 
 ## Rendered Helm manifests per environment
 
@@ -165,6 +165,52 @@ match no component, and the one match the rules find on their own (`aragorn`
 → `shepherd-aragorn`) is a name collision rather than a finding. See
 [`metadata-sources.md`](docs/metadata-sources.md#matching-a-chart-to-a-component).
 And #52 asks which of the identifiable ones are Translator components at all.
+
+## A platform-wide Gaps view
+
+The Component view shows one component's gaps: the catalog fields nobody has
+recorded, the environments no host answers for, the OpenTelemetry names
+nothing reports under. The same list across every component is the
+maintenance to-do for the whole platform, and the payload already carries
+what it needs (`recorded`, `component_schema`, `otel_presence`,
+`derived_rejected`, the cells' `reason`s).
+
+The shape, sketched in #51: a `findings.py` below `rows` that computes a
+`findings` list per row (unrecorded schema fields, cells with a `reason`,
+OpenTelemetry services not reporting, derived hosts rejected, an unclaimed
+SmartAPI candidate, an unclaimed Helm chart), each with a kind, a sentence
+and the section of the Component view it points at. A `?view=gaps` lists
+them grouped by kind, each linking to `?view=component&sel=<id>#cv-<section>`,
+and the Component view gains a Findings section near the top showing the
+same list for one component, which is the "what needs updating" a developer
+opens the page for.
+
+## A mini-map on the Component view
+
+The Connections section lists the one-hop neighbourhood; a small map of it,
+this node and its neighbours drawn by the same layout engine, would show the
+shape as well as the names. `map.js` is a singleton (one host, one scene, one
+camera at module level), so a second instance means turning about 1300 lines
+into a factory first. Until then **Show on map** is the answer: it switches
+to the full map, which rings the component and flies to it.
+
+## Report a problem from the Component view
+
+The view has Copy link and Edit catalog file. A prefilled new-issue link
+(`/issues/new?title=<id>: …&body=<link>`) was left out of #51 so the page
+would not open with three ways to say the same thing before anyone had used
+one. Worth adding once it is clear which of the two the readers reach for.
+
+## Path-shaped component URLs
+
+`?view=component&sel=<id>` is a query string on the one self-contained page.
+If a path-shaped address (`/component/<id>`) turns out to matter, for a chat
+client's link preview say, the cheap version is one tiny
+`component/<id>.html` per component in the Pages artifact, each a
+`<meta http-equiv="refresh">` to `../?view=component&sel=<id>`, written by
+`write_dashboard` from the rows the policy kept. No second copy of the
+payload, and a withheld component gets no stub. Not done because nothing has
+asked for it yet.
 
 ## Upstream gaps worth reporting
 

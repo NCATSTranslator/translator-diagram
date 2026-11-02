@@ -74,7 +74,7 @@ matters inside one directory.
   self-containment assertion while shipping a badge on 27 of 45 cells that
   drowned the table, a tile that counted 74 things where there were 41, and two
   environment columns unreachable at narrow widths. Render it and look, in
-  **every view** and in light and dark.
+  **every view** (Overview, Map and Component) and in light and dark.
   `uv run --group shots python tools/shoot.py` does the rendering — every
   view, both themes, three widths, and `--measure` for the overflow no
   screenshot shows; the recipe behind it, and how to test the JS without a

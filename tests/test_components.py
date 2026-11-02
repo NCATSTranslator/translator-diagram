@@ -21,6 +21,15 @@ class TestParsing:
             "svc", "Service", "DOGSLED")
         assert component.identifiers == {} and component.environments == {}
 
+    def test_the_file_as_parsed_is_kept_beside_the_fields(self):
+        """`raw` keeps what the typed fields flatten: an explicit null
+        ("checked, there is none") and an absent key ("not recorded") read
+        the same as fields, and differently in the file."""
+        component = parse_component({**MINIMAL, "summary": None})
+        assert component.raw["summary"] is None
+        assert "layer" not in component.raw
+        assert component.summary is None and component.layer is None
+
     def test_name_falls_back_to_id(self):
         assert parse_component({**MINIMAL, "name": None}).name == "svc"
 

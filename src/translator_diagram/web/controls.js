@@ -37,6 +37,10 @@
   ui.CHEVRON = `<svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"
     fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
     stroke-linejoin="round"><path d="M4.5 2.5 8.5 6l-4 3.5"/></svg>`;
+  // "Open this component's page": an arrow, not the chevron, which opens a row.
+  ui.OPEN = `<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"
+    fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+    stroke-linejoin="round"><path d="M2 6h7.5M6.5 2.5 10 6 6.5 9.5"/></svg>`;
 
   const el = (tag, cls, html) => {
     const node = document.createElement(tag);
@@ -458,33 +462,4 @@
 
   ui.tooltip = tooltip;
   addEventListener("scroll", () => tooltip.hide(), true);
-
-  /* --- Tabs --------------------------------------------------------------- */
-
-  /* Each button gets `id` = `<prefix>-<tab id>` when `config.idPrefix` is
-     given, so a tabpanel can name the tab that labels it. */
-  ui.tabs = function tabs(config) {
-    const root = el("div", "tabs");
-    root.setAttribute("role", "tablist");
-    if (config.label) root.setAttribute("aria-label", config.label);
-
-    const buttons = config.tabs.map((tab) => {
-      const button = el("button", null, esc(tab.label));
-      button.type = "button";
-      button.setAttribute("role", "tab");
-      button.dataset.id = tab.id;
-      if (config.idPrefix) button.id = `${config.idPrefix}-${tab.id}`;
-      if (tab.panel) button.setAttribute("aria-controls", tab.panel);
-      root.append(button);
-      return button;
-    });
-
-    const radio = roving(root, buttons, {
-      attr: "id", aria: "aria-selected", ends: true,
-      value: config.value ?? (config.tabs[0] && config.tabs[0].id),
-      onChange: config.onChange,
-    });
-
-    return { el: root, get value() { return radio.value; }, set(next) { radio.set(next); } };
-  };
 })();

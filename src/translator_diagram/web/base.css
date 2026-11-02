@@ -1,5 +1,5 @@
 /*
-  The shell: reset, top bar, finding, stats line, filter strip, focus.
+  The shell: reset, top bar, filter strip, focus.
 
   There is not a card on this page. Every group is a hairline and some
   whitespace, which is why nothing here sets a border-radius on a region or a
@@ -92,6 +92,13 @@ code {
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+/* The one line that explains the page: "component" is Translator's own word,
+   and this is what the table of them answers. */
+.brandmark .tagline {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -103,13 +110,53 @@ code {
   gap: var(--sp-3);
   min-width: 0;
 }
-.synced {
+/* The sync panel: a <details> whose summary is drawn as a button, and whose
+   popover copies the listbox's box. */
+.sync { position: relative; }
+.sync > summary {
+  list-style: none;
   color: var(--muted);
-  font-size: var(--fs-meta);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
+.sync > summary::-webkit-details-marker { display: none; }
+.sync > summary::after { content: "▾"; opacity: 0.55; margin-left: 2px; }
+.sync[open] > summary { border-color: var(--accent); color: var(--text); }
+.sync-pop {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 4px);
+  right: 0;
+  width: min(440px, calc(100vw - 2 * var(--sp-3)));
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--page);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-meta);
+  text-align: left;
+}
+.sync-pop h3 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sync-pop p { margin: 0; }
+.sync-pop .muted { color: var(--muted); }
+.sync-pop table { width: 100%; border-collapse: collapse; }
+.sync-pop td { padding: 3px 0; border-top: 1px solid var(--hairline); vertical-align: top; }
+.sync-pop td.n {
+  width: 1%;
+  padding-right: var(--sp-2);
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sync-pop td.pct { width: 1%; padding-right: var(--sp-2); text-align: right; color: var(--muted); }
+.sync-pop .bar { display: block; height: 4px; margin: 4px 0 2px; background: var(--raised); }
+.sync-pop .bar i { display: block; height: 4px; background: var(--accent); }
 
 /* --- Page body ------------------------------------------------------------ */
 
@@ -131,50 +178,6 @@ code {
   padding: var(--sp-5) var(--sp-5) 0;
 }
 
-/* The finding is prose, not a panel: one accent rule on the left, the same
-   3px the map nodes use for an owner rail, and no box. */
-.finding {
-  margin: 0 0 var(--sp-4);
-  padding-left: var(--sp-3);
-  border-left: 3px solid var(--accent);
-  max-width: 92ch;
-  font-size: var(--fs-body);
-}
-.finding p { margin: 0; }
-.finding p + p { margin-top: var(--sp-1); }
-.finding strong { font-variant-numeric: tabular-nums; font-weight: 600; }
-
-/* One typographic line. Four tiles said the same thing and needed four boxes
-   to do it; four hairlines between the four numbers then said it again. The
-   separator is 32px of air. */
-.stats {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-2) var(--sp-6);
-  margin: var(--sp-5) 0 0;
-  padding: var(--sp-2) 0 var(--sp-4);
-}
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-}
-.stat .n {
-  font-size: var(--fs-num);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-}
-.stat .k {
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--muted);
-}
-.stat .k .qual { opacity: 0.85; text-transform: none; letter-spacing: 0; }
-
 /* --- Filter strip --------------------------------------------------------- */
 
 .filters {
@@ -190,6 +193,32 @@ code {
   border-bottom: 1px solid var(--hairline);
 }
 .filters .spacer { flex: 1 1 auto; }
+/* The tint legend. The words match cellState in table.js; the colours are
+   the board tokens in tokens.css. */
+.legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px var(--sp-3);
+  margin-left: var(--sp-2);
+  font-size: var(--fs-label);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.legend .sw {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  border: 1px solid var(--hairline-strong);
+  vertical-align: -2px;
+}
+.legend .sw.same { background: var(--same); }
+.legend .sw.diff { background: var(--diff); }
+.legend .sw.nov { background: var(--nov); }
+.legend .sw.down { background: var(--down); }
+.legend .sw.off { background: var(--off); }
+.legend .sw.copied { width: 18px; border-style: dashed; border-radius: var(--r-pill); }
 .filters .status {
   display: flex;
   align-items: baseline;
@@ -230,24 +259,19 @@ code {
   to { opacity: 1; transform: none; }
 }
 
-.empty-view {
-  padding: var(--sp-6) 0;
-  color: var(--muted);
-  font-size: var(--fs-body);
-}
-
 /* --- Shared pieces --------------------------------------------------------- */
 
-/* The hairline chip: text on a hairline, never a fill. An external beside a
+/* The chip: text on a hairline, rounded, never a fill. An external beside a
    component name, a release tag, a repository topic. Each adds its own
    spacing where it is used. */
-.chip, .rel, .dw-tag {
+.chip, .rel, .cv-tag {
   display: inline-block;
-  padding: 0 5px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-control);
+  padding: 0 7px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-pill);
   color: var(--muted);
   font-size: var(--fs-micro);
+  line-height: 16px;
 }
 
 /* A version, wherever one is printed: mono, bold, tabular. */
@@ -276,9 +300,8 @@ code {
 @media (max-width: 1150px) { .drop-sm { display: none; } }
 @media (max-width: 800px) {
   .drop-xs { display: none; }
+  .brandmark .tagline { display: none; }
+  .legend { display: none; }
   .topbar { padding: 0 var(--sp-3); gap: var(--sp-2); }
   .page { padding: var(--sp-4) var(--sp-3) 0; }
-  .synced { display: none; }
-  .stat { padding: 0 var(--sp-3); }
-  .stat:first-child { padding-left: 0; }
 }

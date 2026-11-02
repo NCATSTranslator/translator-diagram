@@ -2,12 +2,13 @@
 
 import json
 import pathlib
+import re
 
 import click
 import pytest
 
 from tests.dashboard_helpers import _Probes
-from translator_diagram.components import ComponentFile
+from translator_diagram.components import ComponentFile, parse_component
 from translator_diagram.dashboard import build_payload
 from translator_diagram.files import manifest_path
 from translator_diagram.privacy import (
@@ -163,6 +164,182 @@ class TestApply:
         ]
         kept, _ = apply(rows, _policy(components=["jaeger"]))
         assert kept[0]["connections"]["planned_calls"] == ["~other"]
+
+    def test_the_component_file_is_pruned_scrubbed_and_emptied_too(self):
+        """`recorded` is the row's own file, so the three rules that apply to
+        the row apply to it: references pruned, prose scrubbed, and a withheld
+        field spelled like one of its keys emptied."""
+        rows = [
+            {
+                "id": "keep",
+                "notes": "ours",
+                "connections": {"calls": ["other"]},
+                "recorded": {
+                    "notes": "Sends spans to drop.",
+                    "summary": "Talks to drop.",
+                    "connections": {"calls": ["drop", "other"], "gets_results_from": ["~drop"]},
+                    "repositories": [{"url": "https://x", "note": "forked from drop"}],
+                },
+                "environments": {},
+            },
+            {"id": "drop", "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["drop"]))
+        recorded = kept[0]["recorded"]
+        assert recorded["connections"] == {"calls": ["other"], "gets_results_from": []}
+        assert recorded["summary"] == "Talks to …."
+        assert recorded["repositories"][0]["note"] == "forked from …"
+        kept, _ = apply(rows, _policy(fields=["notes"]))
+        assert kept[0]["recorded"]["notes"] is None
+
+    def test_a_list_pruned_to_nothing_is_listed_as_withheld(self):
+        """The file says `calls: [jaeger]`. Once pruned that is `[]`, which in
+        this format means "checked, there are none", and that is not what the
+        file says. A list the file really wrote empty is not listed, and nor
+        is one that still has something left in it."""
+        rows = [
+            {
+                "id": "keep",
+                "recorded": {
+                    "connections": {
+                        "calls": ["~drop"],
+                        "gets_results_from": ["drop", "other"],
+                        "externals": [],
+                    },
+                },
+                "environments": {},
+            },
+            {"id": "drop", "environments": {}},
+        ]
+        kept, _ = apply(rows, _policy(components=["drop"]))
+        assert kept[0]["recorded"]["connections"]["calls"] == []
+        assert kept[0]["recorded_withheld"] == ["connections.calls"]
+
+    def test_a_withheld_field_is_emptied_wherever_the_file_keeps_it(self):
+        """Not only a top-level key: most of the file's identifiers sit one
+        block down, and some of its keys are spelled differently from the row
+        field that carries them."""
+        rows = [
+            {
+                "id": "keep",
+                "infores": "infores:keep",
+                "docs": [{"url": "https://docs/"}],
+                "recorded": {
+                    "identifiers": {"infores": "infores:keep", "smartapi": "abc"},
+                    "documentation": [{"url": "https://docs/", "kind": "wiki"}],
+                },
+                "environments": {},
+            },
+        ]
+        kept, _ = apply(rows, _policy(fields=["infores", "docs"]))
+        recorded = kept[0]["recorded"]
+        assert recorded["identifiers"] == {"infores": None, "smartapi": "abc"}
+        assert recorded["documentation"] == []
+        assert kept[0]["recorded_withheld"] == ["documentation", "identifiers.infores"]
+
+    def test_an_environment_field_is_emptied_in_the_file_too(self):
+        rows = [
+            {
+                "id": "keep",
+                "recorded": {
+                    "environments": {
+                        "ci": {"url": "https://ci/", "location": "ITRB"},
+                        "prod": {"url": "https://prod/"},
+                    },
+                },
+                "environments": {"ci": {"url": "https://ci/"}},
+            },
+        ]
+        kept, _ = apply(rows, _policy(environment_fields=["url"]))
+        envs = kept[0]["recorded"]["environments"]
+        assert envs == {"ci": {"url": None, "location": "ITRB"}, "prod": {"url": None}}
+        assert kept[0]["recorded_withheld"] == [
+            "environments.ci.url",
+            "environments.prod.url",
+        ]
+
+    def test_withholding_a_block_keeps_its_absent_and_null_keys_truthful(self):
+        """Replacing the block with `{}` would turn a key the file wrote as
+        null into "not recorded". Only what held a value reads as withheld."""
+        rows = [
+            {
+                "id": "keep",
+                "endpoints": {"openapi": "openapi.json", "status": None},
+                "recorded": {"endpoints": {"openapi": "openapi.json", "status": None}},
+                "environments": {},
+            },
+        ]
+        kept, _ = apply(rows, _policy(fields=["endpoints"]))
+        assert kept[0]["recorded"]["endpoints"] == {"openapi": None, "status": None}
+        assert kept[0]["recorded_withheld"] == ["endpoints.openapi"]
+
+    def test_a_row_field_holding_a_file_value_takes_it_out_of_the_file(self, tmp_path):
+        """Every row field that carries something the file says, whatever the
+        two are called. The file fills every key the schema allows, so a new
+        one fails here until `_recorded_slots` can find it, and a new row field
+        fails until `FIELD_RECORDED_KEYS` names the key it reads."""
+        schema = json.loads(
+            pathlib.Path("catalog/schema/component.schema.json").read_text()
+        )
+        raw = {
+            "id": "svc",
+            "name": "Name-zz01",
+            "owner": "Owner-zz02",
+            "summary": "Summary-zz03",
+            "description": "Description-zz04",
+            "component_type": "KP",
+            "third_party": {"software": "Software-zz05", "url": "https://zz06.example/"},
+            "refactor_status": "Status-zz07",
+            "layer": "Layer-zz08",
+            "part_of": "Part-zz09",
+            "hosted_at": "Host-zz10",
+            "identifiers": {
+                "infores": "infores:zz11",
+                "smartapi": "zz12",
+                "helm_chart": "chart-zz13",
+                "translator_all_wiki": "wiki-zz14",
+                "otel_services": ["otel-zz15"],
+            },
+            "itrb": {"app": "app-zz16", "group": "group-zz17"},
+            "connections": {
+                "gets_results_from": ["from-zz18"],
+                "calls": ["calls-zz19"],
+                "externals": [{"direction": "in", "name": "ext-zz20"}],
+            },
+            "repositories": [{"url": "https://zz21.example/", "role": "source"}],
+            "documentation": [{"url": "https://zz22.example/", "kind": "wiki"}],
+            "endpoints": {"openapi": "zz23.json", "status": "zz24"},
+            "examples": [{"description": "Example-zz28", "path": "zz29"}],
+            "environments": {"ci": {"url": "https://zz25.example/", "location": "zz26"}},
+            "diagram": {"ubiquitous": True, "hide": True},
+            "notes": "Notes-zz27",
+        }
+        assert set(raw) == set(schema["properties"])
+        row = build_rows(
+            [parse_component(raw)], _Probes(tmp_path).build(counts={})
+        )[0]
+        carrying = [
+            key
+            for key, value in row.items()
+            if key not in ("id", "recorded") and "zz" in json.dumps(value)
+        ]
+        assert "repository" in carrying and "chart_names" in carrying
+        for field in carrying:
+            fresh = json.loads(json.dumps(row))
+            before = {
+                value
+                for value in re.findall(r"zz\d\d", json.dumps(row[field]))
+                if value in json.dumps(raw)
+            }
+            kept, _ = apply([fresh], _policy(fields=[field]))
+            left = json.dumps(kept[0]["recorded"])
+            if field == "environments":
+                # A cell's document URL is built from the file's shared
+                # `endpoints` paths, which are a row field of their own and
+                # say nothing about any one environment.
+                before -= {"zz23", "zz24"}
+            assert not [value for value in before if value in left], field
+            verify({"rows": kept}, _policy(fields=[field]))
 
     def test_a_mention_in_free_text_is_scrubbed_and_counted(self):
         """Third-party prose we cannot edit at the source: a note, a registry
@@ -404,6 +581,18 @@ class TestInThePayload:
         rostered = [cid for stage in payload["stages"] for cid in stage["components"]]
         assert rostered == ["alpha", "omega"]
 
+    def test_the_schema_prose_is_scrubbed(self, synced):
+        """The schema names Jaeger as an example of third-party software, and
+        it ships whole, so a published build withholding jaeger scrubs it."""
+        components = [
+            ComponentFile(id=cid, name=cid, owner="DOGSLED", refactor_status="New in Refactor")
+            for cid in ("alpha", "jaeger")
+        ]
+        policy = _policy(components=["jaeger"])
+        payload = build_payload(components, synced, policy)
+        verify(payload, policy)
+        assert "such as … or" in json.dumps(payload["component_schema"], ensure_ascii=False)
+
     def test_the_withheld_row_is_gone_from_the_json_entirely(
         self, components, synced
     ):
@@ -459,6 +648,32 @@ class TestVerify:
         }
         with pytest.raises(click.ClickException, match="still set on"):
             verify(payload, _policy(environment_fields=["uptime"]))
+
+    def test_a_field_surviving_in_the_component_file_is_caught(self):
+        payload = {
+            "rows": [
+                {
+                    "id": "keep",
+                    "infores": None,
+                    "recorded": {"identifiers": {"infores": "infores:keep"}},
+                }
+            ]
+        }
+        with pytest.raises(click.ClickException, match="identifiers.infores"):
+            verify(payload, _policy(fields=["infores"]))
+
+    def test_an_environment_field_surviving_in_the_file_is_caught(self):
+        payload = {
+            "rows": [
+                {
+                    "id": "keep",
+                    "recorded": {"environments": {"ci": {"url": "https://ci/"}}},
+                    "environments": {"ci": {"url": None}},
+                }
+            ]
+        }
+        with pytest.raises(click.ClickException, match="environments.ci.url"):
+            verify(payload, _policy(environment_fields=["url"]))
 
     def test_the_real_public_build_verifies(self):
         """What `build-dashboard` does before it writes, on real data."""

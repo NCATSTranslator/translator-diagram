@@ -87,7 +87,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PATHS = ("?", "?view=map", "?sel=arax")
+DEFAULT_PATHS = ("?", "?view=map", "?view=component&sel=arax")
 DEFAULT_WIDTHS = (1700, 1200, 760)
 HEIGHT = 1400
 # Playwright's own 30s only makes a typo slower to report.
@@ -95,7 +95,9 @@ ACTION_TIMEOUT_MS = 10_000
 # Below this the environment columns are meant to run past the window and the
 # wrap scrolls; see web/AGENTS.md.
 OVERFLOW_FLOOR = 1000
-# ponytail: the band where a column returns (`@media (min-width: 1500px)`)
+# ponytail: the earlier table's band, which the redrawn table does not have: it
+# has two others, and this exits 1 on them until issue #108 replaces or deletes
+# these. The band where a column returned (`@media (min-width: 1500px)`)
 # before there is room for it, measured at every width with a classic scrollbar
 # on 761a9ba; web/AGENTS.md, issue #31. It is tolerated so `--measure` passes
 # on main and still fails if the band widens or runs further over; delete both
@@ -120,8 +122,8 @@ MEASURE_HEIGHT = 800
 # When a build with no sync behind it thinks it is. Any fixed moment will do.
 UNSYNCED_NOW = datetime(2026, 1, 1, tzinfo=UTC)
 # `--full` adds height until nothing scrolls. It takes more than one pass where
-# a scroller is sized from the window: 30vh with the drawer open on a narrow
-# window gains only 0.3px per pixel added.
+# a scroller is sized from the window: on an older build, 30vh with the drawer
+# open on a narrow window gains only 0.3px per pixel added.
 FULL_PASSES = 40
 
 # Resolves once nothing on the page is still moving. With reduced motion set
@@ -155,7 +157,7 @@ FREEZE_DATE = """{
 # from `overview.json` rather than from `TD.row` or `TD.drawer` because this has
 # to run on any build, and the page's internals are not the same on all of them:
 # an older build is what a before-and-after compares against, and `TD.row` came
-# and `TD.drawer` is going. `overview.json` is a contract, so its rows stay put.
+# and `TD.drawer` went. `overview.json` is a contract, so its rows stay put.
 IGNORED = """({query, rows}) => {
   const asked = new URLSearchParams(query);
   const kept = new URLSearchParams(TD.url.serialize(TD.state));
@@ -324,7 +326,13 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
     if args.full:
         grow_to_fit(page, width)
     if args.hover:
-        first_visible(page, args.hover).hover()
+        target_element = first_visible(page, args.hover)
+        # Scrolled there first, on its own: the page hides a tooltip on any
+        # scroll, including its pending one, so hovering a target below the fold
+        # in one step opens nothing and looks like a target with no tooltip.
+        target_element.scroll_into_view_if_needed()
+        page.evaluate(SETTLE)
+        target_element.hover()
         try:
             page.wait_for_selector("#td-tip:not([hidden])", timeout=2000)
         except PlaywrightTimeout:

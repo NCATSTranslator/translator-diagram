@@ -189,7 +189,8 @@ class TestVersionSourceChain:
         # anything else that would read as a deployment.
         cell = build_rows([component], synced)[0]["environments"]["dev"]
         assert cell == {
-            "deployed": False, "reason": "not in registry for dev"
+            "deployed": False, "reason": "SmartAPI lists no dev server",
+            "reason_key": "not-registered",
         }
 
 
@@ -349,7 +350,10 @@ class TestCellReasons:
         }])
         component = _comp("svc", identifiers={"smartapi": "abc"})
         cell = build_rows([component], probes.build())[0]["environments"]["ci"]
-        assert cell == {"deployed": False, "reason": "not in registry for ci"}
+        assert cell == {
+            "deployed": False, "reason": "SmartAPI lists no ci server",
+            "reason_key": "not-registered",
+        }
 
     def test_no_such_host(self, tmp_path):
         # Nine of the derived candidates do not resolve; curl exits 6 and the
@@ -359,7 +363,7 @@ class TestCellReasons:
             status=None, error="URLError: nodename nor servname provided",
         )
         cell = build_rows([_comp("svc")], probes.build())[0]["environments"]["prod"]
-        assert cell["reason"] == "no such host"
+        assert (cell["reason"], cell["reason_key"]) == ("no such host", "no-such-host")
 
     def test_a_host_that_answers_as_another_service(self, tmp_path):
         # The dangerous one, and the reason `_confirm_derived` exists: the
@@ -370,7 +374,7 @@ class TestCellReasons:
             status=200, error=None, checked="document",
         )
         cell = build_rows([_comp("svc")], probes.build())[0]["environments"]["prod"]
-        assert cell["reason"] == "host answers as another service"
+        assert cell["reason"] == "the address serves another component"
 
     def test_a_live_host_nothing_could_verify(self, tmp_path):
         # The same 200, asked a weaker question. A component with no infores
@@ -382,21 +386,21 @@ class TestCellReasons:
             status=200, error=None, checked="root",
         )
         cell = build_rows([_comp("svc")], probes.build())[0]["environments"]["test"]
-        assert cell["reason"] == "host answers, unverified"
+        assert cell["reason"] == "a host answers, unconfirmed"
 
     def test_a_candidate_that_settled_nothing(self, tmp_path):
         probes = _Probes(tmp_path).rejected(
             "prod", "https://svc.transltr.io/", status=404, error=None
         )
         cell = build_rows([_comp("svc")], probes.build())[0]["environments"]["prod"]
-        assert cell["reason"] == "probed, not confirmed"
+        assert cell["reason"] == "guessed address, unconfirmed"
 
     def test_no_host_recorded(self, tmp_path):
         # Nothing known at all: no registration, no recorded URL, no candidate
         # ever derived. A gap in this repository, not a finding about the
         # platform, and the wording says so.
         cell = build_rows([_comp("svc")], _Probes(tmp_path).build())
-        assert cell[0]["environments"]["prod"]["reason"] == "no host recorded"
+        assert cell[0]["environments"]["prod"]["reason"] == "no address on file"
 
     def test_a_component_that_is_not_a_hosted_service(self, tmp_path):
         component = _comp("svc", hosted_at="Local")
@@ -408,7 +412,7 @@ class TestCellReasons:
         probes = (_Probes(tmp_path)
                   .probe("ci", 200)
                   .document("openapi", "ci", 404))
-        assert _cell(probes)["reason"] == "up · no API document"
+        assert _cell(probes)["reason"] == "no API document found"
 
     def test_up_serving_html_where_a_document_should_be(self, tmp_path):
         # A single-page app answers 200 to every path, so the fetch looks like
@@ -419,7 +423,7 @@ class TestCellReasons:
                   .document("openapi", "ci", 200, "<html><body>app</body></html>"))
         cell = _cell(probes)
         assert cell["document"] == "not-json"
-        assert cell["reason"] == "up · serves HTML, no API document"
+        assert cell["reason"] == "serves a web page, not an API document"
 
     def test_up_with_a_document_that_has_no_version(self, tmp_path):
         probes = (_Probes(tmp_path)
@@ -427,7 +431,7 @@ class TestCellReasons:
                   .document("openapi", "ci", 200, {"info": {"title": "KGX"}}))
         cell = _cell(probes)
         assert cell["document"] == "no-version"
-        assert cell["reason"] == "up · document has no version"
+        assert cell["reason"] == "API document has no version"
 
     def test_a_status_body_with_no_version_says_so_too(self, tmp_path):
         probes = (_Probes(tmp_path)
@@ -438,7 +442,7 @@ class TestCellReasons:
             endpoints={"openapi": None, "status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         ))
-        assert cell["reason"] == "up · document has no version"
+        assert cell["reason"] == "API document has no version"
 
     def test_a_broken_api_document_outranks_a_status_body_with_no_version(
         self, tmp_path
@@ -454,7 +458,7 @@ class TestCellReasons:
             endpoints={"openapi": "openapi.json", "status": "status"},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         ))
-        assert cell["reason"] == "HTTP 500"
+        assert cell["reason"] == "API document answered HTTP 500"
 
     def test_up_with_nowhere_to_look_for_a_version(self, tmp_path):
         # The UI: four hosts that are up, record `openapi: null`, and publish
@@ -466,28 +470,28 @@ class TestCellReasons:
             endpoints={"openapi": None},
             environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
         ))
-        assert cell["reason"] == "up · no version endpoint"
+        assert cell["reason"] == "no version endpoint to read"
 
     def test_unreachable(self, tmp_path):
         probes = (_Probes(tmp_path)
                   .probe("ci", None, error="URLError: nodename nor servname")
                   .document("openapi", "ci", None, error="URLError: nodename"))
-        assert _cell(probes)["reason"] == "unreachable"
+        assert _cell(probes)["reason"] == "not answering"
 
     def test_an_http_error_on_the_document_of_a_live_host(self, tmp_path):
         probes = (_Probes(tmp_path)
                   .probe("ci", 200)
                   .document("openapi", "ci", 503))
-        assert _cell(probes)["reason"] == "HTTP 503"
+        assert _cell(probes)["reason"] == "API document answered HTTP 503"
 
     def test_a_403_on_the_document_is_the_documents_problem(self, tmp_path):
         probes = (_Probes(tmp_path)
                   .probe("ci", 200)
                   .document("openapi", "ci", 403))
-        assert _cell(probes)["reason"] == "HTTP 403"
+        assert _cell(probes)["reason"] == "API document answered HTTP 403"
 
     def test_nothing_probed_says_so_rather_than_guessing(self, tmp_path):
-        assert _cell(_Probes(tmp_path))["reason"] == "not probed"
+        assert _cell(_Probes(tmp_path))["reason"] == "not checked this run"
 
     def test_a_cell_with_a_version_has_no_reason(self, tmp_path):
         probes = (_Probes(tmp_path)

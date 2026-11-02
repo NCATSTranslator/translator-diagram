@@ -74,8 +74,8 @@ ALLOWED = {
         "synced_data",
     },
     "dashboard": {
-        "cells", "charts", "colors", "components", "payload_details", "privacy",
-        "rows", "stages", "synced_data",
+        "cells", "charts", "colors", "components", "files", "payload_details",
+        "privacy", "rows", "stages", "synced_data",
     },
     "dashboard_cli": {
         "components", "dashboard", "files", "flow", "privacy", "sync", "synced_data",

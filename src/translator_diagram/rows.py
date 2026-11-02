@@ -1,4 +1,4 @@
-"""One row per component: its cells, plus everything the drawer reads.
+"""One row per component: its cells, plus everything the Component view reads.
 
 `build_rows` is the assembler. It merges the deployments, calls `build_cell`
 per environment, then decorates the row with the dates, releases, charts and
@@ -8,6 +8,7 @@ Drift is marked here rather than in `build_cell` because it is a comparison
 *between* an environment and its neighbours, which a single cell cannot see.
 """
 
+import copy
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
@@ -405,7 +406,7 @@ def build_rows(
                 "helm_version": helm.get("version"),
                 "helm_images": helm.get("images") or [],
                 "notes": component.notes,
-                # The catalog's own line about what this is. The drawer puts it
+                # The catalog's own line about what this is. The Component view puts it
                 # ahead of the repository's GitHub blurb, which is whatever the
                 # repository's owner last typed there.
                 "summary": component.summary,
@@ -495,6 +496,11 @@ def build_rows(
                     for env in ENVIRONMENTS
                     if (spec := synced.rejected.get(component.id, {}).get(env))
                 ],
+                # The component file as written, for the Component view's
+                # field-by-field Recorded section. A copy, not the parsed dict:
+                # `privacy.apply` prunes and scrubs rows in place, and sharing
+                # it would let a published build edit the ComponentFile.
+                "recorded": copy.deepcopy(component.raw),
                 "environments": cells,
             }
         )
