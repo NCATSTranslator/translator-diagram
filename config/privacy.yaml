@@ -24,7 +24,9 @@ components:
       to someone integrating with Translator.
 
 # Row fields, emptied on every remaining row. Emptied rather than deleted:
-# overview.json's shape is a contract.
+# overview.json's shape is a contract. The same fact is emptied from the copy of
+# the component file a row carries, wherever the file keeps it, and the Component
+# view says "withheld" there rather than "checked: none".
 fields:
   - name: helm_images
     reason: >-
@@ -45,7 +47,8 @@ fields:
 # the same time: only a field a cell actually read its version from belongs in
 # that map, which `helm_images` never was.
 
-# Per-environment cell fields. None today. The candidates if the health
+# Per-environment cell fields, emptied in the cells and in the component file's
+# `environments` block alike. None today. The candidates if the health
 # signals turn out to be too much are `uptime`, `http_status` and `status_url`
 # — see the checklist on PR #21 — and now six more that arrived with the
 # side drawer: `openapi_title`, `trapi_operations`, `asyncquery`, `paths_count`,

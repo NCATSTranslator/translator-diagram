@@ -72,6 +72,25 @@ in the policy. Only a field a cell actually read its value from belongs here.
 """
 
 
+FIELD_RECORDED_KEYS = {
+    "type": "component_type",
+    "chart_names": "helm_chart",
+    "helm_charts": "helm_chart",
+    "otel_presence": "otel_services",
+    "repository": "repositories",
+    "docs": "documentation",
+}
+"""Row fields the component file spells differently, by the file's own key.
+
+A row field and a file key with the same name need no entry: `_recorded_slots`
+finds those wherever the file keeps them. Each entry here is a row field whose
+value is read from a key of another name, so withholding the field and leaving
+the key would publish the same fact in the Recorded section.
+`tests/test_privacy.py` builds a row from a file with every key filled, and
+fails if a row field carrying one of those values leaves it behind.
+"""
+
+
 SCRUBBED = "…"
 """What a withheld id becomes where it is mentioned in somebody else's prose."""
 
@@ -234,6 +253,14 @@ def apply(
     `build_payload` scrubs its descriptions itself; a chart a withheld
     component claims is never listed, since it is matched against every
     component.
+
+    `recorded`, the component file as written, holds many of the same facts
+    under the file's own keys, so everything withheld from the row is withheld
+    there too. What held a value and no longer does is listed in the row's
+    `recorded_withheld`, by its dotted path in the file. Without that list the
+    Component view cannot tell a list the policy emptied from a list the file
+    wrote as empty, and would say "checked: none" about an edge the file does
+    record.
     """
     _check_known(rows, policy)
     withheld_ids = set(policy.component_ids)
@@ -248,20 +275,22 @@ def apply(
     mentions = 0
     for row in kept:
         recorded = row.get("recorded")
+        withheld_paths = _prune_ids(row, folded)
         for name in policy.field_names:
             row[name] = _emptied(row.get(name))
-            # `recorded` is the component file as written, and a policy field
-            # spelled like one of its keys is withheld there too: the same
-            # field in the file's own vocabulary.
-            if isinstance(recorded, dict) and name in recorded:
-                recorded[name] = _emptied(recorded[name])
-        _prune_ids(row, folded)
+            for mapping, key, path in _recorded_slots(recorded, name):
+                withheld_paths.extend(_withhold(mapping, key, path))
         mentions += scrub(row, ROW_FREE_TEXT, patterns)
         for cell in row.get("environments", {}).values():
             for name in policy.environment_field_names:
                 if name in cell:
                     cell[name] = _emptied(cell.get(name))
             _drop_withheld_versions(cell, withheld_sources)
+        for name in policy.environment_field_names:
+            for mapping, key, path in _recorded_env_slots(recorded, name):
+                withheld_paths.extend(_withhold(mapping, key, path))
+        if isinstance(recorded, dict):
+            row["recorded_withheld"] = sorted(set(withheld_paths))
     report = Report(
         components=tuple(
             row["id"] for row in rows if row.get("id") in withheld_ids
@@ -273,8 +302,75 @@ def apply(
     return kept, report
 
 
-def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
+def _recorded_slots(
+    recorded: Any, name: str
+) -> Iterator[tuple[dict[str, Any], str, str]]:
+    """Where the component file holds what row field `name` holds.
+
+    Yields (mapping, key, dotted path). A file key is at the top level or one
+    block down (`identifiers.infores`, `connections.externals`), and it is
+    looked for in both rather than each field being given its path, so a key
+    added to a block later is withheld without anyone coming back to this.
+    """
+    if not isinstance(recorded, dict):
+        return
+    key = FIELD_RECORDED_KEYS.get(name, name)
+    if key in recorded:
+        yield recorded, key, key
+    for block_name, block in recorded.items():
+        if isinstance(block, dict) and key in block:
+            yield block, key, f"{block_name}.{key}"
+
+
+def _recorded_env_slots(
+    recorded: Any, name: str
+) -> Iterator[tuple[dict[str, Any], str, str]]:
+    """Where the component file holds per-environment field `name`."""
+    envs = recorded.get("environments") if isinstance(recorded, dict) else None
+    if not isinstance(envs, dict):
+        return
+    for env, spec in envs.items():
+        if isinstance(spec, dict) and name in spec:
+            yield spec, name, f"environments.{env}.{name}"
+
+
+def _holds_value(value: Any) -> bool:
+    """Whether the file claims something here, as opposed to null or empty."""
+    return value is not None and value != [] and value != {}
+
+
+def _withhold(mapping: dict[str, Any], key: str, path: str) -> list[str]:
+    """Empty one value of the file, and return the paths that held something.
+
+    A block is emptied key by key rather than replaced with `{}`, and a value
+    the file wrote as null or empty is not listed. Both keep the Recorded
+    section truthful about the rest: an absent key stays "not recorded", a null
+    one stays "checked: none", and only what the file did say reads "withheld".
+    """
+    value = mapping[key]
+    if isinstance(value, dict):
+        held = []
+        for sub in value:
+            held.extend(_withhold(value, sub, f"{path}.{sub}"))
+        return held
+    held_value = _holds_value(value)
+    mapping[key] = _emptied(value)
+    return [path] if held_value else []
+
+
+def _leaves(value: Any) -> Iterator[Any]:
+    """Every non-mapping value under `value`, for `verify`."""
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from _leaves(child)
+    else:
+        yield value
+
+
+def _prune_ids(row: dict[str, Any], withheld: set[str]) -> list[str]:
     """Drop withheld components from a kept row's recorded connections.
+
+    Returns the file's paths this left empty, for `recorded_withheld`.
 
     A row's `connections` come from `ComponentFile.connection_ids`, which has
     already stripped the planned-edge tilde and sorted each reference into
@@ -290,20 +386,23 @@ def _prune_ids(row: dict[str, Any], withheld: set[str]) -> None:
     file's vocabulary, tildes and all, and the Component view shows it.
     """
     recorded = row.get("recorded")
-    blocks = [row.get("connections")]
-    if isinstance(recorded, dict):
-        blocks.append(recorded.get("connections"))
-    for connections in blocks:
+    file_block = recorded.get("connections") if isinstance(recorded, dict) else None
+    emptied = []
+    for connections in (row.get("connections"), file_block):
         if not isinstance(connections, dict):
             continue
         for key, refs in connections.items():
             if not isinstance(refs, list):
                 continue
-            connections[key] = [
+            kept = [
                 ref
                 for ref in refs
                 if not (isinstance(ref, str) and ref.lstrip("~").lower() in withheld)
             ]
+            connections[key] = kept
+            if connections is file_block and refs and not kept:
+                emptied.append(f"connections.{key}")
+    return emptied
 
 
 def _word(name: str) -> re.Pattern[str]:
@@ -451,12 +550,26 @@ def verify(payload: dict[str, Any], policy: Policy) -> None:
                     f"Withheld field `{name}` is still set on row "
                     f"{row.get('id')!r}."
                 )
+            for mapping, key, path in _recorded_slots(row.get("recorded"), name):
+                if any(_holds_value(leaf) for leaf in _leaves(mapping[key])):
+                    raise click.ClickException(
+                        f"Withheld field `{name}` is still set in the component "
+                        f"file carried on row {row.get('id')!r}, at `{path}`."
+                    )
         for env, cell in row.get("environments", {}).items():
             for name in policy.environment_field_names:
                 if cell.get(name):
                     raise click.ClickException(
                         f"Withheld environment field `{name}` is still set on "
                         f"{row.get('id')!r} / {env}."
+                    )
+        for name in policy.environment_field_names:
+            for mapping, key, path in _recorded_env_slots(row.get("recorded"), name):
+                if _holds_value(mapping[key]):
+                    raise click.ClickException(
+                        f"Withheld environment field `{name}` is still set in the "
+                        f"component file carried on row {row.get('id')!r}, at "
+                        f"`{path}`."
                     )
 
 

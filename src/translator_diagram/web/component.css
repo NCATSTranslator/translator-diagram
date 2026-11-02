@@ -29,6 +29,9 @@ html[data-view="component"] .filters { display: none; }
   padding: var(--sp-3) 0;
 }
 .cv-bar .spacer { flex: 1; }
+/* A wrapper so the buttons can be redrawn without touching the picker; it
+   takes no part in the bar's layout. */
+.cv-actions { display: contents; }
 .cv-pick { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .cv-picklabel {
   font-size: var(--fs-label);
@@ -131,11 +134,12 @@ table.cv-envs td.env { text-align: left; }
 .cv-rec thead th:nth-child(2) { width: 120px; }
 .cv-rec td { padding-top: 5px; padding-bottom: 5px; }
 .cv-state { font-size: var(--fs-meta); white-space: nowrap; }
-/* Three states, three treatments, none of them colour alone: the word is in
-   every row. Absent is the one the section exists to show, so it is the one
-   that stands out: the field name dims and the state does not. */
+/* Four states, none of them colour alone: the word is in every row. Absent is
+   the one the section exists to show, so it is the one that stands out: the
+   field name dims and the state does not. */
 .cv-f-recorded .cv-state { color: var(--muted); }
-.cv-f-none .cv-state { color: var(--muted); font-style: italic; }
+.cv-f-none .cv-state,
+.cv-f-withheld .cv-state { color: var(--muted); font-style: italic; }
 .cv-f-absent th[scope="row"] { color: var(--muted); }
 .cv-f-absent .cv-state { color: var(--drift-ink); font-weight: 600; }
 .cv-value { overflow-wrap: anywhere; }

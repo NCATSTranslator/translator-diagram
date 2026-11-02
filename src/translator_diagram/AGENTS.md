@@ -340,6 +340,15 @@ would fail every published build the day someone withholds a component called
 `ars` or `ui`, naming a leak that is not there, and the only way to clear a
 false alarm is to stop running the check.
 
+A row also carries its component file as `recorded`, which says many of the
+same things under other keys, so `apply` and `verify` both reach into it:
+`_recorded_slots` looks for a withheld field's key at the top of the file and
+one block down, and `FIELD_RECORDED_KEYS` names the file key of a row field
+spelled differently. If you add a row field that reads a file key of another
+name, add it there; `tests/test_privacy.py` fails until you do. The serialised
+search in `verify` cannot catch this one, since it looks for component ids and
+not for field values.
+
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
 version-source chain in `cells.build_cell`. Order that chain by how close
 the source is to what is actually running: a live endpoint, then a manual

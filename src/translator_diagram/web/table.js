@@ -141,13 +141,15 @@
 
      "same" needs company: a component deployed in one environment agrees
      with nobody, and tinting it green read as a claim the row never made.
-     "off" is the page's own gap (no address on file); an absence the page is
-     sure of — no such host, no server listed, not a hosted service — is
-     left white, because there is nothing to look at there. */
+     "off" is the page's own gap: no address on file, an address it could not
+     confirm, or a host it never checked. "nov" says the host is up, so a host
+     nothing probed cannot have it. An absence the page is sure of — no such
+     host, no server listed, not a hosted service — is left white, because
+     there is nothing to look at there. */
   function cellState(m, peers) {
     if (!m.deployed) return m.knownAbsent ? "none" : "off";
     if (m.reach === "down") return "down";
-    if (!m.version) return "nov";
+    if (!m.version) return m.reach === "up" ? "nov" : "off";
     if (m.drift.length) return "diff";
     return peers > 1 ? "same" : "one";
   }

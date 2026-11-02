@@ -63,7 +63,7 @@ test("our own code has no third-party text", () => {
 const VIEW_TD = globalThis.TD;
 const {
   catalogNeighbours, catalogUrls, deployedIn, docLabel, fieldState, pageHtml, pickerGroups,
-  recordedSection, schemaFields, updatedHtml,
+  panelConnections, recordedSection, schemaFields, updatedHtml,
 } = VIEW_TD.component;
 const SCHEMA = JSON.parse(fs.readFileSync(
   path.join(__dirname, "..", "..", "catalog", "schema", "component.schema.json"), "utf8"));
@@ -186,6 +186,44 @@ test("the page renders every section of a full row", (t) => {
   assert.match(html, /<option value="arax" selected>ARAX<\/option>/);
 });
 
+test("a section that throws costs that section, wherever it is on the page", (t) => {
+  const saved = { DATA: VIEW_TD.DATA, state: VIEW_TD.state };
+  const savedError = console.error;
+  t.after(() => { VIEW_TD.DATA = saved.DATA; VIEW_TD.state = saved.state; console.error = savedError; });
+  console.error = () => {};
+  const throwing = (key) => Object.defineProperty({ ...FULL }, key, { get() { throw new Error(key); } });
+  for (const [key, section] of [["summary", /<header class="cv-head"><p class="cv-muted">/],
+    ["environments", /id="cv-environments-h">Environments<\/h2><p class="cv-muted">/]]) {
+    VIEW_TD.boot({ rows: [throwing(key)], environments: ["ci", "prod"], component_schema: SCHEMA });
+    VIEW_TD.state = { ...VIEW_TD.url.defaults(), view: "component", sel: "arax" };
+    VIEW_TD.table.ensureColumns();
+    const html = pageHtml("arax");
+    assert.match(html, section, key);
+    assert.match(html, /id="cv-recorded"/, key);
+    assert.match(html, /<option value="arax" selected>/, key);
+  }
+});
+
+test("a null in otel_presence does not stop an environment being drawn", (t) => {
+  const saved = VIEW_TD.DATA;
+  t.after(() => { VIEW_TD.DATA = saved; });
+  const row = { ...FULL, otel_presence: [null, { service: "svc", seen_in: ["ci"] }] };
+  VIEW_TD.boot({ rows: [row], environments: ["ci", "prod"] });
+  assert.equal(VIEW_TD.cell(row, "ci").facts.find((f) => f.label === "Telemetry").value, "svc");
+  assert.doesNotMatch(pageHtml("arax"), /could not be rendered/);
+});
+
+test("the picker and the page's body are separate, so the body can be redrawn alone", (t) => {
+  const saved = VIEW_TD.DATA;
+  t.after(() => { VIEW_TD.DATA = saved; });
+  VIEW_TD.boot({ rows: [FULL], environments: ["ci", "prod"] });
+  const html = pageHtml("arax");
+  assert.ok(html.indexOf('id="cv-select"') < html.indexOf('id="cv-actions"'));
+  assert.ok(html.indexOf('id="cv-actions"') < html.indexOf('id="cv-body"'));
+  assert.ok(html.indexOf('id="cv-body"') < html.indexOf('class="cv-head"'));
+  assert.doesNotMatch(pageHtml("nope"), /id="cv-copy"/);
+});
+
 test("an unknown or empty selection shows the picker and says why", (t) => {
   const saved = VIEW_TD.DATA;
   t.after(() => { VIEW_TD.DATA = saved; });
@@ -244,6 +282,55 @@ test("absent, null and empty are three different states", () => {
   assert.equal(fieldState(RECORDED, ["description"]).state, "absent");
   assert.equal(fieldState(RECORDED, ["environments", "prod"]).state, "absent");
   assert.equal(fieldState(RECORDED, ["environments", "ci"]).state, "recorded");
+});
+
+test("a list the policy emptied is withheld, not checked: none", () => {
+  // `calls: [jaeger]`, pruned to [] by privacy.apply.
+  const file = { connections: { calls: [], externals: [] }, notes: null };
+  const withheld = ["connections.calls", "notes"];
+  assert.equal(fieldState(file, ["connections", "calls"], withheld).state, "withheld");
+  assert.equal(fieldState(file, ["notes"], withheld).state, "withheld");
+  // Written empty by the file, and not in the list.
+  assert.equal(fieldState(file, ["connections", "externals"], withheld).state, "none");
+  // A local build has no list at all.
+  assert.equal(fieldState(file, ["connections", "calls"]).state, "none");
+});
+
+test("the Recorded headline counts each state apart", (t) => {
+  const saved = VIEW_TD.DATA;
+  t.after(() => { VIEW_TD.DATA = saved; });
+  const schema = { properties: { a: {}, b: {}, c: {}, d: {}, e: {} } };
+  VIEW_TD.boot({ rows: [], environments: ["ci"], component_schema: schema });
+  const html = recordedSection({ id: "svc", recorded: { a: "x", b: null, c: [] },
+    recorded_withheld: ["c"] });
+  assert.match(html, /1 of 5 fields recorded · <strong>2<\/strong> not recorded · 1 checked: none · 1 withheld ·/);
+  assert.match(html, /cv-f-withheld/);
+  assert.match(html, /this published page does not show it/);
+  // Nothing withheld: the sentence and the count are not there to explain.
+  const local = recordedSection({ id: "svc", recorded: { a: "x" } });
+  assert.match(local, /1 of 5 fields recorded · <strong>4<\/strong> not recorded ·/);
+  assert.doesNotMatch(local, /withheld/);
+});
+
+test("the part of a block that was withheld is named beside what is left", (t) => {
+  const saved = { DATA: VIEW_TD.DATA, ENVS: VIEW_TD.ENVS };
+  t.after(() => { VIEW_TD.DATA = saved.DATA; VIEW_TD.ENVS = saved.ENVS; });
+  VIEW_TD.boot({ rows: [], environments: ["ci"], component_schema: SCHEMA });
+  const html = recordedSection({ id: "svc",
+    recorded: { environments: { ci: { url: null, location: "ITRB" } } },
+    recorded_withheld: ["environments.ci.url"] });
+  assert.match(html, /<span class="cv-note">url withheld<\/span>/);
+});
+
+test("connections the policy took out read as withheld, not as none recorded", (t) => {
+  const saved = VIEW_TD.DATA;
+  t.after(() => { VIEW_TD.DATA = saved; });
+  VIEW_TD.boot({ rows: [], environments: ["ci"] });
+  const row = { id: "svc", connections: { calls: [], gets_results_from: [] },
+    recorded_withheld: ["connections.calls"] };
+  const html = panelConnections(row);
+  assert.match(html, />Calls<\/h3><p class="cv-muted">Withheld from this page\.<\/p>/);
+  assert.match(html, />Gets results from<\/h3><p class="cv-muted">None recorded\.<\/p>/);
 });
 
 test("the Recorded section counts, marks and links", (t) => {

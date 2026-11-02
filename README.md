@@ -401,7 +401,7 @@ it.
 | `versions` | the `Show` view: `all`, `differ`, `known`, `none`, `unreachable`, `unregistered` or `no-smartapi` |
 | `sort`, `dir` | the sorted column (`name`, `owner`, `repo`, `smartapi` or `env-<env>`) and `asc` or `desc`; absent means stage order |
 | `expand` | the ids of the rows expanded inline |
-| `sel` | the component looked at: the Component view's subject, the table's highlighted row and the map's ringed node. A `tab` from an older link is ignored |
+| `sel` | the component looked at: the Component view's subject, the table's highlighted row and the map's ringed node. Reset or `Esc` on the Overview clears it. A `tab` from an older link is ignored |
 | `edges` | on the map, which edge kinds are shown |
 
 Only what differs from the default is written, so a shared link says what the

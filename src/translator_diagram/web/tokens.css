@@ -47,7 +47,7 @@
 
   /* The board: what an environment cell's tint says. Same as the rest of
      the row, differs from it, up without a version, down, and the page's
-     own gap (no address on file). A cell the page is sure is empty — no
+     own gap (no confirmed address, or not checked). A cell the page is sure is empty — no
      such host, no server listed, not a hosted service — has no tint. */
   --same: rgba(102, 159, 56, 0.10);
   --same-ink: #3d6b1c;
