@@ -10,10 +10,49 @@ the payload this code reads, and which module builds which part of it — is in
 ## Looking at the page
 
 `CONTRIBUTING.md` says to render the page and look before calling it fine, in
-both views and both themes. This is how.
+every view and both themes. This is how.
 
-Either browser works. Chromium's headless shell runs from the command line
-with no Python package; Firefox runs through Playwright's API, which also
+**The short way is `tools/shoot.py`.** It serves a build over HTTP on a
+free port, drives headless Chromium through Playwright with the theme and
+reduced motion set on the browser context, and writes one PNG per surface,
+named so that two runs compare by name:
+
+```bash
+uv run --group shots playwright install chromium          # once
+uv run build-dashboard --output-dir data/dashboard-mine   # not under a --watch
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine --measure
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?' --hover '[data-tip="src"]' --theme dark --width 1200
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?view=map' --hover '.mp-node'
+```
+
+The defaults are the Overview, the Map and a component's drawer
+(`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` grows the window
+until nothing scrolls, so every row is in the shot. `--hover` and `--click` act
+on the first visible match and fail (exit 2) if there is none, or if the hover
+opens no tooltip; the tooltip targets are `[data-tip]` in the table and drawer
+and `.mp-node`, `.mp-edge` and `.mp-lane` on the Map. A `--path` the page
+ignored, such as a component this build does not have, fails the same way,
+because the page itself would just show the Overview. `--measure` sweeps
+1000–1700px, reports the table's `scrollWidth` against its `clientWidth` with a
+classic scrollbar taking its room, and exits 1 on an overflow beyond the known
+band below (issue #31's failure, which no screenshot shows); it exits 2 if there
+is no table to measure. The docstring has the rest. Build to a directory of your
+own while a `build-dashboard --watch` is running: the watcher rewrites
+`data/dashboard/` with the published policy on every code change, and a
+shot of it is a shot of that build.
+
+To compare two builds, shoot each with its own `--out` and
+`diff -rq data/shots/before data/shots/after`; the same `--out` overwrites the
+first run. The page's clock is frozen at the build's sync, so a shot's ages and
+its "synced just now" do not move with the wall clock, and the same build shot
+hours apart is the same PNG.
+
+**The long way**, for a machine without Playwright, is below: either
+browser works. Chromium's headless shell runs from the command line with
+no Python package; Firefox runs through Playwright's API, which also
 handles the theme and the reduced motion itself (see *Firefox* below).
 Playwright's bundled headless shell needs no install. From the repo root:
 
@@ -124,17 +163,25 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render, and the tiles read the final counts.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
-between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
-1480 and 1540 — where a column returns before there is room for it. The page
-root never overflows at any width, and the wrap scrolls, so nothing is
-unreachable; issue #31 describes the wider 1100–1500px version of this, most
-of which is now gone. At 760px the PROD column is likewise clipped but
-reachable, and the Map's EDGES legend sits over the Translator UI / Node
+breakpoints. Measured at every width from 1000 to 1700px, `div.tablewrap`
+overflows only from **1500px**, where a column returns before there is room
+for it (`@media (min-width: 1500px)`): to 1529px and at most 30px over where
+scrollbars overlay the page, as on a default macOS, and to **1544px** and at
+most **45px** over where a classic 15px scrollbar takes its room, as on Windows
+and Linux. These are Chromium's numbers: Firefox 157 fits the table at every
+width across the band, measured headless with overlay scrollbars, where it would
+not give the wrap a classic one. The page root never overflows at any width, and
+the wrap scrolls, so nothing is unreachable; issue #31 describes the wider
+1100–1500px version of this, most of which is now gone. At 760px the PROD column
+is likewise clipped but reachable, and the Map's EDGES legend sits over the
+Translator UI / Node
 Annotator row; neither has been fixed, and neither hides anything that cannot
 be scrolled or panned to. The overflow is not visible in a screenshot: measure
 `scrollWidth` against `clientWidth` at several widths instead of judging by
-eye.
+eye, which is what `tools/shoot.py --measure` does, always with the classic
+scrollbar, the worse of the two. Its `KNOWN_OVERFLOW` and `KNOWN_OVERFLOW_MAX`
+hold this band so the check passes today; when the column is fixed, delete them
+and correct this paragraph.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
@@ -150,7 +197,9 @@ themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
 component with data on all of them), and an expanded row (`?expand=<id>`).
 The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
 checked this way; a differing PNG means something moved, and `--dump-dom` on
-the two builds, diffed, says what.
+the two builds, diffed, says what. The recipe above leaves the clock running,
+so a page synced in the last 90 minutes says "synced 12 minutes ago" and differs
+for that alone; `tools/shoot.py` freezes it.
 
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.
