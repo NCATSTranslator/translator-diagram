@@ -36,9 +36,9 @@ opens no tooltip; the tooltip targets are `[data-tip]` in the table and drawer
 and `.mp-node`, `.mp-edge` and `.mp-lane` on the Map. A `--path` the page
 ignored, such as a component this build does not have, fails the same way,
 because the page itself would just show the Overview. `--measure` sweeps
-1000–1700px in 10px steps, reports the table's `scrollWidth` against its
-`clientWidth`, and exits 1 on an overflow outside the known 1490–1535px band
-below (issue #31's failure, which no screenshot shows); it exits 2 if there
+1000–1700px, reports the table's `scrollWidth` against its `clientWidth` with a
+classic scrollbar taking its room, and exits 1 on an overflow beyond the known
+band below (issue #31's failure, which no screenshot shows); it exits 2 if there
 is no table to measure. The docstring has the rest. Build to a directory of your
 own while a `build-dashboard --watch` is running: the watcher rewrites
 `data/dashboard/` with the published policy on every code change, and a
@@ -163,19 +163,25 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render, and the tiles read the final counts.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured across 1000–1600px, `div.tablewrap` overflows only
-between about **1490 and 1535px** — 30px over at 1500, 10px at 1520, clean at
-1480 and 1540 — where a column returns before there is room for it. The page
-root never overflows at any width, and the wrap scrolls, so nothing is
-unreachable; issue #31 describes the wider 1100–1500px version of this, most
-of which is now gone. At 760px the PROD column is likewise clipped but
-reachable, and the Map's EDGES legend sits over the Translator UI / Node
+breakpoints. Measured at every width from 1000 to 1700px, `div.tablewrap`
+overflows only from **1500px**, where a column returns before there is room
+for it (`@media (min-width: 1500px)`): to 1529px and at most 30px over where
+scrollbars overlay the page, as on a default macOS, and to **1544px** and at
+most **45px** over where a classic 15px scrollbar takes its room, as on Windows
+and Linux. These are Chromium's numbers: Firefox 157 fits the table at every
+width across the band, measured headless with overlay scrollbars, where it would
+not give the wrap a classic one. The page root never overflows at any width, and
+the wrap scrolls, so nothing is unreachable; issue #31 describes the wider
+1100–1500px version of this, most of which is now gone. At 760px the PROD column
+is likewise clipped but reachable, and the Map's EDGES legend sits over the
+Translator UI / Node
 Annotator row; neither has been fixed, and neither hides anything that cannot
 be scrolled or panned to. The overflow is not visible in a screenshot: measure
 `scrollWidth` against `clientWidth` at several widths instead of judging by
-eye, which is what `tools/shoot.py --measure` does. Its `KNOWN_OVERFLOW`
-holds this band so the check passes today; when the column is fixed, delete
-it and correct this paragraph.
+eye, which is what `tools/shoot.py --measure` does, always with the classic
+scrollbar, the worse of the two. Its `KNOWN_OVERFLOW` and `KNOWN_OVERFLOW_MAX`
+hold this band so the check passes today; when the column is fixed, delete them
+and correct this paragraph.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub

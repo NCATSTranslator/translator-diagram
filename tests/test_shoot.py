@@ -1,7 +1,8 @@
 """`tools/shoot.py`: the decisions it makes without a browser.
 
 CI installs no Chromium, so what the tool does to a page is checked by running
-it, as web/AGENTS.md describes. What is here is what must hold regardless.
+it, as web/AGENTS.md describes. What is here is what must hold regardless: the
+flags it refuses, and what an overflow of a given size at a given width means.
 Playwright is imported inside `main`, so none of this needs the `shots` group.
 """
 
@@ -57,6 +58,40 @@ def test_a_path_must_be_a_query(shoot, path, capsys):
 def test_no_flags_mean_every_surface(shoot):
     args = shoot.parse_args([])
     assert args.path is None and args.theme is None and args.out is None
+
+
+def test_a_table_that_fits_is_ok(shoot):
+    assert shoot.verdict(1700, 1652, 1652) == ("ok", False)
+
+
+def test_overflow_below_the_floor_is_expected(shoot):
+    assert shoot.verdict(shoot.OVERFLOW_FLOOR - 1, 1500, 900) == ("scrolls (expected)", False)
+
+
+def test_overflow_at_the_floor_fails(shoot):
+    assert shoot.verdict(shoot.OVERFLOW_FLOOR, 1001, 1000)[1] is True
+
+
+def test_the_known_band_passes_as_far_over_as_it_was_measured(shoot):
+    width = shoot.KNOWN_OVERFLOW.start
+    text, failed = shoot.verdict(width, width + shoot.KNOWN_OVERFLOW_MAX, width)
+    assert not failed and "known" in text
+
+
+def test_the_known_band_fails_once_it_runs_further_over(shoot):
+    """Tolerating the width alone would pass a column that went 300px over."""
+    width = shoot.KNOWN_OVERFLOW.start
+    assert shoot.verdict(width, width + shoot.KNOWN_OVERFLOW_MAX + 1, width) == ("OVERFLOW", True)
+
+
+def test_the_known_band_fails_just_outside_it(shoot):
+    for width in (shoot.KNOWN_OVERFLOW.start - 1, shoot.KNOWN_OVERFLOW.stop):
+        assert shoot.verdict(width, width + 1, width) == ("OVERFLOW", True)
+
+
+def test_the_sweep_sees_the_band_widen_by_a_pixel(shoot):
+    band = shoot.KNOWN_OVERFLOW
+    assert band.start - 1 in shoot.MEASURE_WIDTHS and band.stop in shoot.MEASURE_WIDTHS
 
 
 def test_the_clock_is_frozen_at_the_sync(shoot, tmp_path):

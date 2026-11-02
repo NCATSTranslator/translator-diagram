@@ -48,12 +48,15 @@ none), and the Map has no table rows, so name the `--path` a selector is for.
 `--measure` reports the Overview table's `scrollWidth` against its
 `clientWidth`, once per width (the theme does not change a width), and exits
 1 if it overflows at 1000px or wider: the overflow that issue #31 was is
-invisible in a screenshot, so it is measured rather than looked for. With no
-`--width` it sweeps 1000–1700px in 10px steps, because the overflow lives
-between breakpoints and three fixed widths walk past it. Below 1000px the
-table is meant to scroll sideways, and is not counted. The one band where it
-is known still to overflow, `KNOWN_OVERFLOW` below, is reported but does not
-fail; an overflow anywhere else does. It takes no
+invisible in a screenshot, so it is measured rather than looked for. It
+measures with a classic 15px scrollbar, the worst case, which is what a reader
+on Windows or Linux has. With no `--width` it sweeps 1000–1700px in 10px steps,
+because the overflow lives between breakpoints and three fixed widths walk past
+it, and in 1px steps around the known band so that a band that widens by less
+than a step still shows. Below 1000px the table is meant to scroll sideways,
+and is not counted. The one band where it is known still to overflow,
+`KNOWN_OVERFLOW` below, is reported but does not fail unless it runs further
+over than `KNOWN_OVERFLOW_MAX`; an overflow anywhere else fails. It takes no
 `--path`, `--theme`, `--full`, `--hover`, `--click` or `--out`, and refuses
 them rather than measuring something other than what they ask for.
 
@@ -89,12 +92,27 @@ ACTION_TIMEOUT_MS = 10_000
 # Below this the environment columns are meant to run past the window and the
 # wrap scrolls; see web/AGENTS.md.
 OVERFLOW_FLOOR = 1000
-# ponytail: the 1490–1535px band where a column returns before there is room
-# for it (up to 30px over, measured on 3466bac; web/AGENTS.md, issue #31). It
-# is tolerated so `--measure` passes on main and still fails if the band
-# widens; delete it once the column is fixed, and any overflow fails.
-KNOWN_OVERFLOW = range(1490, 1536)
-MEASURE_WIDTHS = tuple(range(1000, 1701, 10))
+# ponytail: the band where a column returns (`@media (min-width: 1500px)`)
+# before there is room for it, measured at every width with a classic scrollbar
+# on 761a9ba; web/AGENTS.md, issue #31. It is tolerated so `--measure` passes
+# on main and still fails if the band widens or runs further over; delete both
+# once the column is fixed, and any overflow fails.
+KNOWN_OVERFLOW = range(1500, 1545)
+KNOWN_OVERFLOW_MAX = 45
+# ponytail: 1px steps everywhere would take 30s, so only the known band's edges
+# get them. A new band narrower than 10px elsewhere can slip between the steps;
+# `--width` looks at one directly.
+MEASURE_WIDTHS = tuple(sorted({*range(1000, 1701, 10),
+                               *range(KNOWN_OVERFLOW.start - 10, KNOWN_OVERFLOW.stop + 10)}))
+
+# The classic scrollbar `--measure` measures with. Chromium takes the room for
+# a styled scrollbar on every platform; just not hiding scrollbars
+# (`--hide-scrollbars`, a Playwright default) does nothing on macOS, where they
+# are overlays, and the sweep there passes while Windows readers overflow.
+SCROLLBAR_PX = 15
+SCROLLBAR_CSS = f".tablewrap::-webkit-scrollbar {{ width: {SCROLLBAR_PX}px; height: {SCROLLBAR_PX}px; }}"
+# Short enough that the table scrolls, or the wrap has no scrollbar to measure.
+MEASURE_HEIGHT = 800
 
 # When a build with no sync behind it thinks it is. Any fixed moment will do.
 UNSYNCED_NOW = datetime(2026, 1, 1, tzinfo=UTC)
@@ -171,6 +189,18 @@ def frozen_now(build_dir: Path) -> datetime:
         return datetime.fromisoformat(json.loads((build_dir / "overview.json").read_text())["synced_at"])
     except (OSError, ValueError, KeyError):
         return UNSYNCED_NOW
+
+
+def verdict(width: int, scroll: int, client: int) -> tuple[str, bool]:
+    """What a table `scroll` wide in a `client`-wide wrap means: (text, failed)."""
+    over = scroll - client
+    if over <= 0:
+        return "ok", False
+    if width < OVERFLOW_FLOOR:
+        return "scrolls (expected)", False
+    if width in KNOWN_OVERFLOW and over <= KNOWN_OVERFLOW_MAX:
+        return "OVERFLOW (known; issue #31)", False
+    return "OVERFLOW", True
 
 
 class _Quiet(http.server.SimpleHTTPRequestHandler):
@@ -269,24 +299,22 @@ def measure(page, base: str, widths: list[int]) -> bool:
     """Print the table's overflow per width; True if any of it fails."""
     failed = False
     for width in widths:
-        page.set_viewport_size({"width": width, "height": HEIGHT})
+        page.set_viewport_size({"width": width, "height": MEASURE_HEIGHT})
         arrive(page, base + "?")
+        page.add_style_tag(content=SCROLLBAR_CSS)
+        page.evaluate(SETTLE)
         size = page.evaluate(
             "() => { const w = document.querySelector('div.tablewrap');"
-            " return w && [w.scrollWidth, w.clientWidth]; }")
+            " return w && [w.scrollWidth, w.clientWidth, w.offsetWidth]; }")
         if not size:
             raise Missing(f"no div.tablewrap on {page.url}; the measurement has nothing to measure")
-        scroll, client = size
-        if scroll <= client:
-            verdict = "ok"
-        elif width < OVERFLOW_FLOOR:
-            verdict = "scrolls (expected)"
-        elif width in KNOWN_OVERFLOW:
-            verdict = "OVERFLOW (known; issue #31)"
-        else:
-            verdict = "OVERFLOW"
-            failed = True
-        print(f"{width:5}px  table {scroll} in {client}  {verdict}")
+        scroll, client, outer = size
+        if outer - client != SCROLLBAR_PX:
+            raise Missing(f"div.tablewrap on {page.url} has no {SCROLLBAR_PX}px scrollbar at {width}px "
+                          f"({outer - client}px), so this would not measure what it says")
+        text, overflowed = verdict(width, scroll, client)
+        failed = failed or overflowed
+        print(f"{width:5}px  table {scroll} in {client}  {text}")
     return failed
 
 
@@ -302,7 +330,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="the colour scheme (default both)")
     parser.add_argument("--width", action="append", type=int, metavar="PX",
                         help="a window width; repeatable (default 1700, 1200, 760; "
-                             "with --measure, 1000-1700 in 10px steps)")
+                             "with --measure, 1000-1700 in 10px steps and 1px around the known band)")
     parser.add_argument("--full", action="store_true",
                         help="grow the window until nothing on the page scrolls, so every row is in the shot")
     parser.add_argument("--hover", metavar="SELECTOR",
@@ -349,7 +377,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with sync_playwright() as playwright:
             try:
-                browser = playwright.chromium.launch()
+                # Shots keep scrollbars hidden, so a PNG does not depend on the
+                # machine that took it; --measure wants them, see SCROLLBAR_CSS.
+                browser = playwright.chromium.launch(
+                    ignore_default_args=["--hide-scrollbars"] if args.measure else None)
             except PlaywrightError as error:
                 print(str(error).splitlines()[0], file=sys.stderr)
                 print("Install it once: uv run --group shots playwright install chromium", file=sys.stderr)
@@ -377,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         server.shutdown()
     if overflowed:
-        print(f"The table overflows its window at {OVERFLOW_FLOOR}px or wider, outside the known band.",
+        print(f"The table overflows its window at {OVERFLOW_FLOOR}px or wider, beyond the known band.",
               file=sys.stderr)
         return 1
     return 0
