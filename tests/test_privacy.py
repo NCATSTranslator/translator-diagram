@@ -360,6 +360,77 @@ class TestApply:
             assert not [value for value in before if value in left], field
             verify({"rows": kept}, _policy(fields=[field]))
 
+    def test_row_fields_reading_one_file_key_are_withheld_together(self):
+        """Withholding the names and leaving `otel_presence` would publish
+        every one of them, as the Component view's Telemetry fact."""
+        rows = [
+            {
+                "id": "keep",
+                "otel_services": ["svc"],
+                "otel_presence": [{"service": "svc", "seen_in": ["ci"]}],
+                "helm_chart": "chart",
+                "chart_names": ["chart"],
+                "helm_charts": [{"chart": "chart"}],
+                "environments": {},
+            },
+        ]
+        kept, report = apply(rows, _policy(fields=["otel_services", "helm_chart"]))
+        assert kept[0]["otel_presence"] == []
+        assert kept[0]["chart_names"] == [] and kept[0]["helm_charts"] == []
+        # The page names what was asked for, not what came with it.
+        assert report.fields == ("otel_services", "helm_chart")
+
+    def test_a_finding_quoting_a_withheld_value_goes_too(self):
+        def finding(text):
+            return {"key": "k", "severity": "warning", "about": "row", "text": text}
+
+        rows = [
+            {
+                "id": "keep",
+                "otel_services": ["svc-name"],
+                "findings": [
+                    finding("telemetry name svc-name has been seen by no collector"),
+                    finding("hosted at ITRB with no chart in translator-devops"),
+                ],
+                "environments": {
+                    "ci": {
+                        "biolink": "4.2.1",
+                        "biolink_source": "status",
+                        "biolink_declared": "4.2.0",
+                        "findings": [finding("loads Biolink 4.2.1 but its API document declares 4.2.0")],
+                    },
+                    "prod": {"findings": [finding("serves a web page")]},
+                },
+            },
+        ]
+        kept, _ = apply(rows, _policy(fields=["otel_services"], environment_fields=["biolink"]))
+        row = kept[0]
+        assert [f["text"] for f in row["findings"]] == [
+            "hosted at ITRB with no chart in translator-devops"
+        ]
+        ci = row["environments"]["ci"]
+        # Absent when empty, as a finding list always is.
+        assert "findings" not in ci
+        assert (ci["biolink"], ci["biolink_source"], ci["biolink_declared"]) == (None, None, None)
+        assert row["environments"]["prod"]["findings"][0]["text"] == "serves a web page"
+
+    def test_a_withheld_id_in_a_finding_is_scrubbed_not_fatal(self):
+        """`unreleased` quotes a repository's name, which is not ours to edit."""
+        rows = [
+            {
+                "id": "keep",
+                "environments": {
+                    "ci": {"findings": [{"text": "1.0 matches no release of org/jaeger"}]}
+                },
+            },
+            {"id": "jaeger", "environments": {}},
+        ]
+        kept, report = apply(rows, _policy(components=["jaeger"]))
+        text = kept[0]["environments"]["ci"]["findings"][0]["text"]
+        assert text == "1.0 matches no release of org/…"
+        assert report.mentions == 1
+        verify({"rows": kept}, _policy(components=["jaeger"]))
+
     def test_a_mention_in_free_text_is_scrubbed_and_counted(self):
         """Third-party prose we cannot edit at the source: a note, a registry
         description, a release title. A withheld id as a word there must not
@@ -667,6 +738,18 @@ class TestVerify:
         }
         with pytest.raises(click.ClickException, match="still set on"):
             verify(payload, _policy(environment_fields=["uptime"]))
+
+    def test_a_row_field_saying_the_same_thing_is_caught(self):
+        payload = {"rows": [{"id": "keep", "otel_presence": [{"service": "svc"}]}]}
+        with pytest.raises(click.ClickException, match="otel_presence"):
+            verify(payload, _policy(fields=["otel_services"]))
+
+    def test_a_cell_key_spelled_after_a_withheld_one_is_caught(self):
+        payload = {
+            "rows": [{"id": "keep", "environments": {"ci": {"biolink_declared": "4.2.0"}}}]
+        }
+        with pytest.raises(click.ClickException, match="biolink_declared"):
+            verify(payload, _policy(environment_fields=["biolink"]))
 
     def test_a_field_surviving_in_the_component_file_is_caught(self):
         payload = {

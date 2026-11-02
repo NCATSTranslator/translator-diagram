@@ -88,6 +88,11 @@ value is read from a key of another name, so withholding the field and leaving
 the key would publish the same fact in the Recorded section.
 `tests/test_privacy.py` builds a row from a file with every key filled, and
 fails if a row field carrying one of those values leaves it behind.
+
+The table also works the other way round: row fields that read one file key say
+the same thing, so `_row_fields_saying` withholds them together. Withholding
+`otel_services` and leaving `otel_presence` would still publish every name, and
+the Component view would show them as the Telemetry fact.
 """
 
 
@@ -254,6 +259,12 @@ def apply(
     component claims is never listed, since it is matched against every
     component.
 
+    A finding is a sentence the build wrote, and several quote a value ("loads
+    Biolink {loaded}", "telemetry name {service}"), so one that quotes anything
+    withheld from its row goes too. Matching the text rather than naming the
+    findings means a finding added later is covered, and a false match costs a
+    finding rather than publishing a value.
+
     `recorded`, the component file as written, holds many of the same facts
     under the file's own keys, so everything withheld from the row is withheld
     there too. What held a value and no longer does is listed in the row's
@@ -276,16 +287,22 @@ def apply(
     for row in kept:
         recorded = row.get("recorded")
         withheld_paths = _prune_ids(row, folded)
+        quoted: set[str] = set()
         for name in policy.field_names:
-            row[name] = _emptied(row.get(name))
+            for field in _row_fields_saying(name):
+                if field == name or field in row:
+                    quoted |= _texts(row.get(field))
+                    row[field] = _emptied(row.get(field))
             for mapping, key, path in _recorded_slots(recorded, name):
                 withheld_paths.extend(_withhold(mapping, key, path))
         mentions += scrub(row, ROW_FREE_TEXT, patterns)
         for cell in row.get("environments", {}).values():
             for name in policy.environment_field_names:
-                if name in cell:
-                    cell[name] = _emptied(cell.get(name))
+                for key in _cell_keys_for(cell, name):
+                    quoted |= _texts(cell.get(key))
+                    cell[key] = _emptied(cell.get(key))
             _drop_withheld_versions(cell, withheld_sources)
+        _drop_findings_quoting(row, quoted)
         for name in policy.environment_field_names:
             for mapping, key, path in _recorded_env_slots(recorded, name):
                 withheld_paths.extend(_withhold(mapping, key, path))
@@ -300,6 +317,54 @@ def apply(
         mentions=mentions,
     )
     return kept, report
+
+
+def _row_fields_saying(name: str) -> set[str]:
+    """Every row field that reads the same file key as row field `name`."""
+    key = FIELD_RECORDED_KEYS.get(name, name)
+    siblings = {field for field, read in FIELD_RECORDED_KEYS.items() if read == key}
+    return {name, key} | siblings
+
+
+def _cell_keys_for(cell: dict[str, Any], name: str) -> list[str]:
+    """Cell field `name` and what is spelled after it: `biolink` and its
+    `biolink_source`, `biolink_url` and `biolink_declared`. Every such group in
+    a cell is spelled this way, so the rule is the prefix rather than a list a
+    new data axis would be missing from."""
+    return [key for key in cell if key == name or key.startswith(f"{name}_")]
+
+
+def _texts(value: Any) -> set[str]:
+    """Every non-empty string in `value`, however deep."""
+    if isinstance(value, str):
+        return {value} if value else set()
+    if isinstance(value, dict):
+        value = list(value.values())
+    if isinstance(value, list):
+        return {text for child in value for text in _texts(child)}
+    return set()
+
+
+def _drop_findings_quoting(row: dict[str, Any], quoted: set[str]) -> None:
+    """Remove a row's and its cells' findings that quote a withheld value.
+
+    The key goes when the list is empty: a list with nothing in it is not a
+    shape findings otherwise take, on a row or in a cell.
+    """
+    if not quoted:
+        return
+    for holder in (row, *row.get("environments", {}).values()):
+        if "findings" not in holder:
+            continue
+        kept = [
+            finding
+            for finding in holder["findings"]
+            if not any(text in str(finding.get("text", "")) for text in quoted)
+        ]
+        if kept:
+            holder["findings"] = kept
+        else:
+            del holder["findings"]
 
 
 def _recorded_slots(
@@ -446,6 +511,10 @@ ROW_FREE_TEXT: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("helm_charts", "last_changed"), ("subject",)),
     (("catalog",), ("name", "description")),
     (("environments", "*"), ("status_message", "openapi_title")),
+    # Written by the build, but quoting what other people wrote: a repository
+    # name, a reported version.
+    (("findings",), ("text",)),
+    (("environments", "*", "findings"), ("text",)),
     # The component file as written. Its prose is ours, but it is prose: a
     # note saying "calls jaeger on boot" is a mention, not a reference.
     (("recorded",), ("notes", "summary", "description")),
@@ -545,11 +614,12 @@ def verify(payload: dict[str, Any], policy: Policy) -> None:
         )
     for row in payload.get("rows", []):
         for name in policy.field_names:
-            if row.get(name):
-                raise click.ClickException(
-                    f"Withheld field `{name}` is still set on row "
-                    f"{row.get('id')!r}."
-                )
+            for field in _row_fields_saying(name):
+                if row.get(field):
+                    raise click.ClickException(
+                        f"Withheld field `{field}` is still set on row "
+                        f"{row.get('id')!r}."
+                    )
             for mapping, key, path in _recorded_slots(row.get("recorded"), name):
                 if any(_holds_value(leaf) for leaf in _leaves(mapping[key])):
                     raise click.ClickException(
@@ -558,11 +628,12 @@ def verify(payload: dict[str, Any], policy: Policy) -> None:
                     )
         for env, cell in row.get("environments", {}).items():
             for name in policy.environment_field_names:
-                if cell.get(name):
-                    raise click.ClickException(
-                        f"Withheld environment field `{name}` is still set on "
-                        f"{row.get('id')!r} / {env}."
-                    )
+                for key in _cell_keys_for(cell, name):
+                    if cell.get(key):
+                        raise click.ClickException(
+                            f"Withheld environment field `{key}` is still set on "
+                            f"{row.get('id')!r} / {env}."
+                        )
         for name in policy.environment_field_names:
             for mapping, key, path in _recorded_env_slots(row.get("recorded"), name):
                 if _holds_value(mapping[key]):

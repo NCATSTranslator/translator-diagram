@@ -349,6 +349,12 @@ name, add it there; `tests/test_privacy.py` fails until you do. The serialised
 search in `verify` cannot catch this one, since it looks for component ids and
 not for field values.
 
+Withholding reaches what repeats the value too. Row fields reading one file key
+go together, cell keys spelled after a withheld one (`biolink`, `biolink_declared`)
+go with it, and a finding quoting a withheld value is dropped. Findings are found
+by their text rather than listed, so a new one that quotes a value needs nothing
+here.
+
 **Add a new upstream source** → a fetch in `sync.py` and a tier in the
 version-source chain in `cells.build_cell`. Order that chain by how close
 the source is to what is actually running: a live endpoint, then a manual
