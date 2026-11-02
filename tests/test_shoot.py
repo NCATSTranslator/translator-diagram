@@ -7,6 +7,7 @@ Playwright is imported inside `main`, so none of this needs the `shots` group.
 
 import importlib.util
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -56,3 +57,16 @@ def test_a_path_must_be_a_query(shoot, path, capsys):
 def test_no_flags_mean_every_surface(shoot):
     args = shoot.parse_args([])
     assert args.path is None and args.theme is None and args.out is None
+
+
+def test_the_clock_is_frozen_at_the_sync(shoot, tmp_path):
+    (tmp_path / "overview.json").write_text('{"synced_at": "2026-09-02T18:17:07+00:00"}')
+    assert shoot.frozen_now(tmp_path) == datetime(2026, 9, 2, 18, 17, 7, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("body", [None, "{}", '{"synced_at": ""}', "not json"])
+def test_a_build_with_no_sync_gets_a_fixed_clock(shoot, tmp_path, body):
+    """Falling back to the wall clock would bring back the PNGs that differ."""
+    if body is not None:
+        (tmp_path / "overview.json").write_text(body)
+    assert shoot.frozen_now(tmp_path) == shoot.UNSYNCED_NOW

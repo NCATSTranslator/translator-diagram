@@ -15,16 +15,17 @@ every view and both themes. This is how.
 **The short way is `tools/shoot.py`.** It serves a build over HTTP on a
 free port, drives headless Chromium through Playwright with the theme and
 reduced motion set on the browser context, and writes one PNG per surface,
-named so two builds shot with the same arguments compare by name:
+named so that two runs compare by name:
 
 ```bash
 uv run --group shots playwright install chromium          # once
 uv run build-dashboard --output-dir data/dashboard-mine   # not under a --watch
 uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine
 uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine --measure
-uv run --group shots python tools/shoot.py --path '?' \
-  --hover '[data-tip="src"]' --theme dark --width 1200
-uv run --group shots python tools/shoot.py --path '?view=map' --hover '.mp-node'
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?' --hover '[data-tip="src"]' --theme dark --width 1200
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?view=map' --hover '.mp-node'
 ```
 
 The defaults are the Overview, the Map and a component's drawer
@@ -42,6 +43,12 @@ is no table to measure. The docstring has the rest. Build to a directory of your
 own while a `build-dashboard --watch` is running: the watcher rewrites
 `data/dashboard/` with the published policy on every code change, and a
 shot of it is a shot of that build.
+
+To compare two builds, shoot each with its own `--out` and
+`diff -rq data/shots/before data/shots/after`; the same `--out` overwrites the
+first run. The page's clock is frozen at the build's sync, so a shot's ages and
+its "synced just now" do not move with the wall clock, and the same build shot
+hours apart is the same PNG.
 
 **The long way**, for a machine without Playwright, is below: either
 browser works. Chromium's headless shell runs from the command line with
@@ -184,7 +191,9 @@ themes, a narrow width, the drawer on each tab (`?sel=<id>&tab=<tab>`, on a
 component with data on all of them), and an expanded row (`?expand=<id>`).
 The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
 checked this way; a differing PNG means something moved, and `--dump-dom` on
-the two builds, diffed, says what.
+the two builds, diffed, says what. The recipe above leaves the clock running,
+so a page synced in the last 90 minutes says "synced 12 minutes ago" and differs
+for that alone; `tools/shoot.py` freezes it.
 
 Whether the result *reads* well is still the operator's call: report what you
 saw and let them look.

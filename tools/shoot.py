@@ -15,18 +15,31 @@ for the run, because a `file://` origin blocks the Map's export and the
 page's history handling.
 
 Every combination of `--path`, `--theme` and `--width` becomes one PNG under
-`--out`, named `<path-slug>[-hover-<selector>][-click-<selector>]-<theme>-<width>.png`,
-so two builds shot with the same arguments can be compared by name — `cmp`
-says whether a change moved a pixel, which is the check CONTRIBUTING.md asks
-for on a refactor. Each shot waits for the page to settle (load, fonts,
-every running animation finished, two frames) rather than for a fixed time.
+`--out`, named `<path-slug>[-hover-<selector>][-click-<selector>]-<theme>-<width>.png`.
+Two builds compare by name, so give each its own `--out` (the same one
+overwrites the first run) and let `diff` say whether a change moved a pixel,
+which is the check CONTRIBUTING.md asks for on a refactor:
+
+    uv run build-dashboard --output-dir data/dashboard-before
+    # ... make the change ...
+    uv run build-dashboard --output-dir data/dashboard-after
+    uv run --group shots python tools/shoot.py --build-dir data/dashboard-before --out data/shots/before
+    uv run --group shots python tools/shoot.py --build-dir data/dashboard-after --out data/shots/after
+    diff -rq data/shots/before data/shots/after
+
+So that this holds across a wait, the page's clock is frozen at the moment of
+the build's sync: the top bar reads "synced just now" and every age is counted
+from that sync, whenever the shot is taken. Each shot waits for the page to
+settle (load, fonts, every running animation finished, two frames) rather than
+for a fixed time.
 
 `--path` has to start with `?`, and the page has to do what it asks: it
 quietly ignores a view, a component or a tab it does not know, so the tool
 checks, and a path the page ignored is an error rather than a shot of the
 wrong thing. `--hover` and `--click` act on the first *visible* match, through
 Playwright's own pointer, so the target is scrolled into view and CSS `:hover`
-applies. A selector that matches nothing
+applies. After a `--click` the pointer moves away and any tooltip is closed,
+so the shot shows what the click opened. A selector that matches nothing
 visible, or a hover that opens no tooltip, is an error too. Not every
 `[data-tip]` has a tooltip (an environment cell with nothing deployed has
 none), and the Map has no table rows, so name the `--path` a selector is for.
@@ -59,9 +72,11 @@ from __future__ import annotations
 import argparse
 import functools
 import http.server
+import json
 import re
 import sys
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -80,6 +95,9 @@ OVERFLOW_FLOOR = 1000
 KNOWN_OVERFLOW = range(1490, 1536)
 MEASURE_WIDTHS = tuple(range(1000, 1701, 10))
 
+# When a build with no sync behind it thinks it is. Any fixed moment will do.
+UNSYNCED_NOW = datetime(2026, 1, 1, tzinfo=UTC)
+
 # Resolves once nothing on the page is still moving. With reduced motion set
 # the page renders synchronously, so this is a few milliseconds; a fixed sleep
 # was either slower than this or, on a loaded machine, too short.
@@ -89,6 +107,18 @@ SETTLE = """async () => {
     .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity);
   await Promise.all(finite.map((a) => a.finished.catch(() => {})));
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+}"""
+
+# Freezes `Date` and nothing else. Not Playwright's `clock.set_fixed_time`,
+# which also replaces `requestAnimationFrame`: SETTLE's two frames then pass
+# without a real one, and about one drawer shot in three caught the table with
+# its columns 1px from where they end up, so two runs of one build differed.
+FREEZE_DATE = """{
+  const now = %d;
+  globalThis.Date = new Proxy(Date, {
+    construct: (real, args, target) => Reflect.construct(real, args.length ? args : [now], target),
+    get: (real, name) => (name === "now" ? () => now : Reflect.get(real, name)),
+  });
 }"""
 
 # The parts of a query the page did not act on. Everything it understands comes
@@ -119,6 +149,20 @@ def slug(path: str) -> str:
     return re.sub(r"(^|-)(view|sel)-", r"\1", body) or "overview"
 
 
+def frozen_now(build_dir: Path) -> datetime:
+    """The moment the page is told it is: when this build's data was synced.
+
+    Not the wall clock, or a shot says "synced 12 minutes ago" and the same
+    build shot two minutes later is a different PNG. Not a constant either, or
+    every age on the page reads as however long ago that constant is from the
+    sync. `synced_at` is empty for a build with no sync behind it.
+    """
+    try:
+        return datetime.fromisoformat(json.loads((build_dir / "overview.json").read_text())["synced_at"])
+    except (OSError, ValueError, KeyError):
+        return UNSYNCED_NOW
+
+
 class _Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args: object) -> None:  # one line per request is noise here
         pass
@@ -135,10 +179,11 @@ class Missing(Exception):
     """Something the run was asked to find or open is not on the page."""
 
 
-def new_context(browser, **options):
-    """A browser context with motion off and a timeout a typo does not wait out."""
+def new_context(browser, now: datetime, **options):
+    """A browser context with motion off and the page's clock frozen at `now`."""
     context = browser.new_context(reduced_motion="reduce", **options)
     context.set_default_timeout(ACTION_TIMEOUT_MS)
+    context.add_init_script(FREEZE_DATE % round(now.timestamp() * 1000))
     return context
 
 
@@ -161,6 +206,9 @@ def first_visible(page, selector: str):
 def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, target: Path) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
+    # The page is reused between paths, and a pointer left over a tooltip's
+    # target by the last --hover would open that tooltip on this one too.
+    page.mouse.move(0, 0)
     page.set_viewport_size({"width": width, "height": HEIGHT})
     arrive(page, base + path)
     ignored = page.evaluate(IGNORED, path)
@@ -168,6 +216,12 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
         raise Missing(f"the page ignored {', '.join(ignored)}: no such view, component or tab in this build")
     if args.click:
         first_visible(page, args.click).click()
+        # A click focuses its target and focus opens a tooltip 240ms later: the
+        # settle below is shorter than that on a quiet machine and longer on a
+        # busy one. The target may also be gone by now, re-rendered, in which
+        # case no mouseout would ever cancel it, so close it outright.
+        page.mouse.move(0, 0)
+        page.evaluate("TD.ui.tooltip.hide()")
         page.evaluate(SETTLE)
     if args.hover:
         first_visible(page, args.hover).hover()
@@ -211,7 +265,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--build-dir", type=Path, default=ROOT / "data" / "dashboard",
                         help="the directory build-dashboard wrote (default data/dashboard)")
     parser.add_argument("--out", type=Path,
-                        help="where the PNGs go (default data/shots)")
+                        help="where the PNGs go (default data/shots); give each build its own to compare them")
     parser.add_argument("--path", action="append", metavar="QUERY",
                         help="a query string to shoot, starting with '?', e.g. '?view=map'; repeatable")
     parser.add_argument("--theme", choices=("light", "dark", "both"),
@@ -258,6 +312,7 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or ROOT / "data" / "shots"
     actions = "".join(f"-{verb}-{slug(sel)}" for verb, sel in (("hover", args.hover), ("click", args.click))
                       if sel)
+    now = frozen_now(args.build_dir)
     server, base = serve(args.build_dir)
     overflowed = False
     try:
@@ -270,11 +325,11 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             try:
                 if args.measure:
-                    context = new_context(browser)
+                    context = new_context(browser, now)
                     overflowed = measure(context.new_page(), base, widths)
                     context.close()
                 for theme in ([] if args.measure else themes):
-                    context = new_context(browser, color_scheme=theme)
+                    context = new_context(browser, now, color_scheme=theme)
                     for width in widths:
                         page = context.new_page()
                         for path in paths:
