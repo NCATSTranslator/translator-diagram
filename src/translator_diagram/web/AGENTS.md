@@ -160,15 +160,17 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured in Chromium at every width from 1000 to 1700px on the
-redrawn table with every row collapsed, `div.tablewrap` overflows in two bands
-(issue #108): 1000–1022px and 1151–1185px, at most 35px over, where scrollbars
-overlay the page, and 1000–1037px and 1151–1200px, at most 50px over, where a
-classic 15px scrollbar takes its room. At 900px and below the environment
-columns run past the window, and the wrap scrolls at every width, so nothing is
-unreachable. With every row open nothing overflows at any of those widths, but
-with every third row open the two bands widen, to 1046px and 1204px with the
-classic scrollbar, and a third appears at 1401–1468px, at most 68px over.
+breakpoints. Measured in Chromium at every width from 1000 to 1700px on a sync
+from 2026-11-02 (the bands move with the data: an older cache measured up to
+50px on this table). With every row collapsed, `div.tablewrap` does not overflow
+where scrollbars overlay the page, and where a classic 15px scrollbar takes its
+room it overflows at 1000–1002, 1151–1165, 1300–1302 and 1401–1413px, at most
+15px over (issue #108). At 900px and below the environment columns run past the
+window, and the wrap scrolls at every width, so nothing is unreachable. With
+every row open only 1401–1408px overflows, by 8px, with the classic scrollbar.
+With every third row open the classic scrollbar's bands reach 1011, 1196, 1302
+and 1499px, at most 99px over, and overlaid scrollbars overflow at 1151–1181 and
+1401–1484px.
 Three rules in `table.css` keep the
 all-open case clean, each written where it applies: the Owner
 column's labels wrap between 800 and 1150px, a host label longer than its
@@ -181,7 +183,7 @@ both are gone. The overflow is not visible in a screenshot: measure
 `tools/shoot.py --measure` does, always with the classic scrollbar, the worse
 of the two. Its `KNOWN_OVERFLOW` and `KNOWN_OVERFLOW_MAX` still hold the earlier
 table's 1500–1544px band, which this one does not have, so it exits 1 on the
-two bands above until #108 settles them. At 760px the Map's EDGES legend still
+bands above until #108 settles them. At 760px the Map's EDGES legend still
 sits over the Translator UI / Node Annotator row.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
