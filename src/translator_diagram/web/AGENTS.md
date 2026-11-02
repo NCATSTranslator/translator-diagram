@@ -28,21 +28,21 @@ uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
   --path '?view=map' --hover '.mp-node'
 ```
 
-The defaults are the Overview, the Map and a component's drawer
-(`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` grows the window
-until nothing scrolls, so every row is in the shot. `--hover` and `--click` act
-on the first visible match and fail (exit 2) if there is none, or if the hover
-opens no tooltip; the tooltip targets are `[data-tip]` in the table and drawer
-and `.mp-node`, `.mp-edge` and `.mp-lane` on the Map. A `--path` the page
-ignored, such as a component this build does not have, fails the same way,
-because the page itself would just show the Overview. `--measure` sweeps
-1000–1700px, reports the table's `scrollWidth` against its `clientWidth` with a
-classic scrollbar taking its room, and exits 1 on an overflow beyond the known
-band below (issue #31's failure, which no screenshot shows); it exits 2 if there
-is no table to measure. The docstring has the rest. Build to a directory of your
-own while a `build-dashboard --watch` is running: the watcher rewrites
-`data/dashboard/` with the published policy on every code change, and a
-shot of it is a shot of that build.
+The defaults are the Overview, the Map and the Component view
+(`?view=component&sel=arax`), both themes, at 1700, 1200 and 760px. `--full`
+grows the window until nothing scrolls, so every row is in the shot. `--hover`
+and `--click` act on the first visible match and fail (exit 2) if there is
+none, or if the hover opens no tooltip; the tooltip targets are `[data-tip]` in
+the table and the Component view and `.mp-node`, `.mp-edge` and `.mp-lane` on
+the Map. A `--path` the page ignored, such as a component this build does not
+have, fails the same way, because the page itself would just show the Overview.
+`--measure` sweeps 1000–1700px, reports the table's `scrollWidth` against its
+`clientWidth` with a classic scrollbar taking its room, and exits 1 on an
+overflow it does not know about, as it does today (see below; no screenshot
+shows this); it exits 2 if there is no table to measure. The docstring has the
+rest. Build to a directory of your own while a `build-dashboard --watch` is
+running: the watcher rewrites `data/dashboard/` with the published policy on
+every code change, and a shot of it is a shot of that build.
 
 To compare two builds, shoot each with its own `--out` and
 `diff -rq data/shots/before data/shots/after`; the same `--out` overwrites the
