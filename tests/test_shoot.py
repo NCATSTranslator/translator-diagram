@@ -7,6 +7,7 @@ Playwright is imported inside `main`, so none of this needs the `shots` group.
 """
 
 import importlib.util
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -107,6 +108,35 @@ def test_a_build_with_no_readable_rows_is_an_error(shoot, tmp_path, body):
         (tmp_path / "overview.json").write_text(body)
     with pytest.raises(shoot.Missing, match="build-dashboard"):
         shoot.row_ids(tmp_path)
+
+
+def _build_and_sources(tmp_path, built, **sources):
+    (tmp_path / "index.html").write_text("")
+    os.utime(tmp_path / "index.html", (built, built))
+    folder = tmp_path / "web"
+    folder.mkdir()
+    for name, mtime in sources.items():
+        path = folder / name.replace("_", ".")
+        path.write_text("")
+        os.utime(path, (mtime, mtime))
+    return folder
+
+
+def test_a_build_newer_than_its_source_gets_no_warning(shoot, tmp_path):
+    folder = _build_and_sources(tmp_path, 200, core_js=100, table_css=150)
+    assert shoot.stale_warning(tmp_path, folder) is None
+
+
+def test_a_build_older_than_its_source_is_named_with_the_newest_file(shoot, tmp_path):
+    folder = _build_and_sources(tmp_path, 200, core_js=300, table_css=400)
+    warning = shoot.stale_warning(tmp_path, folder)
+    assert "table.css" in warning and "build-dashboard" in warning
+
+
+def test_only_what_the_page_is_built_from_can_make_a_build_stale(shoot, tmp_path):
+    """The notes sit beside the page's source, and editing them moves no pixel."""
+    folder = _build_and_sources(tmp_path, 200, AGENTS_md=300)
+    assert shoot.stale_warning(tmp_path, folder) is None
 
 
 def test_the_clock_is_frozen_at_the_sync(shoot, tmp_path):

@@ -60,6 +60,9 @@ over than `KNOWN_OVERFLOW_MAX`; an overflow anywhere else fails. It takes no
 `--path`, `--theme`, `--full`, `--hover`, `--click` or `--out`, and refuses
 them rather than measuring something other than what they ask for.
 
+A build older than the page's source gets a one-line warning on stderr, and the
+run carries on: an old build may be what you meant to shoot.
+
 Exit status: 0 when it did what was asked, 1 when `--measure` found an overflow
 it should fail on, 2 when it could not do what was asked (no build, no browser,
 a bad flag, a page that would not load or do as its path said, an action that
@@ -178,6 +181,24 @@ def slug(path: str) -> str:
     """A filename out of a query string: `?view=map&sel=arax` → `map-arax`."""
     body = re.sub(r"[^a-z0-9]+", "-", path.lower().lstrip("?")).strip("-")
     return re.sub(r"(^|-)(view|sel)-", r"\1", body) or "overview"
+
+
+def stale_warning(build_dir: Path, sources: Path = ROOT / "src" / "translator_diagram" / "web") -> str | None:
+    """A note if this build is older than the page's source, else None.
+
+    Only a warning, because it can be wrong either way: a checkout resets a
+    file's time without changing the file, and a build of another branch has
+    nothing to do with this checkout's source. An old build is also exactly what
+    a before-and-after shoots on purpose. But without it, a stale build gets
+    shot and looked at as though it were the current page, with exit 0.
+    """
+    built = (build_dir / "index.html").stat().st_mtime
+    newer = [path for path in sources.iterdir() if path.suffix in (".js", ".css") and path.stat().st_mtime > built]
+    if not newer:
+        return None
+    newest = max(newer, key=lambda path: path.stat().st_mtime)
+    return (f"Warning: {build_dir} is older than {newest.name}, so it may not show the current page; "
+            "`uv run build-dashboard` rebuilds it.")
 
 
 def row_ids(build_dir: Path) -> list[str]:
@@ -384,6 +405,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Playwright is not installed: run with `uv run --group shots`.", file=sys.stderr)
         return 2
 
+    warning = stale_warning(args.build_dir)
+    if warning:
+        print(warning, file=sys.stderr)
     paths = args.path or list(DEFAULT_PATHS)
     themes = ("light", "dark") if args.theme in (None, "both") else (args.theme,)
     widths = args.width or list(MEASURE_WIDTHS if args.measure else DEFAULT_WIDTHS)
