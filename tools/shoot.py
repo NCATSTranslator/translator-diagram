@@ -15,7 +15,7 @@ for the run, because a `file://` origin blocks the Map's export and the
 page's history handling.
 
 Every combination of `--path`, `--theme` and `--width` becomes one PNG under
-`--out`, named `<path-slug>[-hover-<selector>][-click-<selector>]-<theme>-<width>.png`.
+`--out`, named `<path-slug>[-hover-<selector>][-click-<selector>][-full]-<theme>-<width>.png`.
 Two builds compare by name, so give each its own `--out` (the same one
 overwrites the first run) and let `diff` say whether a change moved a pixel,
 which is the check CONTRIBUTING.md asks for on a refactor:
@@ -43,6 +43,7 @@ so the shot shows what the click opened. A selector that matches nothing
 visible, or a hover that opens no tooltip, is an error too. Not every
 `[data-tip]` has a tooltip (an environment cell with nothing deployed has
 none), and the Map has no table rows, so name the `--path` a selector is for.
+`--full` grows the window until nothing scrolls, so every row is in the shot.
 
 `--measure` reports the Overview table's `scrollWidth` against its
 `clientWidth`, once per width (the theme does not change a width), and exits
@@ -97,6 +98,10 @@ MEASURE_WIDTHS = tuple(range(1000, 1701, 10))
 
 # When a build with no sync behind it thinks it is. Any fixed moment will do.
 UNSYNCED_NOW = datetime(2026, 1, 1, tzinfo=UTC)
+# `--full` adds height until nothing scrolls. It takes more than one pass where
+# a scroller is sized from the window: 30vh with the drawer open on a narrow
+# window gains only 0.3px per pixel added.
+FULL_PASSES = 40
 
 # Resolves once nothing on the page is still moving. With reduced motion set
 # the page renders synchronously, so this is a few milliseconds; a fixed sleep
@@ -141,6 +146,11 @@ IGNORED = """(query) => {
   for (const id of TD.state.expand) if (!TD.row.byId(id)) ignored.push(`expand=${id}`);
   return ignored;
 }"""
+
+# How much the tallest scroller on the page still has out of sight.
+OVERHANG = """() => Math.max(0, ...[...document.querySelectorAll('*')]
+  .filter((e) => /auto|scroll/.test(getComputedStyle(e).overflowY))
+  .map((e) => e.scrollHeight - e.clientHeight))"""
 
 
 def slug(path: str) -> str:
@@ -203,6 +213,24 @@ def first_visible(page, selector: str):
     return match
 
 
+def grow_to_fit(page, width: int) -> None:
+    """Make the window tall enough that no element on the page still scrolls.
+
+    Playwright's `full_page` does nothing here: the page root is `height: 100%;
+    overflow: hidden` and the table scrolls inside `.tablewrap`, so the document
+    is exactly as tall as the window and the rows below the fold stay cut off.
+    """
+    height = HEIGHT
+    for _ in range(FULL_PASSES):
+        over = page.evaluate(OVERHANG)
+        if over <= 1:
+            return
+        height += over
+        page.set_viewport_size({"width": width, "height": height})
+        page.evaluate(SETTLE)
+    raise Missing(f"{page.url} still scrolls at {width}x{height}; --full cannot fit it")
+
+
 def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, target: Path) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
@@ -223,6 +251,8 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
         page.mouse.move(0, 0)
         page.evaluate("TD.ui.tooltip.hide()")
         page.evaluate(SETTLE)
+    if args.full:
+        grow_to_fit(page, width)
     if args.hover:
         first_visible(page, args.hover).hover()
         try:
@@ -231,7 +261,7 @@ def shoot(page, base: str, path: str, width: int, args: argparse.Namespace, targ
             raise Missing(f"hovering {args.hover!r} on {page.url} opened no tooltip") from None
         page.evaluate(SETTLE)
     target.parent.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(target), full_page=args.full)
+    page.screenshot(path=str(target))
     print(target.relative_to(ROOT) if target.is_relative_to(ROOT) else target)
 
 
@@ -273,7 +303,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--width", action="append", type=int, metavar="PX",
                         help="a window width; repeatable (default 1700, 1200, 760; "
                              "with --measure, 1000-1700 in 10px steps)")
-    parser.add_argument("--full", action="store_true", help="full-page shots, not the first screen")
+    parser.add_argument("--full", action="store_true",
+                        help="grow the window until nothing on the page scrolls, so every row is in the shot")
     parser.add_argument("--hover", metavar="SELECTOR",
                         help="hover the first visible match before each shot, and wait for its tooltip")
     parser.add_argument("--click", metavar="SELECTOR",
@@ -311,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
     widths = args.width or list(MEASURE_WIDTHS if args.measure else DEFAULT_WIDTHS)
     out = args.out or ROOT / "data" / "shots"
     actions = "".join(f"-{verb}-{slug(sel)}" for verb, sel in (("hover", args.hover), ("click", args.click))
-                      if sel)
+                      if sel) + ("-full" if args.full else "")
     now = frozen_now(args.build_dir)
     server, base = serve(args.build_dir)
     overflowed = False

@@ -29,8 +29,8 @@ uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
 ```
 
 The defaults are the Overview, the Map and a component's drawer
-(`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` shoots the
-whole page. `--hover` and `--click` act
+(`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` grows the window
+until nothing scrolls, so every row is in the shot. `--hover` and `--click` act
 on the first visible match and fail (exit 2) if there is none, or if the hover
 opens no tooltip; the tooltip targets are `[data-tip]` in the table and drawer
 and `.mp-node`, `.mp-edge` and `.mp-lane` on the Map. A `--path` the page
