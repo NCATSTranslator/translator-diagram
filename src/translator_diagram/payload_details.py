@@ -116,7 +116,7 @@ def smartapi_detail(record: Any) -> dict[str, Any] | None:
     if not record or not isinstance(record, dict):
         return None
     info = mapping(record.get("info"))
-    translator = mapping(info.get("x-translator"))
+    translator = translator_info(record)
     trapi = mapping(info.get("x-trapi"))
     status = mapping(record.get("_status"))
     meta = mapping(record.get("_meta"))
@@ -130,14 +130,7 @@ def smartapi_detail(record: Any) -> dict[str, Any] | None:
         "team": strings(translator.get("team")),
         "component": text(translator.get("component")),
         "infores": text(translator.get("infores")),
-        # Both spellings, hyphen first because that is what 98 of the 127
-        # records use. Retriever registers `biolink_version` with an
-        # underscore, and reading only the hyphen showed it as having no
-        # Biolink version at all — a gap that reads as a finding about the
-        # team rather than about our parser.
-        "biolink_version": text(
-            translator.get("biolink-version") or translator.get("biolink_version")
-        ),
+        "biolink_version": text(translator.get("biolink-version")),
         "trapi": {
             "version": text(trapi.get("version")),
             "asyncquery": trapi.get("asyncquery"),
@@ -629,6 +622,26 @@ def catalog_detail(entry: Any) -> dict[str, Any] | None:
 # a field rather than raising. Public because `cells`, `synced_data`,
 # `deployments` and `dashboard` read the same documents; this module has no
 # package imports, so any of them may use these without a cycle.
+
+
+def translator_info(document: Any) -> dict[str, Any]:
+    """The `info.x-translator` block of an OpenAPI document or a registry
+    record, with one spelling per field.
+
+    Retriever registers `biolink_version` with an underscore; 98 of the
+    other 127 records spell it `biolink-version`. This is the one reader of
+    the block, so the table's cell and the Component view's SmartAPI panel
+    cannot disagree about whether a component has a Biolink version (issue
+    #79): the hyphen wins where both are present, and the underscore is
+    folded into it. `components.reported_biolink` reads the same two
+    spellings for the sync's hash scan — it cannot import this module —
+    and `tests/test_payload_details.py` holds the two in step.
+    """
+    translator = dict(mapping(mapping(mapping(document).get("info")).get("x-translator")))
+    translator["biolink-version"] = (
+        translator.get("biolink-version") or translator.get("biolink_version")
+    )
+    return translator
 
 
 def mapping(value: Any) -> dict[str, Any]:

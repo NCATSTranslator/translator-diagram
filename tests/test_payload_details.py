@@ -633,3 +633,30 @@ def _image_leaks(node, path=()) -> list[str]:
     if isinstance(node, str) and REGISTRY_HOST.search(node):
         return [f"{where} names the registry {node!r}"]
     return []
+
+
+class TestTranslatorInfo:
+    def test_one_spelling_per_field_whichever_the_document_used(self):
+        from translator_diagram.payload_details import translator_info
+        hyphen = {"info": {"x-translator": {"biolink-version": "4.2.5", "component": "KP"}}}
+        underscore = {"info": {"x-translator": {"biolink_version": "4.3.2"}}}
+        assert translator_info(hyphen)["biolink-version"] == "4.2.5"
+        assert translator_info(hyphen)["component"] == "KP"
+        assert translator_info(underscore)["biolink-version"] == "4.3.2"
+        # The hyphen wins where a record carries both.
+        both = {"info": {"x-translator": {"biolink-version": "1", "biolink_version": "2"}}}
+        assert translator_info(both)["biolink-version"] == "1"
+        assert translator_info({})["biolink-version"] is None
+        assert translator_info(None) == {"biolink-version": None}
+
+    def test_the_sync_side_reader_agrees_with_it(self):
+        # `components.reported_biolink` cannot import this module, so the
+        # two spellings are written twice; this is what keeps them the same.
+        from translator_diagram.components import reported_biolink
+        from translator_diagram.payload_details import translator_info
+        for document in (
+            {"info": {"x-translator": {"biolink-version": "4.2.5"}}},
+            {"info": {"x-translator": {"biolink_version": "4.3.2"}}},
+            {"info": {"x-translator": {"biolink-version": "1", "biolink_version": "2"}}},
+        ):
+            assert reported_biolink(document) == [translator_info(document)["biolink-version"]]

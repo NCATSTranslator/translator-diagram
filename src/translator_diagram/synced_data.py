@@ -27,6 +27,7 @@ from .charts import chart_dirs, chart_meta
 from .components import OTEL_ENVIRONMENTS, Deployment
 from .files import (
     chart_commit_path,
+    commit_path,
     confirmed_hosts,
     derived_path,
     endpoint_key,
@@ -39,6 +40,8 @@ from .files import (
     otel_path,
     read_json,
     read_yaml,
+    ref_names,
+    refs_path,
     rejected_hosts,
     releases_path,
     repo_meta_path,
@@ -222,6 +225,32 @@ class SyncedData:
                 if isinstance(entry, dict)
             ],
         )
+
+    def refs(self, repo: str | None) -> dict[str, Any] | None:
+        """One repository's tags, branches and looked-up commits, or None.
+
+        `{"tags": {name: sha}, "heads": {name: sha}, "commits": {sha}}`. None
+        when neither ref list is cached — an older cache, or a run GitHub
+        throttled — and the build then makes no claim about whether a
+        reported version resolves: not gated on this run's manifest, like
+        the release lists, because a stale tag list is still a tag list.
+        """
+        if not repo:
+            return None
+
+        def load() -> dict[str, Any] | None:
+            tags = read_json(refs_path(self.root, repo, "tags"))
+            heads = read_json(refs_path(self.root, repo, "heads"))
+            if tags is None and heads is None:
+                return None
+            commits = {
+                path.stem.lower()
+                for path in commit_path(self.root, repo, "x").parent.glob("*.json")
+                if isinstance(read_json(path), dict)
+            }
+            return {"tags": ref_names(tags), "heads": ref_names(heads), "commits": commits}
+
+        return self._once(("refs", repo), load)
 
     def helm(self, chart: str, name: str) -> dict[str, Any] | None:
         """One file out of one cached chart, parsed once per build.

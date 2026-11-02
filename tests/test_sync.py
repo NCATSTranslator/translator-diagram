@@ -30,7 +30,9 @@ from translator_diagram.sync import (
     _confirm_derived,
     _plan_chart_commits,
     _plan_chart_fetches,
+    _plan_commit_lookups,
     _plan_index_chart_fetches,
+    _plan_ref_fetches,
     _plan_release_fetches,
     _plan_repo_meta,
     _plan_root_probes,
@@ -587,8 +589,9 @@ class TestThrottling:
             f for f in report.fetches
             if f.status == 403 and f.url.startswith("https://api.github.com/")
         ]
-        # The index, the commit, the repository description and the releases.
-        assert len(throttled) == 4
+        # The index, the commit, the repository description, the releases, and
+        # the two ref lists for biolink-model.
+        assert len(throttled) == 6
         assert any("rate-limited" in line for line in lines)
         assert report.finished_at  # and none of it failed the run
 
@@ -952,3 +955,33 @@ def test_one_collector_per_otel_environment():
     # fetches one collector per OTEL_COLLECTORS entry; the two must agree or a
     # collector is fetched and never read, or read and never fetched.
     assert set(OTEL_COLLECTORS) == set(OTEL_ENVIRONMENTS)
+
+
+class TestRefFetches:
+    def test_the_tags_and_branches_of_every_data_repository(self, tmp_path):
+        from translator_diagram.files import refs_path
+        assert _plan_ref_fetches(tmp_path) == [
+            ("https://api.github.com/repos/biolink/biolink-model/git/matching-refs/tags/",
+             refs_path(tmp_path, "biolink/biolink-model", "tags")),
+            ("https://api.github.com/repos/biolink/biolink-model/git/matching-refs/heads/",
+             refs_path(tmp_path, "biolink/biolink-model", "heads")),
+        ]
+
+    def test_a_bare_hash_nothing_carries_is_looked_up_once(self, tmp_path):
+        from translator_diagram.files import commit_path
+        probes = _Probes(tmp_path).refs("biolink/biolink-model", tags={"v4.4.3": "a" * 40})
+        probes.body("status", "ci", {"biolink_model": {"tag": "0123abcd"}})
+        probes.body("status", "test", {"biolink_model": {"tag": "0123ABCD"}})
+        probes.document("openapi", "ci", 200, {"info": {"x-translator": {"biolink-version": "aaaaaaa"}}},
+                        url="https://svc.ci/")
+        registry = {"x": {"info": {"x-translator": {"biolink-version": "v4.4.3"}}}}
+        # One lookup: the two spellings are one hash, "aaaaaaa" is a tag's
+        # commit, and v4.4.3 is not a hash at all.
+        assert _plan_commit_lookups(tmp_path, registry) == [(
+            "https://api.github.com/repos/biolink/biolink-model/commits/0123abcd",
+            commit_path(tmp_path, "biolink/biolink-model", "0123abcd"),
+        )]
+
+    def test_no_hash_plans_nothing(self, tmp_path):
+        _Probes(tmp_path).body("status", "ci", {"biolink_model": {"tag": "master"}})
+        assert _plan_commit_lookups(tmp_path, {}) == []

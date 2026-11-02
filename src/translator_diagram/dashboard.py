@@ -22,7 +22,7 @@ from typing import Any
 
 import click
 
-from .cells import SOURCE_LABELS
+from .cells import DATA_AXES, SOURCE_LABELS
 from .charts import unclaimed_charts
 from .colors import load_owner_colors, owner_styles
 from .components import ENVIRONMENTS, ComponentFile
@@ -379,6 +379,8 @@ def build_payload(
         # separately is how a page and a legend come to disagree about a team.
         "owner_styles": owner_styles(colors),
         "source_labels": SOURCE_LABELS,
+        # The data axes a cell may carry, in page order, with their labels.
+        "data_axes": DATA_AXES,
         "component_schema": schema,
         "updated_labels": UPDATED_LABELS,
         "source_tally": source_tally(rows),

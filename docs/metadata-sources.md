@@ -234,7 +234,18 @@ version nor the data release the page shows.
 
 What it uniquely offers is **data provenance**: `babel_version` and
 `biolink_model.tag` are a different axis from software version, and nothing
-else exposes them at runtime. `?full=true` adds JVM/OS/cache detail; the
+else exposes them at runtime. The dashboard reads them as the `babel` and
+`biolink` axes of `cells.DATA_AXES` (with `babel_version_url` and
+`biolink_model.url` as the documents they link to) and draws each as a pill
+under the version, compared across the row the way the version is. The
+`biolink` axis prefers this loaded tag to the version the API document
+declares, and a disagreement between the two is a finding. Each value is
+also resolved against `biolink/biolink-model`, whose tags and branches
+`sync-components` fetches (`git/matching-refs`, two calls): a tag is a
+release, a branch such as NameRes's `master` is a moderate finding, and a
+value that is neither and no commit is a severe one. A third axis,
+`graph`, waits on the Translator Graph release being reported anywhere.
+`?full=true` adds JVM/OS/cache detail; the
 default is cheap enough for a liveness probe. A shared schema would make them
 readable generically; see
 [`FUTURE.md`](../FUTURE.md#upstream-gaps-worth-reporting).

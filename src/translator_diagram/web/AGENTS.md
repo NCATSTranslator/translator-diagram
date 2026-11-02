@@ -160,15 +160,18 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured in Chromium at every width from 1000 to 1700px on the
-redrawn table with every row collapsed, `div.tablewrap` overflows in two bands
-(issue #108): 1000–1002px and 1151–1165px, at most 15px over, where scrollbars
-overlay the page, and 1000–1017px and 1151–1180px, at most 30px over, where a
-classic 15px scrollbar takes its room. At 900px and below the environment
-columns run past the window, and the wrap scrolls at every width, so nothing is
-unreachable. With every row open nothing overflows at any of those widths, but
-with every third row open the same two bands widen, to 1026px and 1184px and at
-most 34px over with the classic scrollbar. Three rules in `table.css` keep the
+breakpoints. Measured in Chromium at every width from 1000 to 1700px on a sync
+from 2026-11-02 (the bands move with the data: an older cache measured up to
+50px on this table). With every row collapsed, `div.tablewrap` does not overflow
+where scrollbars overlay the page, and where a classic 15px scrollbar takes its
+room it overflows at 1000–1002, 1151–1165, 1300–1302 and 1401–1413px, at most
+15px over (issue #108). At 900px and below the environment columns run past the
+window, and the wrap scrolls at every width, so nothing is unreachable. With
+every row open only 1401–1408px overflows, by 8px, with the classic scrollbar.
+With every third row open the classic scrollbar's bands reach 1011, 1196, 1302
+and 1499px, at most 99px over, and overlaid scrollbars overflow at 1151–1181 and
+1401–1484px.
+Three rules in `table.css` keep the
 all-open case clean, each written where it applies: the Owner
 column's labels wrap between 800 and 1150px, a host label longer than its
 column may break inside itself there, and a long connection name wraps inside
@@ -180,7 +183,7 @@ both are gone. The overflow is not visible in a screenshot: measure
 `tools/shoot.py --measure` does, always with the classic scrollbar, the worse
 of the two. Its `KNOWN_OVERFLOW` and `KNOWN_OVERFLOW_MAX` still hold the earlier
 table's 1500–1544px band, which this one does not have, so it exits 1 on the
-two bands above until #108 settles them. At 760px the Map's EDGES legend still
+bands above until #108 settles them. At 760px the Map's EDGES legend still
 sits over the Translator UI / Node Annotator row.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
@@ -372,6 +375,49 @@ version string: comparing `2.10.2` against `1.0` across two different
 components means nothing. Cells rank in tiers — running a release we can date,
 running something no release names, not deployed — and the tiers hold in both
 directions.
+
+**Finding glyphs sit beside the thing they are about, not one per cell.**
+A cell can carry a finding about its deployment (the version pill) and each
+release it runs on (a data pill), and a reader scanning a column for a ✕
+should land on the thing that is wrong. One glyph
+per cell would send them to the tooltip to find out which. The anchor is
+the payload's `about`, and `TD.findings.marks` draws one button per
+severity present at that anchor, so three warnings about one version are
+one ◆ whose tooltip lists three lines. The severities are three *shapes*
+(✕ ▲ ◆) and not three colours alone, for the same reason the drift tint
+comes with a ≠. A glyph is a `<button>` because it opens the component's
+page at its Findings section; in the Component view's own matrix the same
+click only scrolls.
+
+**Findings about the host are the dot, not a glyph beside it.** A glyph
+after the green light read as belonging to the version pill next to it.
+So the online light itself carries them (`hostState` in core.js): red when
+the host is down or something severe is wrong with what it serves, amber
+when it answers but a finding says look closer, green when it answers and
+nothing does, and no dot when nothing was probed — unless a host finding
+exists anyway, which is the undeployed cell whose conventional address
+answered as another service. With findings the dot is a button whose
+tooltip lists every severity, worst first.
+
+**A pill's border is its own status; the cell's tint is the cell's.** The
+version pill used to take the down ink whenever its cell was down, so a
+version copied from the registry turned red for a host that had nothing to
+do with it, and the Biolink pill with it. Now `TD.findings.status` colours a
+pill's border amber for a finding about *that* pill or drift on it and red
+for a severe one, and nothing else reaches the border.
+
+**The data pills are the version pill's size, and white.** The data a
+deployment runs on used to be a micro-font caption, and read as a footnote
+to the version. A release of Babel or of the Biolink Model moves through
+the environments on its own schedule, and whether it has reached prod is
+read off this line as much as off the version's, so the pill is the same
+size and weight, with the axis's name inside at a lighter weight and the
+accent on the text so the two kinds of version cannot be mistaken for each
+other. It was filled in the accent at first, and went white because a fill
+leaves the border nothing to say. Below 1300px it may break between name
+and number — on one
+line it pushed the table past the window at 1000 and 1200px, which is
+issue #31's failure — and a broken pill is drawn as a box.
 
 **The theme cycle starts by moving away from the system**, not at light: the
 page defaults to following the operating system, so `auto → light → dark`

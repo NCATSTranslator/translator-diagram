@@ -220,3 +220,5 @@ input[type="search"]:focus { border-color: var(--accent); }
 .tip dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tip .title { font-weight: 600; font-family: var(--mono); font-size: var(--fs-table); }
 .tip .note { color: var(--muted); }
+.tip .fl { margin: 4px 0 0; padding-left: 1.1em; }
+.tip .fl li { margin: 2px 0; }

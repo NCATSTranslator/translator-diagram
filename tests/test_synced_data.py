@@ -285,3 +285,28 @@ class TestUnexpectedShapes:
         synced = SyncedData(tmp_path)
         assert synced.derived == {"svc": {}}
         assert synced.rejected == {}
+
+
+class TestRefs:
+    def test_tags_heads_and_commits_are_read_by_name(self, tmp_path):
+        synced = _Probes(tmp_path).refs(
+            "biolink/biolink-model",
+            tags={"v4.4.3": "a" * 40}, heads={"master": "b" * 40}, commits=["c" * 40],
+        ).build()
+        refs = synced.refs("biolink/biolink-model")
+        assert refs == {
+            "tags": {"v4.4.3": "a" * 40},
+            "heads": {"master": "b" * 40},
+            "commits": {"c" * 40},
+        }
+
+    def test_no_cached_refs_is_none_not_empty(self, tmp_path):
+        # None lets the build make no claim; `{}` would call every value unresolved.
+        synced = _Probes(tmp_path).build()
+        assert synced.refs("biolink/biolink-model") is None
+        assert synced.refs(None) is None
+
+    def test_a_throttled_object_reads_as_no_refs_of_that_kind(self, tmp_path):
+        probes = _Probes(tmp_path)
+        probes.file("refs/biolink/biolink-model/tags.json", '{"message": "API rate limit exceeded"}')
+        assert probes.build().refs("biolink/biolink-model") == {"tags": {}, "heads": {}, "commits": set()}

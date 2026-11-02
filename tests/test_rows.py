@@ -5,6 +5,7 @@ comparisons a single cell cannot make, which is why they are decided here.
 """
 
 from tests.dashboard_helpers import _comp, _Probes
+from translator_diagram.components import Deployment
 from translator_diagram.payload_details import releases_detail
 from translator_diagram.rows import (
     _instant,
@@ -539,3 +540,75 @@ class TestTheMetadataBlock:
         # Different from a record whose fields are blank, and the Component view says
         # so: "not registered" is a finding the page already counts.
         assert build_rows([_comp("svc")], synced)[0]["smartapi_record"] is None
+
+
+class TestDataAxisDrift:
+    def test_a_babel_release_in_the_minority_is_drift(self, tmp_path):
+        probes = _Probes(tmp_path)
+        for env, babel in (("ci", "2025sep1"), ("test", "2025sep1"), ("prod", "2026jul22")):
+            probes.body("status", env, {"version": "1.0", "babel_version": babel})
+        component = _comp(
+            "svc", endpoints={"status": "status"},
+            environments={e: Deployment(env=e, url=f"https://svc.{e}/") for e in ("ci", "test", "prod")},
+        )
+        cells = build_rows([component], probes.build())[0]["environments"]
+        assert cells["prod"]["drift"] == ["babel"]
+        assert "drift" not in cells["ci"]
+
+
+class TestUnreleased:
+    def _with(self, synced, component, entries):
+        _Probes(synced.root).releases("a/b", entries)
+        component.repositories = [{"url": "https://github.com/a/b", "role": "source"}]
+        return build_rows([component], synced)[0]["environments"]
+
+    def test_a_version_no_release_names_is_a_finding(self, synced, component):
+        envs = self._with(synced, component, [_release("v2.0.0", published_at="2026-08-01T00:00:00Z")])
+        assert "findings" not in envs["ci"]
+        assert envs["prod"]["findings"] == [{
+            "key": "unreleased", "severity": "warning", "about": "version",
+            "text": "1.0.0 matches no release of a/b",
+        }]
+
+    def test_a_repository_with_no_releases_flags_nothing(self, synced, component):
+        # Twelve of nineteen publish none; a glyph on every one of their cells
+        # would be a glyph nobody reads.
+        envs = self._with(synced, component, [])
+        assert all("findings" not in cell for cell in envs.values())
+
+
+class TestRowFindings:
+    def test_unregistered_is_a_finding_on_the_cell(self, tmp_path):
+        synced = _Probes(tmp_path).registry([{
+            "_id": "abc", "info": {"version": "1.0"},
+            "servers": [{"url": "https://svc/", "x-maturity": "production"}],
+        }]).build()
+        component = _comp(
+            "svc", identifiers={"smartapi": "abc"},
+            environments={"ci": Deployment(env="ci", url="https://svc.ci/")},
+        )
+        ci = build_rows([component], synced)[0]["environments"]["ci"]
+        assert ci["unregistered"] is True
+        assert [f["key"] for f in ci["findings"]] == ["unregistered"]
+
+    def test_the_row_level_findings(self, tmp_path):
+        probes = _Probes(tmp_path).registry([
+            {"_id": "a", "info": {"version": "1", "x-translator": {"infores": "infores:svc"}}},
+            {"_id": "b", "info": {"version": "1", "x-translator": {"infores": "infores:svc"}}},
+        ])
+        probes.otel("ci", ["seen"])
+        component = _comp(
+            "svc", identifiers={"infores": "infores:svc", "otel_services": ["seen", "ghost"]},
+        )
+        row = build_rows([component], probes.build())[0]
+        assert [(f["key"], f["severity"], f["about"]) for f in row["findings"]] == [
+            ("ambiguous-record", "moderate", "row"),
+            ("otel-missing", "warning", "row"),
+            ("no-chart", "warning", "row"),
+        ]
+        assert row["findings"][0]["text"] == "2 SmartAPI records claim infores:svc; none is used"
+        assert row["findings"][1]["text"] == "telemetry name ghost has been seen by no collector"
+
+    def test_a_row_with_nothing_to_say_has_no_findings_key(self, tmp_path):
+        component = _comp("svc", hosted_at="RENCI")
+        assert "findings" not in build_rows([component], _Probes(tmp_path).build())[0]

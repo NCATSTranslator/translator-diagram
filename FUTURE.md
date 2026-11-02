@@ -234,7 +234,12 @@ itself, and only the owner upstream can fix it:
   [#65](https://github.com/NCATSTranslator/translator-diagram/issues/65). Each component's `/status` is shaped its
   own way, so the data-provenance versions it exposes (`babel_version`, the
   Biolink tag) cannot be read generically.
-  ([survey](docs/metadata-sources.md#status-endpoints))
+  ([survey](docs/metadata-sources.md#status-endpoints)) The coming
+  **Translator Graph release** — stamped by DINGO, stored by KGX Storage,
+  served by Retriever and eventually carried by every query response — is
+  the third data axis (`graph` in `cells.DATA_AXES`), and has a place on the
+  page and no reader: nothing reports it yet, and a shared `/status` key for
+  it is what would make it readable everywhere at once.
 - **OpenTelemetry service names drift** — [#66](https://github.com/NCATSTranslator/translator-diagram/issues/66). The
   same component reports under a different name per environment
   (`ANSWER-APPRAISER`, `STRIDER-DEV`), processing steps report as services,
