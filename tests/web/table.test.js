@@ -16,7 +16,7 @@ const WEB = path.join(__dirname, "..", "..", "src", "translator_diagram", "web")
 
 globalThis.TD = {};
 vm.runInThisContext(fs.readFileSync(path.join(WEB, "core.js"), "utf8"), { filename: "core.js" });
-globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", tooltip: { bind() {}, hide() {} } };
+globalThis.TD.ui = { CHEVRON: "", CARET_UP: "", OPEN: "", tooltip: { bind() {}, hide() {} } };
 vm.runInThisContext(fs.readFileSync(path.join(WEB, "table.js"), "utf8"), { filename: "table.js" });
 const TD = globalThis.TD;
 const { table } = TD;
@@ -100,9 +100,23 @@ test("stage order draws a band per step present, and never an empty one", () => 
 });
 
 test("a sort by date draws no bands, and no rows draws the empty message", () => {
-  reset({ sort: "smartapi", dir: "asc" });
+  reset({ sort: "env-prod", dir: "asc" });
   assert.doesNotMatch(table.bodyHtml(table.visibleRows()), /class="band"/);
   assert.match(table.bodyHtml([]), /No components match these filters/);
+});
+
+test("a SmartAPI sort puts the problems first in both directions, banded by state", () => {
+  for (const dir of ["asc", "desc"]) {
+    reset({ sort: "smartapi", dir });
+    const column = table.COLUMNS.find((entry) => entry.key === "smartapi");
+    const ids = TD.sort.rows(table.visibleRows(), column, dir).map((row) => row.id);
+    // arax has an environment its record leaves out; ars has a clean record;
+    // ui has none at all.
+    assert.deepEqual(ids, ["arax", "ui", "ars"]);
+    const html = table.bodyHtml(TD.sort.rows(table.visibleRows(), column, dir));
+    const bands = [...html.matchAll(/class="band" data-step="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(bands, ["Deployments missing from the record", "Not registered", "Registered"]);
+  }
 });
 
 test("an expanded row shows only the fields some environment answered", () => {
@@ -112,8 +126,10 @@ test("an expanded row shows only the fields some environment answered", () => {
   assert.doesNotMatch(arax, /Biolink/);
   // The label is written into every non-environment cell, each with its
   // column's drop class, so CSS can show the one beside the first environment.
+  // At narrow widths that includes the Component column.
   assert.match(arax, /class="dk dk-smartapi drop-sm"/);
-  assert.match(arax, /class="dk dk-name "/);
+  assert.doesNotMatch(arax, /class="dk dk-name "/);
+  assert.match(table.detailRowsHtml(ROWS[1], "Step 2", { narrow: true }), /class="dk dk-name "/);
   // And a (?) that says where the row comes from.
   assert.match(arax, /class="help" data-tip="fact" data-id="arax"\s+data-fact="TRAPI"/);
   const ars = table.detailRowsHtml(ROWS[0], "Step 1");
@@ -136,23 +152,41 @@ test("a cell's state follows the model: known absences are white, a lone deploym
   assert.equal(state({ deployed: true, version: "1.0" }, 1), "one");
 });
 
-test("the repository and SmartAPI cells carry their dates and the registry's probe", () => {
+test("the repository and SmartAPI cells each carry their own date, whichever is newer", () => {
   reset();
   const row = {
     ...ROWS[0],
-    last_updated: { at: "2026-10-01T00:00:00Z", date: "2026-10-01", source: "release", tag: "v1.0" },
-    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc", status: { uptime_status: "fail" } },
+    // The registration changed after the release: last_updated is the
+    // registry's, and the release date must stay under the repository anyway.
+    last_updated: { at: "2026-10-02T00:00:00Z", date: "2026-10-02", source: "registry", tag: null },
+    releases_detail: [{ tag: "v1.0", published: "2026-10-01", url: "https://github.com/x/ars/releases/tag/v1.0" }],
+    smartapi_record: { id: "abc", registry_url: "https://smart-api.info/ui/abc",
+      status: { uptime_status: "fail" }, meta: { last_updated: "2026-10-02T00:00:00Z" } },
   };
   const html = table.bodyHtml([row]);
   assert.match(html, /class="repo drop-md"><a[^>]*href="https:\/\/github\.com\/x\/ars"/);
-  assert.match(html, /class="l2" data-tip="upd" data-id="ars"><span class="age">[^<]+<\/span> · v1\.0/);
-  assert.match(html, /class="sapi drop-sm"><span class="dot down" aria-label="registry probe: fail"><\/span><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>registered/);
-  // Registered, but the date came from the registry: it goes under "registered".
-  const registry = { ...row, last_updated: { ...row.last_updated, source: "registry", tag: null } };
-  assert.match(table.bodyHtml([registry]), /registered<\/a><span class="l2" data-tip="upd" data-id="ars">changed/);
-  // No record: say so, or count the candidates.
-  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]), /not registered/);
+  assert.match(html, /class="l2" data-tip="rel" data-id="ars" data-tag="v1\.0"><span class="age">[^<]+<\/span> · v1\.0/);
+  assert.match(html, /class="sapi drop-sm" data-tip="sapi" data-id="ars"><span class="sapil"><span class="dot down" aria-label="Registry probe failing"><\/span><span class="sapiw"><a[^>]*href="https:\/\/smart-api\.info\/ui\/abc"[^>]*>probe failing<\/a><\/span><span class="l2">changed <span class="age">/);
+  // A release newer than the registration leaves the registry date in place.
+  const released = { ...row, last_updated: { at: "2026-10-03T00:00:00Z", date: "2026-10-03", source: "release", tag: "v1.0" } };
+  assert.match(table.bodyHtml([released]), /class="sapi[\s\S]*changed <span class="age">/);
+  // No record: say so, or count the candidates, with no dot but the gutter kept.
+  assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null }]),
+    /<span class="sapil"><span class="sapiw"><span class="why">not registered<\/span>/);
   assert.match(table.bodyHtml([{ ...ROWS[0], smartapi_record: null, smartapi_candidates: [{}, {}] }]), /2 possible records/);
+});
+
+test("the SmartAPI tooltip names the state, each problem and the failing probe lines", () => {
+  const row = { ...ROWS[1], smartapi: "def", smartapi_record: { id: "def",
+    status: { uptime_status: "fail", uptime_ts: "2026-10-21T07:00:00Z",
+      uptime_msg: ["🟢 200: (/ok) All good!", "🔴 /get: (400) Invalid <request>."] } } };
+  TD.boot({ rows: [row], environments: ["ci", "prod"] });
+  const html = table.tipHtml({ dataset: { tip: "sapi", id: "arax" } });
+  assert.match(html, /SmartAPI · Registry probe failing/);
+  assert.match(html, /<dt>probed<\/dt><dd>2026-10-21<\/dd>/);
+  assert.match(html, /ci, but the record lists no server there/);
+  assert.match(html, /🔴 \/get: \(400\) Invalid &lt;request&gt;\./);
+  assert.doesNotMatch(html, /All good/);
 });
 
 test("an environment cell says why it has no version, and marks drift", () => {
@@ -227,9 +261,61 @@ test("row-level findings sit after the name, and the tooltip lists one anchor's 
     { key: "no-chart", severity: "warning", about: "row", text: "no chart" },
     { key: "otel-missing", severity: "warning", about: "row", text: "ghost unseen" }] };
   const html = table.bodyHtml([row]);
-  assert.match(html, /data-open="ars">ARS<\/button><button type="button" class="fg warning" data-tip="findings" data-id="ars" data-env="" data-about="row" data-sev="warning" aria-label="2 warning findings">/);
+  assert.match(html, /class="cname">ARS<\/span><button type="button" class="fg warning" data-tip="findings" data-id="ars" data-env="" data-about="row" data-sev="warning" aria-label="2 warning findings">/);
   TD.boot({ rows: [row], environments: ["ci", "prod"] });
   const tip = table.tipHtml({ dataset: { tip: "findings", id: "ars", env: "", about: "row", sev: "warning" } });
   assert.match(tip, /<div class="title">warning · ars<\/div><ul class="fl"><li>no chart<\/li><li>ghost unseen<\/li><\/ul>/);
   assert.equal(table.tipHtml({ dataset: { tip: "findings", id: "ars", env: "", about: "row", sev: "severe" } }), "");
+});
+
+test("an expanded row's Component column holds the connections, in one cell spanning the detail", () => {
+  const rows = [
+    { ...ROWS[0], connections: { gets_results_from: ["arax"], calls: ["ui"], planned_calls: ["nope"] } },
+    { ...ROWS[1], connections: {},
+      environments: { ...ROWS[1].environments, prod: cell("2.0", { trapi: "1.5", biolink: "4.2", location: "ITRB" }) } },
+    ROWS[2],
+    { ...ROWS[2], id: "lone", name: "Lone" },
+  ];
+  TD.boot({ rows, environments: ["ci", "prod"] });
+  TD.state = { ...TD.url.defaults() };
+  table.ensureColumns();
+  const html = table.detailRowsHtml(rows[1], "Step 2");
+  const trs = html.match(/<tr /g).length;
+  // One cell, in the first row, spanning every detail row; the rest start at
+  // Owner, marked so CSS does not make that cell sticky or draw the spine on it.
+  assert.equal(trs, 3);
+  assert.match(html, new RegExp(`^<tr class="detail grp detail-first"[^>]*><td class="dk-conn" rowspan="${trs}">`));
+  assert.equal((html.match(/class="dk-conn"/g) || []).length, 1);
+  assert.equal((html.match(/class="detail grp[^"]*spanned"/g) || []).length, trs - 1);
+  // arax is what ars gets results from, so ars is what arax provides them to.
+  assert.match(html, /<span class="cgl">Provides results to<\/span><button type="button" class="conn" data-open="ars"/);
+  assert.doesNotMatch(html, /Gets results from/);
+  // ars's own: an unknown id keeps its id as its name, and planned is marked.
+  const ars = table.detailRowsHtml(rows[0], "Step 1");
+  assert.match(ars, /Gets results from<\/span><button[^>]*data-open="arax"[^>]*>.*ARAX<\/button>/s);
+  assert.match(ars, /class="conn planned" data-open="nope" title="Open nope \(planned, not yet implemented\)">nope</);
+  // Nothing recorded either way says so.
+  assert.match(table.detailRowsHtml(rows[3], "Step 3"), /No connections recorded/);
+  assert.match(table.detailRowsHtml(rows[2], "Step 3"), /Called by<\/span><button[^>]*data-open="ars"/);
+  // Narrow: today's rows, no connections, every row with its own label cell.
+  const narrow = table.detailRowsHtml(rows[1], "Step 2", { narrow: true });
+  assert.doesNotMatch(narrow, /dk-conn|spanned/);
+  assert.equal((narrow.match(/class="dk dk-name "/g) || []).length, trs);
+});
+
+test("the name opens the row; the arrow and the open row's button open the page", () => {
+  reset();
+  const html = table.bodyHtml([ROWS[0]]);
+  // The name is text, so a click on it falls through to the row and expands it.
+  assert.match(html, /<span class="cname">ARS<\/span>/);
+  assert.doesNotMatch(html, /class="cname"[^>]*data-open/);
+  assert.match(html, /<button\s+type="button" class="openpage" data-open="ars" title="Open the ARS page"/);
+  assert.match(table.detailRowsHtml(ROWS[0], "Step 1"),
+    /<td class="dk-conn" rowspan="1"><button type="button" class="openlink" data-open="ars">Open the ARS page /);
+});
+
+test("a detail label keeps its last word with its (?), so a narrow column never strands the (?)", () => {
+  reset();
+  const html = table.detailRowsHtml({ ...ROWS[1], environments: { prod: cell("2.0", { asyncquery: true }) } }, "Step 2");
+  assert.match(html, /<span class="dkl">Async <span class="dkw">query<button type="button" class="help"/);
 });

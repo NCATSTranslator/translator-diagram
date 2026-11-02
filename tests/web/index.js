@@ -24,6 +24,7 @@
 require("./urlstate.test.js");
 require("./sort.test.js");
 require("./row.test.js");
+require("./smartapi.test.js");
 require("./fmt.test.js");
 require("./table.test.js");
 require("./layout.test.js");

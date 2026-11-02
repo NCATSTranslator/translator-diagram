@@ -12,8 +12,47 @@ the payload this code reads, and which module builds which part of it — is in
 `CONTRIBUTING.md` says to render the page and look before calling it fine, in
 every view and both themes. This is how.
 
-Either browser works. Chromium's headless shell runs from the command line
-with no Python package; Firefox runs through Playwright's API, which also
+**The short way is `tools/shoot.py`.** It serves a build over HTTP on a
+free port, drives headless Chromium through Playwright with the theme and
+reduced motion set on the browser context, and writes one PNG per surface,
+named so that two runs compare by name:
+
+```bash
+uv run --group shots playwright install chromium          # once
+uv run build-dashboard --output-dir data/dashboard-mine   # not under a --watch
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine --measure
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?' --hover '[data-tip="src"]' --theme dark --width 1200
+uv run --group shots python tools/shoot.py --build-dir data/dashboard-mine \
+  --path '?view=map' --hover '.mp-node'
+```
+
+The defaults are the Overview, the Map and the Component view
+(`?view=component&sel=arax`), both themes, at 1700, 1200 and 760px. `--full`
+grows the window until nothing scrolls, so every row is in the shot. `--hover`
+and `--click` act on the first visible match and fail (exit 2) if there is
+none, or if the hover opens no tooltip; the tooltip targets are `[data-tip]` in
+the table and the Component view and `.mp-node`, `.mp-edge` and `.mp-lane` on
+the Map. A `--path` the page ignored, such as a component this build does not
+have, fails the same way, because the page itself would just show the Overview.
+`--measure` sweeps 1000–1700px, reports the table's `scrollWidth` against its
+`clientWidth` with a classic scrollbar taking its room, and exits 1 on an
+overflow it does not know about, as it does today (see below; no screenshot
+shows this); it exits 2 if there is no table to measure. The docstring has the
+rest. Build to a directory of your own while a `build-dashboard --watch` is
+running: the watcher rewrites `data/dashboard/` with the published policy on
+every code change, and a shot of it is a shot of that build.
+
+To compare two builds, shoot each with its own `--out` and
+`diff -rq data/shots/before data/shots/after`; the same `--out` overwrites the
+first run. The page's clock is frozen at the build's sync, so a shot's ages and
+its "synced just now" do not move with the wall clock, and the same build shot
+hours apart is the same PNG.
+
+**The long way**, for a machine without Playwright, is below: either
+browser works. Chromium's headless shell runs from the command line with
+no Python package; Firefox runs through Playwright's API, which also
 handles the theme and the reduced motion itself (see *Firefox* below).
 Playwright's bundled headless shell needs no install. From the repo root:
 
@@ -121,16 +160,28 @@ Checked on c6b97a8 with Firefox 157: Overview light and dark and Map dark
 render.
 
 Shoot it narrow (`--window-size=760,1100`) and at the widths *between* the
-breakpoints. Measured at fourteen widths from 760 to 1700px on the redrawn
-table, `div.tablewrap` never overflows from 1000px up (`scrollWidth` equals
-`clientWidth` at every step); at 900px and below the environment columns
-run past the window and the wrap scrolls, so nothing is unreachable. The
-earlier table overflowed between about 1490 and 1535px (issue #31) because a
-wide-window rule widened the environment columns and the names and
-repository slugs could not wrap; both are gone. The overflow is not visible
-in a screenshot: measure `scrollWidth` against `clientWidth` at several
-widths instead of judging by eye. At 760px the Map's EDGES legend still sits
-over the Translator UI / Node Annotator row.
+breakpoints. Measured in Chromium at every width from 1000 to 1700px on the
+redrawn table with every row collapsed, `div.tablewrap` overflows in two bands
+(issue #108): 1000–1002px and 1151–1165px, at most 15px over, where scrollbars
+overlay the page, and 1000–1017px and 1151–1180px, at most 30px over, where a
+classic 15px scrollbar takes its room. At 900px and below the environment
+columns run past the window, and the wrap scrolls at every width, so nothing is
+unreachable. With every row open nothing overflows at any of those widths, but
+with every third row open the same two bands widen, to 1026px and 1184px and at
+most 34px over with the classic scrollbar. Three rules in `table.css` keep the
+all-open case clean, each written where it applies: the Owner
+column's labels wrap between 800 and 1150px, a host label longer than its
+column may break inside itself there, and a long connection name wraps inside
+its button. Each was a measured overflow first. The earlier table overflowed
+between about 1490 and 1535px (issue #31) because a wide-window rule widened
+the environment columns and the names and repository slugs could not wrap;
+both are gone. The overflow is not visible in a screenshot: measure
+`scrollWidth` against `clientWidth` instead of judging by eye, which is what
+`tools/shoot.py --measure` does, always with the classic scrollbar, the worse
+of the two. Its `KNOWN_OVERFLOW` and `KNOWN_OVERFLOW_MAX` still hold the earlier
+table's 1500–1544px band, which this one does not have, so it exits 1 on the
+two bands above until #108 settles them. At 760px the Map's EDGES legend still
+sits over the Translator UI / Node Annotator row.
 
 Serve the build over HTTP rather than opening `file://`: Map export and other
 features are blocked on a `file://` origin, and the copies the theme stub
@@ -147,13 +198,15 @@ section (`?view=component&sel=arax`, scrolled down as well: the page is
 taller than any window), and an expanded row (`?expand=<id>`).
 The ten commits of #86 that only moved code (fd0c9c3–f6e7321) were each
 checked this way; a differing PNG means something moved, and `--dump-dom` on
-the two builds, diffed, says what. One pixel block is allowed to differ: the
-sync note in the top bar says "N minutes ago" against the reader's clock,
-so two shots minutes apart differ there and nowhere else. PIL's
+the two builds, diffed, says what. In this recipe one pixel block is allowed to
+differ: the sync note in the top bar says "N minutes ago" against the reader's
+clock, so two shots minutes apart differ there and nowhere else. PIL's
 `ImageChops.difference(a, b).getbbox()` names the box; a box confined to
-the top bar's right end is the clock.
+the top bar's right end is the clock. `tools/shoot.py` freezes the clock, so
+its shots do not differ at all.
 
-**To shoot a tooltip, hover it synthetically.** The headless shell's window is
+**To shoot a tooltip by hand, hover it synthetically.** (`tools/shoot.py
+--hover` needs none of this.) The headless shell's window is
 never focused, so `element.focus()` fires no `focusin` and the tooltip stays
 hidden; `dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))` on
 the element does open it. Pick the *visible* element: an expanded row writes
@@ -192,6 +245,12 @@ a row is said once for every view.
 `(() => { … })()`, so a `const` in one file cannot collide with one in
 another; the only shared name is `TD`, which each file publishes its half of
 the page on (`TD.fmt`, `TD.table`, `TD.map`, …) and reads the others' from.
+
+The CSS has no such scope: `CSS_FILES` are concatenated into one stylesheet,
+so a class name in `table.css` shares one namespace with `controls.css` and
+the rest. Search `web/*.css` for a class before using it. A `.seg` in the
+SmartAPI cell once picked up the segmented control's flex layout and
+swallowed the space in "changed 5 months ago".
 
 ES modules were considered and not adopted. The page has to open from
 `file://`, where `import` across files is blocked, so modules would mean a
@@ -238,6 +297,27 @@ in `table.css`). The first-column
 label was tried in #90 and read as detached from the numbers it named; the
 ladder is more rules, and the right answer.
 
+**An expanded row's connections are decided in JS, at render time.** They
+fill the Component column of the detail rows, which is empty above 800px
+because the labels sit in the rightmost non-environment column (the ladder).
+They are one cell with a `rowspan`, and a rowspan cannot be undone in CSS:
+hiding that cell at 800px, where the Component column becomes the label
+column, would move every later row's cells one column left. So
+`detailRowsHtml` takes `narrow` as an argument, `isNarrow` reads `NARROW` in
+`table.js`, a `change` listener on it redraws the open rows, and the 800px
+there and in the ladder must change together. The rows the cell spans start
+at Owner, so `tr.detail.spanned` stops that cell being sticky or drawing the
+group spine. The grouping is `TD.row.connections`, which the Component view
+reads too.
+
+**A component's name in the table is not a link.** A click on it opens the
+row, like a click anywhere else on the row, because the open row is where the
+connections are and it is the better first click. The page is behind the
+arrow at the cell's right edge, which sits in the same place on every row so
+the arrows read as a column without costing one, and behind a labelled button
+at the top of the open row. A new column for it would have had to take width
+from the environment columns.
+
 **A component has a view of its own, not a drawer beside the table.** The
 440px side drawer this replaced could not fit its six tabs on one row, could
 not show two environments side by side, and needed its own column ladder in
@@ -261,6 +341,20 @@ table as it was before the click.
 groups, found by typing: the browser's own control does type-to-find, the
 keyboard and a phone's picker, and `TD.ui.listbox` would have had to be
 taught all three.
+
+**The SmartAPI column says what to do, not whether a record exists.** It
+used to print "registered" for every record and draw the registry's
+`uptime_status` as green for `pass` and red for anything else, so the three
+shepherds, whose paths the registry skipped (`unknown`), looked as broken as
+RTX/ARAX's failing probe, and Retriever and PloverDB, whose recorded ids match
+no Translator-tagged record, read "not registered". `TD.smartapi.status`
+(`core.js`) now names one state per row, worst first, and the cell, the
+column's sort and its tooltip all read it, so they cannot disagree. Only
+`pass` is green. The cell's date is the record's own `meta.last_updated`, not
+`last_updated`: that one is the newer of the release and the registration,
+and showing it only when the registry won hid the registry date from every
+component with a newer release, and the release date from the Repository
+column of every component whose registration was newer.
 
 **Environment columns sort by the age of the release running there**, not by
 version string: comparing `2.10.2` against `1.0` across two different
