@@ -29,15 +29,17 @@ uv run --group shots python tools/shoot.py --path '?view=map' --hover '.mp-node'
 
 The defaults are the Overview, the Map and a component's drawer
 (`?sel=arax`), both themes, at 1700, 1200 and 760px. `--full` shoots the
-whole page; `--hover` and `--click` act on the first visible match and fail
-(exit 2) if there is none, or if the hover opens no tooltip; the tooltip
-targets are `[data-tip]` in the table and drawer and `.mp-node`, `.mp-edge`
-and `.mp-lane` on the Map. `--measure` sweeps 1000–1700px in 10px steps,
-reports the table's `scrollWidth` against its `clientWidth`, and exits 1 on
-an overflow outside the known 1490–1535px band below (issue #31's failure,
-which no screenshot shows); it fails too if there is no table to measure.
-The docstring has the rest. Build to a directory of your own while a
-`build-dashboard --watch` is running: the watcher rewrites
+whole page. `--hover` and `--click` act
+on the first visible match and fail (exit 2) if there is none, or if the hover
+opens no tooltip; the tooltip targets are `[data-tip]` in the table and drawer
+and `.mp-node`, `.mp-edge` and `.mp-lane` on the Map. A `--path` the page
+ignored, such as a component this build does not have, fails the same way,
+because the page itself would just show the Overview. `--measure` sweeps
+1000–1700px in 10px steps, reports the table's `scrollWidth` against its
+`clientWidth`, and exits 1 on an overflow outside the known 1490–1535px band
+below (issue #31's failure, which no screenshot shows); it exits 2 if there
+is no table to measure. The docstring has the rest. Build to a directory of your
+own while a `build-dashboard --watch` is running: the watcher rewrites
 `data/dashboard/` with the published policy on every code change, and a
 shot of it is a shot of that build.
 
